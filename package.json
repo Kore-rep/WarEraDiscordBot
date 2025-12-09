@@ -1,0 +1,35 @@
+{
+  "name": "warera-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for WarEra game that performs periodic API requests and mentions users",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "watch": "tsc --watch",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "warera",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1",
+    "warera-sdk": "file:../WarEraSDK"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "rimraf": "^5.0.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

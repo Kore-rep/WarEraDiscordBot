@@ -1,0 +1,13 @@
+{
+  "servers": {
+    "SERVER_ID_1": {
+      "channelId": "CHANNEL_ID_1",
+      "roleIds": ["ROLE_ID_1", "ROLE_ID_2"]
+    },
+    "SERVER_ID_2": {
+      "channelId": "CHANNEL_ID_2",
+      "roleIds": ["ROLE_ID_3"]
+    }
+  }
+}
+
