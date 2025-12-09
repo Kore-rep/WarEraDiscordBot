@@ -211,9 +211,15 @@ this.client.commands.set(pingCommand.data.name, pingCommand);
 ### Option 1: Azure App Service
 
 1. Build the Docker image:
-```bash
-docker build -t warera-discord-bot .
-```
+   **Important:** Build from the parent directory (one level up from WarEraBot) to include the SDK:
+   ```bash
+   cd ..
+   docker build -f WarEraBot/Dockerfile -t warera-discord-bot .
+   ```
+   Or from the WarEraBot directory:
+   ```bash
+   docker build -f Dockerfile -t warera-discord-bot ..
+   ```
 
 2. Push to Azure Container Registry or use Azure Container Instances
 
