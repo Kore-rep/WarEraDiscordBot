@@ -31,6 +31,7 @@ RUN npm install
 COPY WarEraBot/src ./src
 COPY WarEraBot/tsconfig.json ./
 COPY WarEraBot/servers.json.example ./servers.json.example
+COPY WarEraBot/servers.json ./servers.json
 
 # Build TypeScript
 RUN npm run build

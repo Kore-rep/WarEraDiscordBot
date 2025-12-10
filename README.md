@@ -55,13 +55,19 @@ API_BASE_URL=https://api.example.com
 
 **Getting Discord Credentials:**
 
-1. **Bot Token:**
+1. **Bot Token and Intents:**
    - Go to [Discord Developer Portal](https://discord.com/developers/applications)
    - Create a new application or select an existing one
    - Go to "Bot" section
    - Click "Reset Token" or "Copy" to get your bot token
-   - Enable "Message Content Intent" in the Bot settings
-   - Invite the bot to your servers with appropriate permissions
+   - **Enable the following Privileged Gateway Intents:**
+     - ✅ **MESSAGE CONTENT INTENT** (Required - allows bot to read message content)
+     - The bot also uses SERVER MEMBERS INTENT and PRESENCE INTENT if needed
+   - Scroll down to "Privileged Gateway Intents" and enable "Message Content Intent"
+   - Invite the bot to your servers with appropriate permissions:
+     - Send Messages
+     - View Channels
+     - Read Message History
 
 2. **Server ID:**
    - Enable Developer Mode in Discord (User Settings → Advanced → Developer Mode)
@@ -290,10 +296,17 @@ The bot includes error handling for:
 
 ## Troubleshooting
 
-**Bot doesn't connect:**
+**Bot doesn't connect / "Used disallowed intents" error:**
 - Verify `DISCORD_TOKEN` is correct
-- Ensure bot has "Message Content Intent" enabled
-- Check bot has permission to access the channel
+- **CRITICAL:** Enable "Message Content Intent" in Discord Developer Portal:
+  - Go to https://discord.com/developers/applications
+  - Select your application → "Bot" section
+  - Scroll down to "Privileged Gateway Intents"
+  - Enable **"MESSAGE CONTENT INTENT"** toggle
+  - Click "Save Changes"
+  - Restart your bot/container
+- Ensure bot has been invited to your servers with appropriate permissions
+- Check bot has permission to access the channels
 
 **Channel not found:**
 - Verify `channelId` in `servers.json` is correct for the specific server

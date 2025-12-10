@@ -76,8 +76,8 @@ export class PollingService {
     try {
       logger.debug('Starting polling cycle...');
 
-      // Fetch data from API
-      const allBattles = await this.apiService.fetchBattles();
+      // Fetch data from API (battles, countries, and regions)
+      const { battles: allBattles, countries, regions } = await this.apiService.fetchBattles();
       logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
 
       // Detect changes (new battles, replenished moneyPool, or changed moneyPer1kDamages)
@@ -96,16 +96,16 @@ export class PollingService {
       // Extract role IDs per server from changed battles only
       const roleIdsByServer = this.apiService.extractRoleIdsByServer(changedBattles);
 
-      // Send mentions to each server that has roles to mention
+      // Send battle notifications to each server that has roles to mention
       let serversNotified = 0;
       for (const [serverId, roleIds] of roleIdsByServer.entries()) {
         if (roleIds.length > 0) {
           try {
             logger.info(`Sending notification for ${changedBattles.length} changed battle(s) to server ${serverId}`);
-            await this.discordService.sendMentionMessage(serverId, roleIds);
+            await this.discordService.sendBattleNotification(serverId, roleIds, changedBattles, countries, regions);
             serversNotified++;
           } catch (error) {
-            logger.error(`Failed to send mention message to server ${serverId}`, error);
+            logger.error(`Failed to send battle notification to server ${serverId}`, error);
             // Continue with other servers even if one fails
           }
         }

@@ -5,6 +5,10 @@ import { BotConfig } from '../config';
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<ReturnType<APIClient['battle']['getBattles']>>;
 type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
+type GetCountryByIdResponse = Awaited<ReturnType<APIClient['country']['getCountryById']>>;
+type CountryDTO = GetCountryByIdResponse['result']['data'];
+type GetRegionsObjectResponse = Awaited<ReturnType<APIClient['region']['getRegionsObject']>>;
+type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
 
 /**
  * Service for handling API requests using the WarEra SDK
@@ -31,12 +35,98 @@ export class ApiService {
   }
 
   /**
+   * Fetch country information for given country IDs using batch requests
+   * 
+   * @param countryIds - Array of country IDs to fetch
+   * @returns Map of countryId -> CountryDTO
+   */
+  async fetchCountries(countryIds: string[]): Promise<Map<string, CountryDTO>> {
+    const countryMap = new Map<string, CountryDTO>();
+    
+    if (countryIds.length === 0) {
+      return countryMap;
+    }
+
+    try {
+      logger.debug(`Fetching country information for ${countryIds.length} country/countries...`);
+
+      // Remove duplicates
+      const uniqueCountryIds = [...new Set(countryIds)];
+
+      // Create a batch-enabled client for fetching countries
+      const batchClient = createAPI({
+        baseUrl: this.config.api.baseUrl,
+        batch: true, // Enable batch mode
+      });
+
+      // Queue all country requests (they return promises that resolve when batch executes)
+      const countryPromises = uniqueCountryIds.map((countryId) => {
+        return batchClient.country.getCountryById(countryId);
+      });
+
+      // Execute all queued batch requests at once
+      // This will resolve all the promises above
+      await batchClient.runBatch();
+
+      // Wait for all promises to resolve and map results
+      const results = await Promise.all(countryPromises);
+
+      // Map results to country data
+      for (let i = 0; i < uniqueCountryIds.length; i++) {
+        const countryId = uniqueCountryIds[i];
+        const result = results[i] as GetCountryByIdResponse | undefined;
+        
+        if (result && result.result && result.result.data) {
+          countryMap.set(countryId, result.result.data);
+        } else {
+          logger.warn(`Failed to fetch country ${countryId} - result was invalid`);
+        }
+      }
+
+      logger.info(`Fetched ${countryMap.size} country/countries out of ${uniqueCountryIds.length} requested`);
+      return countryMap;
+    } catch (error) {
+      logger.error('Failed to fetch countries from API', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch regions data from the API using the region.getRegionsObject endpoint
+   * Note: This endpoint is expensive, so it should be called sparingly
+   * 
+   * @returns Promise with regions map (regionId -> RegionDTO)
+   */
+  async fetchRegions(): Promise<Map<string, RegionDTO>> {
+    const regionMap = new Map<string, RegionDTO>();
+    
+    try {
+      logger.debug('Fetching regions object from API...');
+      
+      const response: GetRegionsObjectResponse = await this.client.region.getRegionsObject();
+      const regionsData = response.result.data;
+      
+      // Convert Record<string, RegionDTO> to Map
+      for (const [regionId, region] of Object.entries(regionsData)) {
+        regionMap.set(regionId, region);
+      }
+      
+      logger.info(`Fetched ${regionMap.size} region(s) from API`);
+      return regionMap;
+    } catch (error) {
+      logger.error('Failed to fetch regions from API', error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetch battles data from the API using the battles.getBattles endpoint
    * Filters results client-side where moneyPer1kDamages > 0 and moneyPool > 0
+   * Also fetches country and region information for all countries/regions in the battles
    * 
-   * @returns Promise with filtered battles array
+   * @returns Promise with filtered battles array, country map, and regions map
    */
-  async fetchBattles(): Promise<BattleDTO[]> {
+  async fetchBattles(): Promise<{ battles: BattleDTO[]; countries: Map<string, CountryDTO>; regions: Map<string, RegionDTO> }> {
     try {
       logger.debug('Fetching active battles from API...');
 
@@ -65,8 +155,25 @@ export class ApiService {
       logger.info(
         `Filtered to ${filteredBattles.length} battle(s) with rewards (out of ${allBattles.length} total)`
       );
+
+      // Extract unique country IDs from filtered battles
+      const countryIds = new Set<string>();
+      for (const battle of filteredBattles) {
+        if (battle.attacker.country) {
+          countryIds.add(battle.attacker.country);
+        }
+        if (battle.defender.country) {
+          countryIds.add(battle.defender.country);
+        }
+      }
+
+      // Fetch country information using batch requests
+      const countries = await this.fetchCountries(Array.from(countryIds));
       
-      return filteredBattles;
+      // Fetch regions information (expensive call, but needed for region names)
+      const regions = await this.fetchRegions();
+      
+      return { battles: filteredBattles, countries, regions };
     } catch (error) {
       logger.error('Failed to fetch battles from API', error);
       throw error;
