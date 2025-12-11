@@ -36,7 +36,7 @@ describe('BattleFormatter', () => {
         'new'
       );
 
-      expect(message).toContain('New Battle');
+      expect(message).toContain('New Bounty');
     });
 
     it('should include change indicator for pool increases', () => {
@@ -53,6 +53,10 @@ describe('BattleFormatter', () => {
 
     it('should include change history', () => {
       const battle = createMockBattle('1');
+      const countries = new Map([
+        ['country1', { name: 'USA', _id: 'country1' }],
+        ['country2', { name: 'Canada', _id: 'country2' }],
+      ]);
       const changeHistory = [
         {
           timestamp: new Date('2024-12-11T10:00:00Z'),
@@ -65,14 +69,14 @@ describe('BattleFormatter', () => {
 
       const message = formatter.formatBattleMessage(
         battle,
-        new Map(),
+        countries,
         new Map(),
         'pool_increased',
         changeHistory
       );
 
       expect(message).toContain('Change History');
-      expect(message).toContain('Attacker Pool increased to 200 from 100');
+      expect(message).toContain('USA Pool increased to 200 from 100');
     });
 
     it('should stay under 2000 characters', () => {

@@ -130,7 +130,12 @@ function formatTimestamp(date: Date): string {
 /**
  * Format change log entries, trimming if necessary to fit within character limit
  */
-function formatChangeLog(changeHistory: ChangeEntry[], maxLength: number = Infinity): { log: string; entriesUsed: number } {
+function formatChangeLog(
+  changeHistory: ChangeEntry[], 
+  attackerName: string,
+  defenderName: string,
+  maxLength: number = Infinity
+): { log: string; entriesUsed: number } {
   if (changeHistory.length === 0) return { log: '', entriesUsed: 0 };
   
   const logEntries: string[] = [];
@@ -140,7 +145,7 @@ function formatChangeLog(changeHistory: ChangeEntry[], maxLength: number = Infin
   for (let i = changeHistory.length - 1; i >= 0; i--) {
     const entry = changeHistory[i];
     const timestamp = formatTimestamp(entry.timestamp);
-    const sideLabel = entry.side === 'attacker' ? 'Attacker' : 'Defender';
+    const sideLabel = entry.side === 'attacker' ? attackerName : defenderName;
     const typeLabel = entry.type === 'bounty' ? 'Bounty' : 'Pool';
     const change = entry.newValue - entry.oldValue;
     const changeStr = change > 0 
@@ -151,7 +156,12 @@ function formatChangeLog(changeHistory: ChangeEntry[], maxLength: number = Infin
     if (entry.type === 'bounty') {
       entryText = `${timestamp} - ${sideLabel} ${typeLabel} changed to ${entry.newValue.toFixed(1)} from ${entry.oldValue.toFixed(1)} (${changeStr})`;
     } else {
-      entryText = `${timestamp} - ${sideLabel} ${typeLabel} increased to ${formatNumber(entry.newValue)} from ${formatNumber(entry.oldValue)}`;
+      // Check if pool was depleted (went from > 0 to == 0)
+      if (entry.oldValue > 0 && entry.newValue === 0) {
+        entryText = `${timestamp} - ${sideLabel} ${typeLabel} depleted`;
+      } else {
+        entryText = `${timestamp} - ${sideLabel} ${typeLabel} increased to ${formatNumber(entry.newValue)} from ${formatNumber(entry.oldValue)}`;
+      }
     }
     
     // Check if adding this entry would exceed the limit
@@ -176,7 +186,7 @@ function formatChangeLog(changeHistory: ChangeEntry[], maxLength: number = Infin
 function getChangeIndicator(changeType: ChangeType): string {
   switch (changeType) {
     case 'new':
-      return '\x1b[1;33m🆕 New Battle\x1b[0m';
+      return '\x1b[1;33m🆕 New Bounty\x1b[0m';
     case 'pool_increased':
       return '\x1b[1;32m💰 Pool Increased\x1b[0m';
     case 'pool_decreased':
@@ -292,7 +302,7 @@ function formatSingleBattle(
   // Add change log if available and there's space
   if (changeHistory && changeHistory.length > 0 && availableForLog > 50) {
     // Format change log with character limit
-    const { log } = formatChangeLog(changeHistory, availableForLog);
+    const { log } = formatChangeLog(changeHistory, attackerName, defenderName, availableForLog);
     if (log) {
       battleLines.push('');
       battleLines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
