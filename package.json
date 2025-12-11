@@ -8,7 +8,10 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "watch": "tsc --watch",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "discord",
@@ -27,8 +30,12 @@
     "warera-sdk": "file:../WarEraSDK"
   },
   "devDependencies": {
+    "@jest/globals": "^30.2.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
+    "jest": "^30.2.0",
     "rimraf": "^5.0.10",
+    "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }

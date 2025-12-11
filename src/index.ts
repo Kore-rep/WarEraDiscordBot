@@ -1,5 +1,5 @@
-import { loadConfig } from './config';
-import { Bot } from './bot';
+import { loadConfig } from './config/config';
+import { Bot } from './bot/Bot';
 import { logger } from './utils/logger';
 
 /**

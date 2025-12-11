@@ -1,8 +1,7 @@
 import { Client, TextChannel, User } from 'discord.js';
-import { logger } from '../utils/logger';
-import { BotConfig } from '../config';
-import { MessageTracker } from './messageTracker';
-import { BattleChange } from './battleTracker';
+import { logger } from '../../utils/logger';
+import { BotConfig } from '../../config/config';
+import { MessageTracker } from './MessageTracker';
 
 /**
  * Service for handling Discord-related operations
@@ -108,16 +107,14 @@ export class DiscordService {
    * 
    * @param serverId - Discord server ID
    * @param roleIds - Array of role IDs to mention (only on first message)
-   * @param battleChange - Battle change information
-   * @param countries - Map of countryId -> CountryDTO for displaying country names
-   * @param regions - Map of regionId -> RegionDTO for displaying region names
+   * @param battleId - Battle ID
+   * @param battleMessage - Formatted battle message
    */
   async updateBattleMessage(
     serverId: string,
     roleIds: string[],
-    battleChange: BattleChange,
-    countries: Map<string, unknown>,
-    regions: Map<string, unknown>
+    battleId: string,
+    battleMessage: string
   ): Promise<void> {
     const channel = this.channels.get(serverId);
     
@@ -126,23 +123,10 @@ export class DiscordService {
     }
 
     try {
-      // Import formatter dynamically to avoid circular dependencies
-      const { formatBattleMessage } = await import('../utils/battleFormatter');
-      
-      const battleId = battleChange.battle._id;
       const existingMessageId = this.messageTracker.getMessageId(serverId, battleId);
 
-      // Format battle details with country and region information
-      const battleMessage = formatBattleMessage(
-        [battleChange.battle] as Parameters<typeof formatBattleMessage>[0],
-        countries as Parameters<typeof formatBattleMessage>[1],
-        regions as Parameters<typeof formatBattleMessage>[2],
-        battleChange.changeType,
-        battleChange.changeHistory
-      );
-
       if (!battleMessage || battleMessage.length === 0) {
-        logger.warn(`No battle message generated for battle ${battleId}`);
+        logger.warn(`No battle message provided for battle ${battleId}`);
         return;
       }
 

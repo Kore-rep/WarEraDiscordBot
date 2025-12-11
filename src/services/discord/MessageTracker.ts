@@ -1,4 +1,4 @@
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 /**
  * Tracks Discord message IDs for each battle per server

@@ -1,10 +1,11 @@
 import { Client, GatewayIntentBits, Events } from 'discord.js';
-import { logger } from './utils/logger';
-import { BotConfig } from './config';
-import { ApiService } from './services/apiService';
-import { DiscordService } from './services/discordService';
-import { PollingService } from './services/pollingService';
-import { MessageTracker } from './services/messageTracker';
+import { logger } from '../utils/logger';
+import { BotConfig } from '../config/config';
+import { ApiService } from '../services/api/ApiService';
+import { DiscordService } from '../services/discord/DiscordService';
+import { PollingService } from '../services/polling/PollingService';
+import { MessageTracker } from '../services/discord/MessageTracker';
+import { BattleService } from '../services/battle/BattleService';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -14,6 +15,7 @@ export class Bot {
   private config: BotConfig;
   private apiService: ApiService;
   private discordService: DiscordService;
+  private battleService: BattleService;
   private pollingService: PollingService;
   private isRunning = false;
 
@@ -33,12 +35,8 @@ export class Bot {
     const messageTracker = new MessageTracker();
     this.apiService = new ApiService(config);
     this.discordService = new DiscordService(this.client, config, messageTracker);
-    this.pollingService = new PollingService(
-      config,
-      this.apiService,
-      this.discordService,
-      messageTracker
-    );
+    this.battleService = new BattleService(this.discordService, this.apiService);
+    this.pollingService = new PollingService(config, this.battleService);
 
     // Set up event handlers
     this.setupEventHandlers();

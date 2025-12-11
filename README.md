@@ -138,29 +138,75 @@ npm start
 
 ```
 ├── src/
-│   ├── index.ts              # Main entry point
-│   ├── bot.ts                # Bot class with Discord connection and polling logic
-│   ├── config.ts             # Configuration loading and validation
+│   ├── index.ts                          # Application entry point
+│   ├── bot/
+│   │   └── Bot.ts                        # Main bot orchestrator
+│   ├── config/
+│   │   └── config.ts                     # Configuration loading and validation
 │   ├── services/
-│   │   ├── apiService.ts     # API service using WarEra SDK
-│   │   └── discordService.ts # Discord message handling
+│   │   ├── api/
+│   │   │   └── ApiService.ts             # WarEra API interactions
+│   │   ├── battle/
+│   │   │   ├── BattleService.ts          # Battle processing orchestration
+│   │   │   ├── BattleTracker.ts          # State tracking & change detection
+│   │   │   └── BattleFormatter.ts        # Message formatting
+│   │   ├── discord/
+│   │   │   ├── DiscordService.ts         # Discord API interactions
+│   │   │   └── MessageTracker.ts         # Message ID tracking
+│   │   └── polling/
+│   │       └── PollingService.ts         # Periodic polling scheduler
 │   └── utils/
-│       └── logger.ts         # Logging utility
-├── dist/                     # Compiled JavaScript (generated)
-├── .env.example             # Example environment variables
-├── Dockerfile               # Docker configuration for Azure
-├── package.json             # Dependencies and scripts
-├── tsconfig.json            # TypeScript configuration
-└── README.md                # This file
+│       └── logger.ts                     # Winston logger configuration
+├── tests/                                # Test suite (not in Docker)
+│   ├── config/                           # Configuration tests
+│   ├── services/                         # Service unit tests
+│   └── integration/                      # Integration tests
+├── dist/                                 # Compiled JavaScript (generated)
+├── coverage/                             # Test coverage reports (generated)
+├── .env.example                          # Example environment variables
+├── servers.json.example                  # Example server configuration
+├── Dockerfile                            # Docker configuration for Azure
+├── jest.config.js                        # Jest test configuration
+├── ARCHITECTURE.md                       # Detailed architecture documentation
+├── package.json                          # Dependencies and scripts
+├── tsconfig.json                         # TypeScript configuration
+└── README.md                             # This file
 ```
+
+## Testing
+
+The project includes a comprehensive test suite with 43 tests covering all critical functionality.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+### Test Coverage
+
+- ✅ **BattleTracker**: Change detection, state management, cleanup
+- ✅ **BattleFormatter**: Message formatting, character limits, truncation
+- ✅ **MessageTracker**: Message ID storage and retrieval
+- ✅ **Config**: Configuration loading and validation
+- ✅ **BattleService**: Integration tests for battle processing
+
+**Note:** Tests are automatically excluded from Docker builds.
 
 ## Customizing API Calls
 
-The bot includes a placeholder function in `src/services/apiService.ts` that you need to customize:
+The bot includes a placeholder function in `src/services/api/ApiService.ts` that you can customize:
 
 **`extractRoleIdsByServer()`** - Implement logic to extract role IDs per server from battles
 
-Currently, it returns the configured role IDs for all servers when battles are found. You should customize it to map battles to specific servers based on your game logic (e.g., by country, region, etc.).
+Currently, it returns the configured role IDs for all servers when battles are found. You can customize it to map battles to specific servers based on your game logic (e.g., by country, region, etc.).
 
 Example customization:
 
@@ -176,8 +222,8 @@ extractRoleIdsByServer(battles: BattleDTO[]): Map<string, string[]> {
              battle.defender.country === serverConfig.countryId;
     });
     
-    if (relevantBattles.length > 0 && serverConfig.roleIds.length > 0) {
-      roleIdsByServer.set(serverId, serverConfig.roleIds);
+    if (relevantBattles.length > 0) {
+      roleIdsByServer.set(serverId, serverConfig.roleIds || []);
     }
   }
   

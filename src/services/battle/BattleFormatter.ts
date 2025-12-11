@@ -1,4 +1,6 @@
 
+import { ChangeEntry } from './BattleTracker';
+
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
 type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
@@ -6,7 +8,6 @@ type GetCountryByIdResponse = Awaited<ReturnType<import('warera-sdk').APIClient[
 type CountryDTO = GetCountryByIdResponse['result']['data'];
 type GetRegionsObjectResponse = Awaited<ReturnType<import('warera-sdk').APIClient['region']['getRegionsObject']>>;
 type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
-type ChangeEntry = import('../services/battleTracker').ChangeEntry;
 type ChangeType = 'new' | 'bounty_increased' | 'bounty_decreased' | 'pool_increased' | 'pool_decreased';
 
 /**
@@ -348,27 +349,32 @@ function formatSingleBattle(
 }
 
 /**
- * Format battle details into a single Discord message
- * Automatically trims change history if message exceeds 2000 characters
- * @param battles - Array of battles to display (should be single battle for updates)
- * @param countries - Map of countryId -> CountryDTO for displaying country names
- * @param regions - Map of regionId -> RegionDTO for displaying region names
- * @param changeType - Optional change type for the first battle
- * @param changeHistory - Optional change history for the first battle
- * @returns Single formatted message string (guaranteed under 2000 characters)
+ * BattleFormatter class for formatting battle messages
  */
-export function formatBattleMessage(
-  battles: BattleDTO[], 
-  countries: Map<string, CountryDTO> = new Map(),
-  regions: Map<string, RegionDTO> = new Map(),
-  changeType?: ChangeType,
-  changeHistory?: ChangeEntry[]
-): string {
-  if (battles.length === 0) {
-    return 'No battles found.';
+export class BattleFormatter {
+  /**
+   * Format battle details into a single Discord message
+   * Automatically trims change history if message exceeds 2000 characters
+   * @param battle - Battle to display
+   * @param countries - Map of countryId -> CountryDTO for displaying country names
+   * @param regions - Map of regionId -> RegionDTO for displaying region names
+   * @param changeType - Optional change type
+   * @param changeHistory - Optional change history
+   * @returns Single formatted message string (guaranteed under 2000 characters)
+   */
+  formatBattleMessage(
+    battle: BattleDTO,
+    countries: Map<string, unknown> = new Map(),
+    regions: Map<string, unknown> = new Map(),
+    changeType?: ChangeType,
+    changeHistory?: ChangeEntry[]
+  ): string {
+    return formatSingleBattle(
+      battle,
+      countries as Map<string, CountryDTO>,
+      regions as Map<string, RegionDTO>,
+      changeType,
+      changeHistory
+    );
   }
-
-  // Format the first battle (we only handle one battle per message now)
-  const battle = battles[0];
-  return formatSingleBattle(battle, countries, regions, changeType, changeHistory);
 }

@@ -1,6 +1,6 @@
 import { createAPI, APIClient } from 'warera-sdk';
-import { logger } from '../utils/logger';
-import { BotConfig } from '../config';
+import { logger } from '../../utils/logger';
+import { BotConfig } from '../../config/config';
 
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<ReturnType<APIClient['battle']['getBattles']>>;
@@ -17,6 +17,7 @@ type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
 export class ApiService {
   private client: APIClient;
   private config: BotConfig;
+  private batchClient: APIClient;
 
   constructor(config: BotConfig) {
     this.config = config;
@@ -30,6 +31,10 @@ export class ApiService {
       // rateLimit: { ... },
       // batch: false,
     });
+    this.batchClient = createAPI({
+        baseUrl: this.config.api.baseUrl,
+        batch: true, // Enable batch mode
+      });
 
     logger.info('API Service initialized');
   }
@@ -53,20 +58,14 @@ export class ApiService {
       // Remove duplicates
       const uniqueCountryIds = [...new Set(countryIds)];
 
-      // Create a batch-enabled client for fetching countries
-      const batchClient = createAPI({
-        baseUrl: this.config.api.baseUrl,
-        batch: true, // Enable batch mode
-      });
-
       // Queue all country requests (they return promises that resolve when batch executes)
       const countryPromises = uniqueCountryIds.map((countryId) => {
-        return batchClient.country.getCountryById(countryId);
+        return this.batchClient.country.getCountryById(countryId);
       });
 
       // Execute all queued batch requests at once
       // This will resolve all the promises above
-      await batchClient.runBatch();
+      await this.batchClient.runBatch();
 
       // Wait for all promises to resolve and map results
       const results = await Promise.all(countryPromises);
