@@ -88,7 +88,17 @@ export class BattleService {
             battleChange.changeHistory
           );
 
-          // Update the message in Discord
+          // If pool was replenished, delete the old message and create a new one (to mention roles again)
+          if (battleChange.changeType === 'pool_increased') {
+            logger.info(`Pool replenished for battle ${battleChange.battle._id}, deleting old message to recreate with mentions`);
+            try {
+              await this.discordService.deleteBattleMessage(serverId, battleChange.battle._id);
+            } catch (error) {
+              logger.warn(`Failed to delete message for battle ${battleChange.battle._id}, will create new message anyway`, error);
+            }
+          }
+
+          // Update the message in Discord (will create new if deleted above)
           await this.discordService.updateBattleMessage(
             serverId,
             roleIds,
