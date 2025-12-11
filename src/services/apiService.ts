@@ -192,6 +192,7 @@ export class ApiService {
     const roleIdsByServer = new Map<string, string[]>();
     
     // Iterate over all configured servers
+    // Include all servers that have battles to report, even if they have no role IDs configured
     for (const [serverId, serverConfig] of this.config.discord.servers.entries()) {
       // TODO: Implement logic to extract role IDs from battles for this specific server
       // This is a placeholder that returns the configured role IDs for each server
@@ -207,11 +208,12 @@ export class ApiService {
       //     roleIdsByServer.set(serverId, serverConfig.roleIds);
       //   }
       
-      // For now, return configured role IDs for all servers
-      // This means all servers will get mentioned if there are any battles
+      // For now, return configured role IDs for all servers (including empty arrays)
+      // This means all servers will get notifications if there are any battles
+      // Messages will be sent without mentions if roleIds is empty
       // Replace with actual logic based on your battle data structure
-      if (battles.length > 0 && serverConfig.roleIds.length > 0) {
-        roleIdsByServer.set(serverId, serverConfig.roleIds);
+      if (battles.length > 0) {
+        roleIdsByServer.set(serverId, serverConfig.roleIds || []);
       }
     }
     

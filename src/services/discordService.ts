@@ -1,6 +1,8 @@
 import { Client, TextChannel, User } from 'discord.js';
 import { logger } from '../utils/logger';
 import { BotConfig } from '../config';
+import { MessageTracker } from './messageTracker';
+import { BattleChange } from './battleTracker';
 
 /**
  * Service for handling Discord-related operations
@@ -9,10 +11,12 @@ export class DiscordService {
   private client: Client;
   private config: BotConfig;
   private channels: Map<string, TextChannel> = new Map(); // serverId -> channel
+  private messageTracker: MessageTracker;
 
-  constructor(client: Client, config: BotConfig) {
+  constructor(client: Client, config: BotConfig, messageTracker: MessageTracker) {
     this.client = client;
     this.config = config;
+    this.messageTracker = messageTracker;
   }
 
   /**
@@ -100,18 +104,18 @@ export class DiscordService {
   }
 
   /**
-   * Send a battle notification with formatted UI, mentioning specific roles
+   * Update or create a battle notification message
    * 
    * @param serverId - Discord server ID
-   * @param roleIds - Array of role IDs to mention
-   * @param battles - Array of battles to display
+   * @param roleIds - Array of role IDs to mention (only on first message)
+   * @param battleChange - Battle change information
    * @param countries - Map of countryId -> CountryDTO for displaying country names
    * @param regions - Map of regionId -> RegionDTO for displaying region names
    */
-  async sendBattleNotification(
-    serverId: string, 
-    roleIds: string[], 
-    battles: unknown[],
+  async updateBattleMessage(
+    serverId: string,
+    roleIds: string[],
+    battleChange: BattleChange,
     countries: Map<string, unknown>,
     regions: Map<string, unknown>
   ): Promise<void> {
@@ -121,45 +125,101 @@ export class DiscordService {
       throw new Error(`Channel not initialized for server ${serverId}. Call initialize() first.`);
     }
 
-    if (roleIds.length === 0) {
-      logger.debug(`No roles to mention for server ${serverId}`);
-      return;
-    }
-
     try {
       // Import formatter dynamically to avoid circular dependencies
       const { formatBattleMessage } = await import('../utils/battleFormatter');
       
-      // Build mention string for roles
-      const mentions = roleIds
-        .map(roleId => `<@&${roleId}>`)
-        .join(' ');
+      const battleId = battleChange.battle._id;
+      const existingMessageId = this.messageTracker.getMessageId(serverId, battleId);
 
       // Format battle details with country and region information
-      // Returns an array of message chunks (to handle Discord's 2000 char limit)
-      const battleUIChunks = formatBattleMessage(
-        battles as Parameters<typeof formatBattleMessage>[0],
+      const battleMessage = formatBattleMessage(
+        [battleChange.battle] as Parameters<typeof formatBattleMessage>[0],
         countries as Parameters<typeof formatBattleMessage>[1],
-        regions as Parameters<typeof formatBattleMessage>[2]
+        regions as Parameters<typeof formatBattleMessage>[2],
+        battleChange.changeType,
+        battleChange.changeHistory
       );
 
-      // Send first chunk with mentions, then remaining chunks
-      if (battleUIChunks.length > 0) {
-        await channel.send(`${mentions}\n\n${battleUIChunks[0]}`);
-        
-        // Send remaining chunks without mentions
-        for (let i = 1; i < battleUIChunks.length; i++) {
-          await channel.send(battleUIChunks[i]);
+      if (!battleMessage || battleMessage.length === 0) {
+        logger.warn(`No battle message generated for battle ${battleId}`);
+        return;
+      }
+
+      if (existingMessageId) {
+        // Update existing message
+        try {
+          const message = await channel.messages.fetch(existingMessageId);
+          await message.edit(battleMessage);
+          logger.info(`Updated battle message for battle ${battleId} in server ${serverId}`);
+        } catch (error) {
+          // Message might have been deleted, create a new one
+          logger.warn(`Failed to update message ${existingMessageId}, creating new message`, error);
+          await this.createNewBattleMessage(channel, serverId, roleIds, battleId, battleMessage);
         }
       } else {
-        // Fallback if no chunks (shouldn't happen)
-        await channel.send(mentions);
+        // Create new message
+        await this.createNewBattleMessage(channel, serverId, roleIds, battleId, battleMessage);
       }
-      
-      logger.info(`Sent battle notification to ${roleIds.length} role(s) in server ${serverId} (channel: ${channel.name})`);
     } catch (error) {
-      logger.error(`Failed to send battle notification to server ${serverId}`, error);
+      logger.error(`Failed to update battle message for server ${serverId}`, error);
       throw error;
+    }
+  }
+
+  /**
+   * Create a new battle message
+   */
+  private async createNewBattleMessage(
+    channel: TextChannel,
+    serverId: string,
+    roleIds: string[],
+    battleId: string,
+    battleMessage: string
+  ): Promise<void> {
+    const mentions = roleIds.length > 0
+      ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+      : '';
+
+    const messageContent = mentions 
+      ? `${mentions}\n\n${battleMessage}`
+      : battleMessage;
+
+    const message = await channel.send(messageContent);
+    this.messageTracker.setMessageId(serverId, battleId, message.id);
+
+    if (roleIds.length > 0) {
+      logger.info(`Created new battle message for battle ${battleId} in server ${serverId} (channel: ${channel.name})`);
+    } else {
+      logger.info(`Created new battle message (no roles mentioned) for battle ${battleId} in server ${serverId} (channel: ${channel.name})`);
+    }
+  }
+
+  /**
+   * Delete a battle message
+   */
+  async deleteBattleMessage(serverId: string, battleId: string): Promise<void> {
+    const channel = this.channels.get(serverId);
+    if (!channel) {
+      logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
+      return;
+    }
+
+    const messageId = this.messageTracker.getMessageId(serverId, battleId);
+    if (!messageId) {
+      logger.debug(`No message ID found for battle ${battleId} in server ${serverId}`);
+      return;
+    }
+
+    try {
+      const message = await channel.messages.fetch(messageId);
+      await message.delete();
+      this.messageTracker.removeBattle(serverId, battleId);
+      logger.info(`Deleted battle message for battle ${battleId} in server ${serverId}`);
+    } catch (error) {
+      logger.warn(`Failed to delete message ${messageId} for battle ${battleId}`, error);
+      // Remove from tracker even if deletion failed (message might already be deleted)
+      this.messageTracker.removeBattle(serverId, battleId);
     }
   }
 

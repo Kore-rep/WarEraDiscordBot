@@ -4,6 +4,7 @@ import { BotConfig } from './config';
 import { ApiService } from './services/apiService';
 import { DiscordService } from './services/discordService';
 import { PollingService } from './services/pollingService';
+import { MessageTracker } from './services/messageTracker';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -29,12 +30,14 @@ export class Bot {
     });
 
     // Initialize services
+    const messageTracker = new MessageTracker();
     this.apiService = new ApiService(config);
-    this.discordService = new DiscordService(this.client, config);
+    this.discordService = new DiscordService(this.client, config, messageTracker);
     this.pollingService = new PollingService(
       config,
       this.apiService,
-      this.discordService
+      this.discordService,
+      messageTracker
     );
 
     // Set up event handlers
