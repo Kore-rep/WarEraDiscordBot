@@ -179,6 +179,8 @@ function getChangeIndicator(changeType: ChangeType): string {
       return '\x1b[1;33m🆕 New Battle\x1b[0m';
     case 'pool_increased':
       return '\x1b[1;32m💰 Pool Increased\x1b[0m';
+    case 'pool_decreased':
+      return '\x1b[1;31m💸 Pool Depleted\x1b[0m';
     case 'bounty_increased':
       return '\x1b[1;32m📈 Bounty Increased\x1b[0m';
     case 'bounty_decreased':

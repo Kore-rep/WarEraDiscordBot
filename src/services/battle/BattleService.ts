@@ -35,8 +35,8 @@ export class BattleService {
       const { battles: allBattles, countries, regions } = await this.apiService.fetchBattles();
       logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
 
-      // Detect changes (new battles, replenished moneyPool, or changed moneyPer1kDamages)
-      // Note: pool decreases are not reported
+      // Detect changes (new battles, pool increases, pool depletions, or changed moneyPer1kDamages)
+      // Note: normal pool decreases trigger message updates but are not logged (only increases and depletions are logged)
       const battleChanges = this.battleTracker.detectChanges(allBattles);
 
       if (battleChanges.length === 0) {
@@ -46,7 +46,7 @@ export class BattleService {
 
       logger.info(
         `Detected ${battleChanges.length} changed battle(s) ` +
-        `(new, replenished moneyPool, or changed moneyPer1kDamages)`
+        `(new, pool increases/depletions, or changed moneyPer1kDamages)`
       );
 
       // Extract role IDs per server from changed battles

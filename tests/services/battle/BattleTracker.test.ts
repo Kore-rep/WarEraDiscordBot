@@ -49,17 +49,60 @@ describe('BattleTracker', () => {
       expect(changes[0].changeHistory[0].oldValue).toBe(100);
     });
 
-    it('should NOT detect pool decreases', () => {
+    it('should detect normal pool decreases (trigger update but not log)', () => {
       const battle = createMockBattle('1', 100, 1.5, 200, 2.0);
       
       // First call - new battle
       tracker.detectChanges([battle]);
 
-      // Second call - decreased pool
+      // Second call - decreased pool (normal decrease, not depletion)
       battle.attacker.moneyPool = 50;
       const changes = tracker.detectChanges([battle]);
 
-      expect(changes).toHaveLength(0);
+      // Should trigger message update but not add to log
+      expect(changes).toHaveLength(1);
+      expect(changes[0].changeType).toBe('pool_decreased');
+      expect(changes[0].changeHistory).toHaveLength(0); // Not logged
+    });
+
+    it('should detect pool depletions (pool goes to 0) and log them', () => {
+      const battle = createMockBattle('1', 100, 1.5, 200, 2.0);
+      
+      // First call - new battle
+      tracker.detectChanges([battle]);
+
+      // Second call - pool depleted (went from > 0 to == 0)
+      battle.attacker.moneyPool = 0;
+      const changes = tracker.detectChanges([battle]);
+
+      // Should trigger message update AND add to log
+      expect(changes).toHaveLength(1);
+      expect(changes[0].changeType).toBe('pool_decreased');
+      expect(changes[0].changeHistory).toHaveLength(1);
+      expect(changes[0].changeHistory[0].type).toBe('pool');
+      expect(changes[0].changeHistory[0].side).toBe('attacker');
+      expect(changes[0].changeHistory[0].oldValue).toBe(100);
+      expect(changes[0].changeHistory[0].newValue).toBe(0);
+    });
+
+    it('should detect defender pool depletions and log them', () => {
+      const battle = createMockBattle('1', 100, 1.5, 200, 2.0);
+      
+      // First call - new battle
+      tracker.detectChanges([battle]);
+
+      // Second call - defender pool depleted
+      battle.defender.moneyPool = 0;
+      const changes = tracker.detectChanges([battle]);
+
+      // Should trigger message update AND add to log
+      expect(changes).toHaveLength(1);
+      expect(changes[0].changeType).toBe('pool_decreased');
+      expect(changes[0].changeHistory).toHaveLength(1);
+      expect(changes[0].changeHistory[0].type).toBe('pool');
+      expect(changes[0].changeHistory[0].side).toBe('defender');
+      expect(changes[0].changeHistory[0].oldValue).toBe(200);
+      expect(changes[0].changeHistory[0].newValue).toBe(0);
     });
 
     it('should detect bounty increases', () => {
@@ -122,6 +165,43 @@ describe('BattleTracker', () => {
       expect(changes[0].changeHistory).toHaveLength(2);
       expect(changes[0].changeHistory[0].type).toBe('pool');
       expect(changes[0].changeHistory[1].type).toBe('bounty');
+    });
+
+    it('should update state for normal pool decreases even though not logged', () => {
+      const battle = createMockBattle('1', 100, 1.5, 200, 2.0);
+      
+      // First call - new battle
+      tracker.detectChanges([battle]);
+
+      // Second call - normal pool decrease (not logged)
+      battle.attacker.moneyPool = 50;
+      const changes1 = tracker.detectChanges([battle]);
+      expect(changes1[0].changeHistory).toHaveLength(0); // Not logged
+
+      // Third call - pool increase from the decreased value
+      // Should use 50 as the old value, not 100
+      battle.attacker.moneyPool = 75;
+      const changes2 = tracker.detectChanges([battle]);
+      
+      expect(changes2).toHaveLength(1);
+      expect(changes2[0].changeType).toBe('pool_increased');
+      expect(changes2[0].changeHistory).toHaveLength(1);
+      expect(changes2[0].changeHistory[0].oldValue).toBe(50); // State was updated
+      expect(changes2[0].changeHistory[0].newValue).toBe(75);
+    });
+
+    it('should not log pool decrease when pool was already 0', () => {
+      const battle = createMockBattle('1', 0, 1.5, 200, 2.0);
+      
+      // First call - new battle (pool already at 0)
+      tracker.detectChanges([battle]);
+
+      // Second call - pool stays at 0 (no change)
+      battle.attacker.moneyPool = 0;
+      const changes = tracker.detectChanges([battle]);
+
+      // Should not trigger update since there's no change
+      expect(changes).toHaveLength(0);
     });
   });
 

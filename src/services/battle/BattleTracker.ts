@@ -46,7 +46,8 @@ export class BattleTracker {
 
   /**
    * Compare current battles with tracked state and detect changes
-   * Only reports changes for pool increases and bounty changes (not pool decreases)
+   * Reports changes for pool increases, pool depletions (pool goes from > 0 to == 0),
+   * and bounty changes. Normal pool decreases trigger message updates but are not logged.
    * 
    * @param currentBattles - Current battles from API
    * @returns Array of battle changes with change type and history
@@ -92,38 +93,88 @@ export class BattleTracker {
         // Existing battle - check for changes
         const changeHistory = [...currentState.changeHistory];
         let changeType: BattleChange['changeType'] | null = null;
+        let stateNeedsUpdate = false;
 
-        // Check if moneyPool increased (only report increases, not decreases)
-        if (attackerMoneyPool > currentState.attackerMoneyPool) {
-          logger.debug(
-            `Battle ${battleId}: Attacker moneyPool increased from ${currentState.attackerMoneyPool} to ${attackerMoneyPool}`
-          );
-          changeHistory.push({
-            timestamp: now,
-            type: 'pool',
-            side: 'attacker',
-            oldValue: currentState.attackerMoneyPool,
-            newValue: attackerMoneyPool,
-          });
-          changeType = 'pool_increased';
+        // Check if moneyPool changed (detect all changes, but only log increases and depletions)
+        if (attackerMoneyPool !== currentState.attackerMoneyPool) {
+          stateNeedsUpdate = true;
+          
+          if (attackerMoneyPool > currentState.attackerMoneyPool) {
+            // Pool increased - add to log
+            logger.debug(
+              `Battle ${battleId}: Attacker moneyPool increased from ${currentState.attackerMoneyPool} to ${attackerMoneyPool}`
+            );
+            changeHistory.push({
+              timestamp: now,
+              type: 'pool',
+              side: 'attacker',
+              oldValue: currentState.attackerMoneyPool,
+              newValue: attackerMoneyPool,
+            });
+            changeType = 'pool_increased';
+          } else if (currentState.attackerMoneyPool > 0 && attackerMoneyPool === 0) {
+            // Pool depleted (was > 0, now == 0) - add to log
+            logger.debug(
+              `Battle ${battleId}: Attacker moneyPool depleted from ${currentState.attackerMoneyPool} to 0`
+            );
+            changeHistory.push({
+              timestamp: now,
+              type: 'pool',
+              side: 'attacker',
+              oldValue: currentState.attackerMoneyPool,
+              newValue: attackerMoneyPool,
+            });
+            if (!changeType) changeType = 'pool_decreased';
+          } else {
+            // Normal pool decrease (not a depletion) - update state and trigger message update but don't log
+            logger.debug(
+              `Battle ${battleId}: Attacker moneyPool decreased from ${currentState.attackerMoneyPool} to ${attackerMoneyPool} (state updated, message updated, not logged)`
+            );
+            if (!changeType) changeType = 'pool_decreased';
+          }
         }
 
-        if (defenderMoneyPool > currentState.defenderMoneyPool) {
-          logger.debug(
-            `Battle ${battleId}: Defender moneyPool increased from ${currentState.defenderMoneyPool} to ${defenderMoneyPool}`
-          );
-          changeHistory.push({
-            timestamp: now,
-            type: 'pool',
-            side: 'defender',
-            oldValue: currentState.defenderMoneyPool,
-            newValue: defenderMoneyPool,
-          });
-          if (!changeType) changeType = 'pool_increased';
+        if (defenderMoneyPool !== currentState.defenderMoneyPool) {
+          stateNeedsUpdate = true;
+          
+          if (defenderMoneyPool > currentState.defenderMoneyPool) {
+            // Pool increased - add to log
+            logger.debug(
+              `Battle ${battleId}: Defender moneyPool increased from ${currentState.defenderMoneyPool} to ${defenderMoneyPool}`
+            );
+            changeHistory.push({
+              timestamp: now,
+              type: 'pool',
+              side: 'defender',
+              oldValue: currentState.defenderMoneyPool,
+              newValue: defenderMoneyPool,
+            });
+            if (!changeType) changeType = 'pool_increased';
+          } else if (currentState.defenderMoneyPool > 0 && defenderMoneyPool === 0) {
+            // Pool depleted (was > 0, now == 0) - add to log
+            logger.debug(
+              `Battle ${battleId}: Defender moneyPool depleted from ${currentState.defenderMoneyPool} to 0`
+            );
+            changeHistory.push({
+              timestamp: now,
+              type: 'pool',
+              side: 'defender',
+              oldValue: currentState.defenderMoneyPool,
+              newValue: defenderMoneyPool,
+            });
+            if (!changeType) changeType = 'pool_decreased';
+          } else {
+            // Normal pool decrease (not a depletion) - update state and trigger message update but don't log
+            logger.debug(
+              `Battle ${battleId}: Defender moneyPool decreased from ${currentState.defenderMoneyPool} to ${defenderMoneyPool} (state updated, message updated, not logged)`
+            );
+            if (!changeType) changeType = 'pool_decreased';
+          }
         }
 
         // Check if moneyPer1kDamages changed (report both increases and decreases)
         if (attackerMoneyPer1kDamages !== currentState.attackerMoneyPer1kDamages) {
+          stateNeedsUpdate = true;
           logger.debug(
             `Battle ${battleId}: Attacker moneyPer1kDamages changed from ${currentState.attackerMoneyPer1kDamages} to ${attackerMoneyPer1kDamages}`
           );
@@ -140,6 +191,7 @@ export class BattleTracker {
         }
 
         if (defenderMoneyPer1kDamages !== currentState.defenderMoneyPer1kDamages) {
+          stateNeedsUpdate = true;
           logger.debug(
             `Battle ${battleId}: Defender moneyPer1kDamages changed from ${currentState.defenderMoneyPer1kDamages} to ${defenderMoneyPer1kDamages}`
           );
@@ -157,14 +209,8 @@ export class BattleTracker {
           }
         }
 
-        if (changeType) {
-          changedBattles.push({
-            battle,
-            changeType,
-            changeHistory,
-          });
-          
-          // Update stored state
+        // Update stored state if there were any changes (pool, bounty, or both)
+        if (stateNeedsUpdate) {
           this.battleStates.set(battleId, {
             battleId,
             attackerMoneyPool,
@@ -178,6 +224,15 @@ export class BattleTracker {
         } else {
           // Update lastSeen even if no changes detected
           currentState.lastSeen = now;
+        }
+
+        // Only trigger message update if there's a changeType (logged changes)
+        if (changeType) {
+          changedBattles.push({
+            battle,
+            changeType,
+            changeHistory,
+          });
         }
       }
     }
