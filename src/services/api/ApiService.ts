@@ -60,7 +60,7 @@ export class ApiService {
 
       // Queue all country requests (they return promises that resolve when batch executes)
       const countryPromises = uniqueCountryIds.map((countryId) => {
-        return this.batchClient.country.getCountryById(countryId);
+        return this.batchClient.country.getCountryById(countryId, {cache: {ttl: 86400 }});
       });
 
       // Execute all queued batch requests at once
@@ -102,7 +102,7 @@ export class ApiService {
     try {
       logger.debug('Fetching regions object from API...');
       
-      const response: GetRegionsObjectResponse = await this.client.region.getRegionsObject();
+      const response: GetRegionsObjectResponse = await this.client.region.getRegionsObject({cache: {ttl: 86400 }});
       const regionsData = response.result.data;
       
       // Convert Record<string, RegionDTO> to Map

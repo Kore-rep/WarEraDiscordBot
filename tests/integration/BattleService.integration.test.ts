@@ -26,8 +26,6 @@ describe('BattleService Integration', () => {
     battleService = new BattleService(mockDiscordService, mockApiService);
 
     // Setup default mocks
-    mockApiService.initialize = jest.fn().mockResolvedValue(undefined);
-    mockApiService.isReady = jest.fn().mockReturnValue(true);
     mockApiService.fetchBattles = jest.fn().mockResolvedValue({
       battles: [],
       countries: new Map(),
