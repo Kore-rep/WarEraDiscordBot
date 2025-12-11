@@ -1,4 +1,5 @@
 import { loadConfig } from '../../src/config/config';
+import { ServerConfigManager } from '../../src/utils/serverConfigManager';
 import * as fs from 'fs';
 
 // Mock fs module
@@ -13,10 +14,12 @@ describe('Config', () => {
     jest.resetModules();
     process.env = { ...originalEnv };
     jest.clearAllMocks();
+    ServerConfigManager.clearCache();
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    ServerConfigManager.clearCache();
   });
 
   describe('loadConfig', () => {
@@ -117,6 +120,24 @@ describe('Config', () => {
       const config = loadConfig();
 
       expect(config.discord.servers.get('server1')?.roleIds).toEqual([]);
+    });
+
+    it('should allow empty servers configuration', () => {
+      process.env.DISCORD_TOKEN = 'test-token';
+      process.env.POLLING_INTERVAL_MINUTES = '5';
+
+      const serversConfig = {
+        servers: {},
+      };
+
+      mockFs.existsSync.mockReturnValue(true);
+      mockFs.readFileSync.mockReturnValue(JSON.stringify(serversConfig));
+
+      const config = loadConfig();
+
+      expect(config.discord.servers.size).toBe(0);
+      expect(config.discord.token).toBe('test-token');
+      expect(config.polling.intervalMinutes).toBe(5);
     });
   });
 });

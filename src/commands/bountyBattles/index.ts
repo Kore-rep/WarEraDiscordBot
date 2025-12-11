@@ -1,0 +1,1 @@
+export { bountyBattlesCommand } from './bountyBattles';

@@ -1,0 +1,486 @@
+import { bountyBattlesCommand } from '../../../src/commands/bountyBattles/bountyBattles';
+import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
+import { ServerConfigManager } from '../../../src/utils/serverConfigManager';
+
+// Mock dependencies
+jest.mock('../../../src/utils/serverConfigManager');
+jest.mock('../../../src/utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+describe('bountyBattlesCommand', () => {
+  let mockInteraction: any;
+  let mockReply: jest.Mock;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    mockReply = jest.fn();
+    mockInteraction = {
+      guildId: 'test-guild-id',
+      reply: mockReply,
+      options: {
+        getSubcommandGroup: jest.fn(),
+        getSubcommand: jest.fn(),
+        getChannel: jest.fn(),
+        getRole: jest.fn(),
+      },
+    };
+  });
+
+  describe('command structure', () => {
+    it('should have correct command name', () => {
+      expect(bountyBattlesCommand.data.name).toBe('bountybattles');
+    });
+
+    it('should have a description', () => {
+      expect(bountyBattlesCommand.data.description).toBeTruthy();
+    });
+  });
+
+  describe('/bountybattles config set', () => {
+    beforeEach(() => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue('config');
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('set');
+    });
+
+    it('should configure server with channel and role', async () => {
+      const mockChannel = {
+        id: 'channel-123',
+        type: ChannelType.GuildText,
+      };
+      const mockRole = {
+        id: 'role-456',
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(mockRole);
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        channelId: 'channel-123',
+        roleIds: ['role-456'],
+        enabled: true,
+      });
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('configured'),
+        ephemeral: true,
+      });
+    });
+
+    it('should configure server with channel only (no role)', async () => {
+      const mockChannel = {
+        id: 'channel-789',
+        type: ChannelType.GuildText,
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        channelId: 'channel-789',
+        roleIds: [],
+        enabled: true,
+      });
+    });
+
+    it('should preserve existing roleIds when no role provided', async () => {
+      const mockChannel = {
+        id: 'channel-new',
+        type: ChannelType.GuildText,
+      };
+      const existingConfig = {
+        channelId: 'old-channel',
+        roleIds: ['existing-role-1', 'existing-role-2'],
+        enabled: true,
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        channelId: 'channel-new',
+        roleIds: ['existing-role-1', 'existing-role-2'],
+        enabled: true,
+      });
+    });
+
+    it('should preserve enabled status when updating configuration', async () => {
+      const mockChannel = {
+        id: 'channel-123',
+        type: ChannelType.GuildText,
+      };
+      const mockRole = {
+        id: 'role-456',
+      };
+      const existingConfig = {
+        channelId: 'old-channel',
+        roleIds: ['old-role'],
+        enabled: false,
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(mockRole);
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        channelId: 'channel-123',
+        roleIds: ['role-456'],
+        enabled: false, // Should preserve disabled status
+      });
+    });
+
+    it('should reject non-text channels', async () => {
+      const mockChannel = {
+        id: 'voice-channel',
+        type: ChannelType.GuildVoice,
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('text channel'),
+        ephemeral: true,
+      });
+    });
+
+    it('should reject if not in a guild', async () => {
+      mockInteraction.guildId = null;
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('server'),
+        ephemeral: true,
+      });
+    });
+
+    it('should update in-memory cache after updating', async () => {
+      const mockChannel = {
+        id: 'channel-123',
+        type: ChannelType.GuildText,
+      };
+
+      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
+      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      // Should update ServerConfigManager (which updates in-memory cache)
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalled();
+    });
+  });
+
+  describe('/bountybattles config view', () => {
+    beforeEach(() => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue('config');
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('view');
+    });
+
+    it('should display configuration when it exists', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: ['role-1', 'role-2'],
+        enabled: true,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringMatching(/Bounty Battles Configuration/),
+        ephemeral: true,
+      });
+      const callContent = mockReply.mock.calls[0][0].content;
+      expect(callContent).toContain('Enabled');
+      expect(callContent).toContain('channel-123');
+    });
+
+    it('should show enabled status correctly', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: [],
+        enabled: true,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      const callContent = mockReply.mock.calls[0][0].content;
+      expect(callContent).toContain('Configuration');
+      expect(callContent).toContain('Enabled');
+    });
+
+    it('should show disabled status correctly', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: [],
+        enabled: false,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      const callContent = mockReply.mock.calls[0][0].content;
+      expect(callContent).toContain('Configuration');
+      expect(callContent).toContain('Disabled');
+    });
+
+    it('should default to enabled when status is not set', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: [],
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      const callContent = mockReply.mock.calls[0][0].content;
+      expect(callContent).toContain('Enabled');
+    });
+
+    it('should prompt to configure when no config exists', async () => {
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('No bounty battles configuration'),
+        ephemeral: true,
+      });
+    });
+
+    it('should reject if not in a guild', async () => {
+      mockInteraction.guildId = null;
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('server'),
+        ephemeral: true,
+      });
+    });
+  });
+
+  describe('/bountybattles enable', () => {
+    beforeEach(() => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('enable');
+    });
+
+    it('should enable notifications for configured server', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: ['role-1'],
+        enabled: false,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        enabled: true,
+      });
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('enabled'),
+        ephemeral: true,
+      });
+    });
+
+    it('should prompt to configure when no config exists', async () => {
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('No bounty battles configuration'),
+        ephemeral: true,
+      });
+    });
+
+    it('should update in-memory cache after enabling', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: [],
+        enabled: false,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      // Should update ServerConfigManager (which updates in-memory cache)
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith(
+        'test-guild-id',
+        { enabled: true }
+      );
+    });
+
+    it('should reject if not in a guild', async () => {
+      mockInteraction.guildId = null;
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('server'),
+        ephemeral: true,
+      });
+    });
+  });
+
+  describe('/bountybattles disable', () => {
+    beforeEach(() => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('disable');
+    });
+
+    it('should disable notifications for configured server', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: ['role-1'],
+        enabled: true,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+        enabled: false,
+      });
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('disabled'),
+        ephemeral: true,
+      });
+    });
+
+    it('should prompt to configure when no config exists', async () => {
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('No bounty battles configuration'),
+        ephemeral: true,
+      });
+    });
+
+    it('should update in-memory cache after disabling', async () => {
+      const mockConfig = {
+        channelId: 'channel-123',
+        roleIds: [],
+        enabled: true,
+      };
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      // Should update ServerConfigManager (which updates in-memory cache)
+      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith(
+        'test-guild-id',
+        { enabled: false }
+      );
+    });
+
+    it('should reject if not in a guild', async () => {
+      mockInteraction.guildId = null;
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('server'),
+        ephemeral: true,
+      });
+    });
+  });
+
+  describe('error handling', () => {
+    it('should handle errors gracefully in config set', async () => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue('config');
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('set');
+      (mockInteraction.options!.getChannel as jest.Mock).mockImplementation(() => {
+        throw new Error('Test error');
+      });
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('error occurred'),
+        ephemeral: true,
+      });
+    });
+
+    it('should handle errors gracefully in config view', async () => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue('config');
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('view');
+      (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation(() => {
+        throw new Error('Test error');
+      });
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('error occurred'),
+        ephemeral: true,
+      });
+    });
+
+    it('should handle errors gracefully in enable', async () => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('enable');
+      (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation(() => {
+        throw new Error('Test error');
+      });
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('error occurred'),
+        ephemeral: true,
+      });
+    });
+
+    it('should handle errors gracefully in disable', async () => {
+      (mockInteraction.options!.getSubcommandGroup as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getSubcommand as jest.Mock).mockReturnValue('disable');
+      (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation(() => {
+        throw new Error('Test error');
+      });
+
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+
+      expect(mockReply).toHaveBeenCalledWith({
+        content: expect.stringContaining('error occurred'),
+        ephemeral: true,
+      });
+    });
+  });
+});

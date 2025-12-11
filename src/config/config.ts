@@ -1,6 +1,5 @@
 import dotenv from 'dotenv';
-import * as fs from 'fs';
-import * as path from 'path';
+import { ServerConfigManager } from '../utils/serverConfigManager';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -11,6 +10,7 @@ dotenv.config();
 export interface ServerConfig {
   channelId: string;
   roleIds: string[];
+  enabled?: boolean; // Whether bounty battle notifications are enabled (default: true)
 }
 
 /**
@@ -31,55 +31,13 @@ export interface BotConfig {
 }
 
 /**
- * Loads server configurations from servers.json file
- * Throws an error if the file is missing or invalid
+ * Loads server configurations from ServerConfigManager
+ * ServerConfigManager must be initialized first via loadConfigs()
  */
 function loadServerConfigs(): Map<string, ServerConfig> {
-  const serversFilePath = path.join(process.cwd(), 'servers.json');
-  
-  if (!fs.existsSync(serversFilePath)) {
-    throw new Error(
-      `servers.json file not found at ${serversFilePath}. ` +
-      `Please create it based on servers.json.example`
-    );
-  }
-
-  try {
-    const fileContent = fs.readFileSync(serversFilePath, 'utf-8');
-    const config = JSON.parse(fileContent) as { servers: Record<string, ServerConfig> };
-
-    if (!config.servers || typeof config.servers !== 'object') {
-      throw new Error('servers.json must contain a "servers" object');
-    }
-
-    const serversMap = new Map<string, ServerConfig>();
-
-    for (const [serverId, serverConfig] of Object.entries(config.servers)) {
-      if (!serverConfig.channelId) {
-        throw new Error(`Server ${serverId} is missing channelId`);
-      }
-
-      if (!Array.isArray(serverConfig.roleIds)) {
-        throw new Error(`Server ${serverId} roleIds must be an array`);
-      }
-
-      serversMap.set(serverId, {
-        channelId: serverConfig.channelId,
-        roleIds: serverConfig.roleIds.filter(id => id && id.trim().length > 0),
-      });
-    }
-
-    if (serversMap.size === 0) {
-      throw new Error('No servers configured in servers.json');
-    }
-
-    return serversMap;
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      throw new Error(`Invalid JSON in servers.json: ${error.message}`);
-    }
-    throw error;
-  }
+  // ServerConfigManager has already been initialized with loadConfigs() at this point
+  // Just retrieve the configs from memory
+  return ServerConfigManager.readServerConfigs();
 }
 
 /**
@@ -103,7 +61,10 @@ export function loadConfig(): BotConfig {
     throw new Error('POLLING_INTERVAL_MINUTES must be a positive number');
   }
 
-  // Load server configurations from JSON file
+  // Initialize ServerConfigManager cache - this is the single source of truth for server configs
+  ServerConfigManager.loadConfigs();
+
+  // Load server configurations from ServerConfigManager
   const servers = loadServerConfigs();
 
   return {

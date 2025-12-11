@@ -1,6 +1,7 @@
 import { createAPI, APIClient } from 'warera-sdk';
 import { logger } from '../../utils/logger';
 import { BotConfig } from '../../config/config';
+import { ServerConfigManager } from '../../utils/serverConfigManager';
 
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<ReturnType<APIClient['battle']['getBattles']>>;
@@ -190,9 +191,12 @@ export class ApiService {
     
     const roleIdsByServer = new Map<string, string[]>();
     
+    // Read current server configurations from ServerConfigManager to get latest config
+    const servers = ServerConfigManager.readServerConfigs();
+    
     // Iterate over all configured servers
     // Include all servers that have battles to report, even if they have no role IDs configured
-    for (const [serverId, serverConfig] of this.config.discord.servers.entries()) {
+    for (const [serverId, serverConfig] of servers.entries()) {
       // TODO: Implement logic to extract role IDs from battles for this specific server
       // This is a placeholder that returns the configured role IDs for each server
       // You should parse the battles array and extract relevant role IDs based on:

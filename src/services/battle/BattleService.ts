@@ -3,6 +3,7 @@ import { BattleTracker, BattleChange } from './BattleTracker';
 import { BattleFormatter } from './BattleFormatter';
 import { DiscordService } from '../discord/DiscordService';
 import { ApiService } from '../api/ApiService';
+import { ServerConfigManager } from '../../utils/serverConfigManager';
 
 /**
  * Service that handles all battle-related operations
@@ -75,6 +76,12 @@ export class BattleService {
 
     for (const [serverId, roleIds] of roleIdsByServer.entries()) {
       try {
+        // Check if notifications are enabled for this server
+        const serverConfig = ServerConfigManager.getServerConfig(serverId);
+        if (serverConfig && serverConfig.enabled === false) {
+          logger.debug(`Skipping server ${serverId} - notifications are disabled`);
+          continue;
+        }
         // Update each changed battle
         for (const battleChange of battleChanges) {
           logger.info(`Updating battle message for battle ${battleChange.battle._id} in server ${serverId}`);

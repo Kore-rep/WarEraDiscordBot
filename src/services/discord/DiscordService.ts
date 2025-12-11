@@ -1,32 +1,34 @@
 import { Client, TextChannel, User } from 'discord.js';
 import { logger } from '../../utils/logger';
-import { BotConfig } from '../../config/config';
 import { MessageTracker } from './MessageTracker';
+import { ServerConfigManager } from '../../utils/serverConfigManager';
 
 /**
  * Service for handling Discord-related operations
  */
 export class DiscordService {
   private client: Client;
-  private config: BotConfig;
   private channels: Map<string, TextChannel> = new Map(); // serverId -> channel
   private messageTracker: MessageTracker;
 
-  constructor(client: Client, config: BotConfig, messageTracker: MessageTracker) {
+  constructor(client: Client, messageTracker: MessageTracker) {
     this.client = client;
-    this.config = config;
     this.messageTracker = messageTracker;
   }
 
   /**
    * Initialize the Discord service by fetching all configured channels
+   * Re-reads the server configuration from ServerConfigManager to get latest config
    */
   async initialize(): Promise<void> {
     try {
-      const serverConfigs = Array.from(this.config.discord.servers.entries());
+      // Read latest server configurations from ServerConfigManager
+      const servers = ServerConfigManager.readServerConfigs();
+      const serverConfigs = Array.from(servers.entries());
       
       if (serverConfigs.length === 0) {
-        throw new Error('No servers configured');
+        logger.warn('No servers configured. Bot will start but will not send notifications until servers are configured via /bountybattles config set');
+        return; // Exit early, no channels to initialize
       }
 
       logger.info(`Initializing Discord service for ${serverConfigs.length} server(s)...`);
@@ -54,10 +56,10 @@ export class DiscordService {
       }
 
       if (this.channels.size === 0) {
-        throw new Error('Failed to initialize any channels. Check your servers.json configuration.');
+        logger.warn('Failed to initialize any channels. Check your servers.json configuration or add servers via /bountybattles config set');
+      } else {
+        logger.info(`Discord service initialized. Connected to ${this.channels.size} channel(s)`);
       }
-
-      logger.info(`Discord service initialized. Connected to ${this.channels.size} channel(s)`);
     } catch (error) {
       logger.error('Failed to initialize Discord service', error);
       throw error;

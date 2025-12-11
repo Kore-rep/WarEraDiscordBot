@@ -21,7 +21,7 @@ describe('BattleService Integration', () => {
   let mockApiService: jest.Mocked<ApiService>;
 
   beforeEach(() => {
-    mockDiscordService = new DiscordService(null as any, null as any, null as any) as jest.Mocked<DiscordService>;
+    mockDiscordService = new DiscordService(null as any, null as any) as jest.Mocked<DiscordService>;
     mockApiService = new ApiService(null as any) as jest.Mocked<ApiService>;
     battleService = new BattleService(mockDiscordService, mockApiService);
 

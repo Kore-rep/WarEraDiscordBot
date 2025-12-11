@@ -6,6 +6,7 @@ import { DiscordService } from '../services/discord/DiscordService';
 import { PollingService } from '../services/polling/PollingService';
 import { MessageTracker } from '../services/discord/MessageTracker';
 import { BattleService } from '../services/battle/BattleService';
+import { CommandHandler } from '../commands';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -17,6 +18,7 @@ export class Bot {
   private discordService: DiscordService;
   private battleService: BattleService;
   private pollingService: PollingService;
+  private commandHandler: CommandHandler;
   private isRunning = false;
 
   constructor(config: BotConfig) {
@@ -34,9 +36,10 @@ export class Bot {
     // Initialize services
     const messageTracker = new MessageTracker();
     this.apiService = new ApiService(config);
-    this.discordService = new DiscordService(this.client, config, messageTracker);
+    this.discordService = new DiscordService(this.client, messageTracker);
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.pollingService = new PollingService(config, this.battleService);
+    this.commandHandler = new CommandHandler(this.client, config.discord.token);
 
     // Set up event handlers
     this.setupEventHandlers();
@@ -53,6 +56,13 @@ export class Bot {
       try {
         // Initialize Discord service (fetch channel)
         await this.discordService.initialize();
+        
+        // Register slash commands
+        await this.commandHandler.registerCommands();
+        logger.info(`Registered ${this.commandHandler.getCommandCount()} slash commands`);
+        
+        // Set up interaction handler for slash commands
+        this.commandHandler.setupInteractionHandler();
         
         // Start periodic polling via polling service
         this.pollingService.start();
