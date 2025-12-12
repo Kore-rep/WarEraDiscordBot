@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
 import { Command, createCommandBuilder } from '../types';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
+import { DiscordService } from '../../services/discord/DiscordService';
 
 /**
  * Command to manage bounty battles settings for the server
@@ -50,13 +51,13 @@ export const bountyBattlesCommand: Command = {
         .setDescription('Disable bounty battle notifications for this server')
     ),
 
-  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  async execute(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
     const subcommandGroup = interaction.options.getSubcommandGroup();
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommandGroup === 'config') {
       if (subcommand === 'set') {
-        await handleConfigSet(interaction);
+        await handleConfigSet(interaction, discordService);
       } else if (subcommand === 'view') {
         await handleConfigView(interaction);
       }
@@ -71,7 +72,7 @@ export const bountyBattlesCommand: Command = {
 /**
  * Handle the config set subcommand
  */
-async function handleConfigSet(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleConfigSet(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
   try {
     // Ensure this is in a guild
     if (!interaction.guildId) {
@@ -100,16 +101,25 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
     // Get current server config
     const currentConfig = ServerConfigManager.getServerConfig(interaction.guildId);
 
+    // Check if channel is changing
+    const channelChanged = currentConfig && currentConfig.channelId !== channel.id;
+
     // Build new role IDs array
     const roleIds = role ? [role.id] : (currentConfig?.roleIds || []);
 
-      // Update server configuration (enable by default if new)
-      // This updates both in-memory cache and disk
-      ServerConfigManager.updateServerConfig(interaction.guildId, {
-        channelId: channel.id,
-        roleIds: roleIds,
-        enabled: currentConfig?.enabled !== undefined ? currentConfig.enabled : true,
-      });
+    // Update server configuration (enable by default if new)
+    // This updates both in-memory cache and disk
+    ServerConfigManager.updateServerConfig(interaction.guildId, {
+      channelId: channel.id,
+      roleIds: roleIds,
+      enabled: currentConfig?.enabled !== undefined ? currentConfig.enabled : true,
+    });
+
+    // If channel changed, clear message tracking for this server so it starts fresh
+    if (channelChanged && discordService) {
+      discordService.clearServerTracking(interaction.guildId);
+      logger.info(`Cleared message tracking for server ${interaction.guildId} due to channel change`);
+    }
 
       // Build confirmation message
       let confirmationMessage = `Bounty battle notifications configured!\n\n`;

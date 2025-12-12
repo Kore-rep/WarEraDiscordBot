@@ -1,6 +1,7 @@
 import { Client, Events, REST, Routes, ChatInputCommandInteraction } from 'discord.js';
 import { Command } from './types';
 import { logger } from '../utils/logger';
+import { DiscordService } from '../services/discord/DiscordService';
 
 // Import all command groups
 import { bountyBattlesCommand } from './bountyBattles';
@@ -12,10 +13,12 @@ export class CommandHandler {
   private commands: Map<string, Command> = new Map();
   private client: Client;
   private token: string;
+  private discordService: DiscordService;
 
-  constructor(client: Client, token: string) {
+  constructor(client: Client, token: string, discordService: DiscordService) {
     this.client = client;
     this.token = token;
+    this.discordService = discordService;
     this.loadCommands();
   }
 
@@ -95,7 +98,7 @@ export class CommandHandler {
       logger.info(
         `Executing command: ${interaction.commandName} by ${interaction.user.tag} in guild ${interaction.guildId}`
       );
-      await command.execute(interaction);
+      await command.execute(interaction, this.discordService);
     } catch (error) {
       logger.error(`Error executing command: ${interaction.commandName}`, error);
 

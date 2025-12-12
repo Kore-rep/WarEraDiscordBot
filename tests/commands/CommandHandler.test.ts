@@ -1,6 +1,7 @@
 import { CommandHandler } from '../../src/commands/CommandHandler';
 import { Events } from 'discord.js';
 import { bountyBattlesCommand } from '../../src/commands/bountyBattles/bountyBattles';
+import { DiscordService } from '../../src/services/discord/DiscordService';
 
 // Mock discord.js
 jest.mock('discord.js', () => {
@@ -21,6 +22,9 @@ jest.mock('discord.js', () => {
     },
   };
 });
+
+// Mock DiscordService
+jest.mock('../../src/services/discord/DiscordService');
 
 // Mock the command
 jest.mock('../../src/commands/bountyBattles/bountyBattles', () => ({
@@ -49,6 +53,7 @@ jest.mock('../../src/utils/logger', () => ({
 
 describe('CommandHandler', () => {
   let mockClient: any;
+  let mockDiscordService: jest.Mocked<DiscordService>;
   let commandHandler: CommandHandler;
   const mockToken = 'test-token';
 
@@ -60,7 +65,11 @@ describe('CommandHandler', () => {
       on: jest.fn(),
     };
 
-    commandHandler = new CommandHandler(mockClient, mockToken);
+    mockDiscordService = {
+      clearServerTracking: jest.fn(),
+    } as any;
+
+    commandHandler = new CommandHandler(mockClient, mockToken, mockDiscordService);
   });
 
   describe('initialization', () => {
@@ -100,7 +109,7 @@ describe('CommandHandler', () => {
         put: jest.fn().mockRejectedValue(mockPutError),
       }));
 
-      const newHandler = new CommandHandler(mockClient, mockToken);
+      const newHandler = new CommandHandler(mockClient, mockToken, mockDiscordService);
 
       await expect(newHandler.registerCommands()).rejects.toThrow('Registration failed');
     });
@@ -130,7 +139,7 @@ describe('CommandHandler', () => {
 
       await interactionHandler(mockInteraction);
 
-      expect(bountyBattlesCommand.execute).toHaveBeenCalledWith(mockInteraction);
+      expect(bountyBattlesCommand.execute).toHaveBeenCalledWith(mockInteraction, mockDiscordService);
     });
 
     it('should ignore non-chat-input interactions', async () => {

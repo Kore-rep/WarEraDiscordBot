@@ -34,25 +34,7 @@ export class DiscordService {
       logger.info(`Initializing Discord service for ${serverConfigs.length} server(s)...`);
 
       for (const [serverId, serverConfig] of serverConfigs) {
-        try {
-          const channel = await this.client.channels.fetch(serverConfig.channelId);
-          
-          if (!channel) {
-            logger.warn(`Channel with ID ${serverConfig.channelId} not found for server ${serverId}`);
-            continue;
-          }
-
-          if (!channel.isTextBased()) {
-            logger.warn(`Channel with ID ${serverConfig.channelId} is not a text channel for server ${serverId}`);
-            continue;
-          }
-
-          this.channels.set(serverId, channel as TextChannel);
-          logger.info(`Initialized channel for server ${serverId}: ${(channel as TextChannel).name}`);
-        } catch (error) {
-          logger.error(`Failed to initialize channel for server ${serverId}`, error);
-          // Continue with other servers even if one fails
-        }
+        await this.initializeServerChannel(serverId, serverConfig.channelId);
       }
 
       if (this.channels.size === 0) {
@@ -63,6 +45,32 @@ export class DiscordService {
     } catch (error) {
       logger.error('Failed to initialize Discord service', error);
       throw error;
+    }
+  }
+
+  /**
+   * Initialize or update a channel for a specific server
+   * Can be called when a server is configured via slash command
+   */
+  async initializeServerChannel(serverId: string, channelId: string): Promise<void> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      
+      if (!channel) {
+        logger.warn(`Channel with ID ${channelId} not found for server ${serverId}`);
+        return;
+      }
+
+      if (!channel.isTextBased()) {
+        logger.warn(`Channel with ID ${channelId} is not a text channel for server ${serverId}`);
+        return;
+      }
+
+      this.channels.set(serverId, channel as TextChannel);
+      logger.info(`Initialized channel for server ${serverId}: ${(channel as TextChannel).name}`);
+    } catch (error) {
+      logger.error(`Failed to initialize channel for server ${serverId}`, error);
+      // Don't throw - this is recoverable
     }
   }
 
@@ -118,10 +126,19 @@ export class DiscordService {
     battleId: string,
     battleMessage: string
   ): Promise<void> {
-    const channel = this.channels.get(serverId);
+    let channel = this.channels.get(serverId);
     
+    // If channel not initialized, try to initialize it now
     if (!channel) {
-      throw new Error(`Channel not initialized for server ${serverId}. Call initialize() first.`);
+      const serverConfig = ServerConfigManager.getServerConfig(serverId);
+      if (serverConfig) {
+        await this.initializeServerChannel(serverId, serverConfig.channelId);
+        channel = this.channels.get(serverId);
+      }
+      
+      if (!channel) {
+        throw new Error(`Channel not initialized for server ${serverId}. Server may not be configured or channel is invalid.`);
+      }
     }
 
     try {
@@ -136,7 +153,17 @@ export class DiscordService {
         // Update existing message
         try {
           const message = await channel.messages.fetch(existingMessageId);
-          await message.edit(battleMessage);
+          
+          // Always include role mentions to preserve Discord notifications
+          const mentions = roleIds.length > 0
+            ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+            : '';
+          
+          const messageContent = mentions 
+            ? `${mentions}\n\n${battleMessage}`
+            : battleMessage;
+          
+          await message.edit(messageContent);
           logger.info(`Updated battle message for battle ${battleId} in server ${serverId}`);
         } catch (error) {
           // Message might have been deleted, create a new one
@@ -185,10 +212,20 @@ export class DiscordService {
    * Delete a battle message
    */
   async deleteBattleMessage(serverId: string, battleId: string): Promise<void> {
-    const channel = this.channels.get(serverId);
+    let channel = this.channels.get(serverId);
+    
+    // If channel not initialized, try to initialize it now
     if (!channel) {
-      logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
-      return;
+      const serverConfig = ServerConfigManager.getServerConfig(serverId);
+      if (serverConfig) {
+        await this.initializeServerChannel(serverId, serverConfig.channelId);
+        channel = this.channels.get(serverId);
+      }
+      
+      if (!channel) {
+        logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
+        return;
+      }
     }
 
     const messageId = this.messageTracker.getMessageId(serverId, battleId);
@@ -263,6 +300,17 @@ export class DiscordService {
       logger.warn(`Failed to fetch user ${userId}`, error);
       return null;
     }
+  }
+
+  /**
+   * Clear message tracking for a server
+   * Used when server configuration changes (e.g., channel changed)
+   * 
+   * @param serverId - Discord server ID
+   */
+  clearServerTracking(serverId: string): void {
+    this.messageTracker.clearServer(serverId);
+    logger.info(`Cleared message tracking for server ${serverId}`);
   }
 }
 
