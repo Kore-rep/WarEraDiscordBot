@@ -292,10 +292,10 @@ function formatSingleBattle(
   const DISCORD_CHAR_LIMIT = 2000;
   
   // Calculate available space for change log
-  // Account for separator, "Change History:" label, and battle link
+  // Account for separator, "Change History:" label, and battle link (outside code block)
   const separatorLine = '\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
   const historyLabel = '\nChange History:';
-  const battleLink = `\n\n🔗 https://app.warera.io/battle/${battle._id}`;
+  const battleLink = `\nhttps://app.warera.io/battle/${battle._id}`;
   const overhead = separatorLine.length + historyLabel.length + battleLink.length;
   const availableForLog = DISCORD_CHAR_LIMIT - baseLength - overhead;
 
@@ -311,12 +311,11 @@ function formatSingleBattle(
     }
   }
 
-  // Add battle link
-  battleLines.push('');
-  battleLines.push(`🔗 https://app.warera.io/battle/${battle._id}`);
+  // Close the code block
   battleLines.push('```');
 
-  const finalMessage = battleLines.join('\n');
+  // Add battle link outside code block (clickable)
+  const finalMessage = battleLines.join('\n') + `\nhttps://app.warera.io/battle/${battle._id}`;
   
   // Final safety check - if still too long, remove change log entirely
   if (finalMessage.length > DISCORD_CHAR_LIMIT) {
@@ -349,12 +348,11 @@ function formatSingleBattle(
       `   ${formatNumber(defenderDamage)} dmg`,
       `   \x1b[1;32m${formatNumber(defenderBounty)}\x1b[0m💰/1k`,
       `   \x1b[0;33m${formatNumber(defenderPool)}\x1b[0m💼`,
-      '',
-      `🔗 https://app.warera.io/battle/${battle._id}`,
       '```'
     );
     
-    return minimalLines.join('\n');
+    // Add clickable link outside code block
+    return minimalLines.join('\n') + `\nhttps://app.warera.io/battle/${battle._id}`;
   }
 
   return finalMessage;

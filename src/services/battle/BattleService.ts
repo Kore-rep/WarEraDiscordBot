@@ -105,12 +105,17 @@ export class BattleService {
             }
           }
 
+          // Calculate total bounty for threshold check
+          const totalBounty = (battleChange.battle.attacker.moneyPer1kDamages || 0) + 
+                             (battleChange.battle.defender.moneyPer1kDamages || 0);
+
           // Update the message in Discord (will create new if deleted above)
           await this.discordService.updateBattleMessage(
             serverId,
             roleIds,
             battleChange.battle._id,
-            battleMessage
+            battleMessage,
+            totalBounty
           );
         }
         serversUpdated++;

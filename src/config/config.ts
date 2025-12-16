@@ -11,6 +11,7 @@ export interface ServerConfig {
   channelId: string;
   roleIds: string[];
   enabled?: boolean; // Whether bounty battle notifications are enabled (default: true)
+  bountyThreshold?: number; // Minimum total bounty (attacker + defender) to trigger role mentions (default: 0)
 }
 
 /**

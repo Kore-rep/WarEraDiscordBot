@@ -174,6 +174,7 @@ describe('ServerConfigManager', () => {
         channelId: 'new-channel',
         roleIds: ['new-role'],
         enabled: true,
+        bountyThreshold: 0,
       });
     });
 

@@ -33,6 +33,13 @@ export const bountyBattlesCommand: Command = {
                 .setDescription('The role to mention for battle updates (optional)')
                 .setRequired(false)
             )
+            .addNumberOption(option =>
+              option
+                .setName('threshold')
+                .setDescription('Minimum total bounty to trigger role mentions (default: 0)')
+                .setRequired(false)
+                .setMinValue(0)
+            )
         )
         .addSubcommand(subcommand =>
           subcommand
@@ -88,6 +95,9 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     
     // Get the role option (optional)
     const role = interaction.options.getRole('role', false);
+    
+    // Get the threshold option (optional)
+    const threshold = interaction.options.getNumber('threshold', false);
 
     // Validate channel is a text channel
     if (channel.type !== ChannelType.GuildText) {
@@ -106,6 +116,9 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
 
     // Build new role IDs array
     const roleIds = role ? [role.id] : (currentConfig?.roleIds || []);
+    
+    // Determine bounty threshold
+    const bountyThreshold = threshold !== null ? threshold : (currentConfig?.bountyThreshold ?? 0);
 
     // Update server configuration (enable by default if new)
     // This updates both in-memory cache and disk
@@ -113,6 +126,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       channelId: channel.id,
       roleIds: roleIds,
       enabled: currentConfig?.enabled !== undefined ? currentConfig.enabled : true,
+      bountyThreshold: bountyThreshold,
     });
 
     // If channel changed, clear message tracking for this server so it starts fresh
@@ -124,6 +138,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       // Build confirmation message
       let confirmationMessage = `Bounty battle notifications configured!\n\n`;
       confirmationMessage += `**Channel:** <#${channel.id}>\n`;
+      confirmationMessage += `**Bounty Threshold:** ${bountyThreshold}\n`;
       
       if (role) {
         confirmationMessage += `**Role:** <@&${role.id}>`;
@@ -180,10 +195,12 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
       // Build configuration display message
       const isEnabled = config.enabled !== false; // Default to true if not set
       const statusText = isEnabled ? 'Enabled' : 'Disabled';
+      const bountyThreshold = config.bountyThreshold ?? 0;
       
       let message = `**Bounty Battles Configuration**\n\n`;
       message += `**Status:** ${statusText}\n`;
       message += `**Channel:** <#${config.channelId}>\n`;
+      message += `**Bounty Threshold:** ${bountyThreshold}\n`;
       
       if (config.roleIds && config.roleIds.length > 0) {
         message += `**Roles:** ${config.roleIds.map(id => `<@&${id}>`).join(', ')}`;

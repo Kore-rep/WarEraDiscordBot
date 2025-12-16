@@ -185,7 +185,8 @@ describe('BattleService', () => {
         'server-enabled',
         ['role-1'],
         'battle-1',
-        expect.any(String)
+        expect.any(String),
+        100 // totalBounty
       );
     });
 

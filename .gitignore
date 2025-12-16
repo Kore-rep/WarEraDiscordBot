@@ -12,6 +12,9 @@ dist/
 # Server configuration (contains sensitive IDs)
 servers.json
 
+# Battle message tracking (generated at runtime)
+battles.json
+
 # Logs
 *.log
 npm-debug.log*

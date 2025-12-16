@@ -32,6 +32,7 @@ describe('bountyBattlesCommand', () => {
         getSubcommand: jest.fn(),
         getChannel: jest.fn(),
         getRole: jest.fn(),
+        getNumber: jest.fn(),
       },
     };
 
@@ -189,6 +190,7 @@ describe('bountyBattlesCommand', () => {
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
@@ -210,6 +212,7 @@ describe('bountyBattlesCommand', () => {
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);

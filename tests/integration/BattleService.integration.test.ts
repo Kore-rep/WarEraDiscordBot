@@ -1,6 +1,7 @@
 import { BattleService } from '../../src/services/battle/BattleService';
 import { DiscordService } from '../../src/services/discord/DiscordService';
 import { ApiService } from '../../src/services/api/ApiService';
+import { ServerConfigManager } from '../../src/utils/serverConfigManager';
 
 // Mock dependencies
 jest.mock('../../src/utils/logger', () => ({
@@ -14,6 +15,7 @@ jest.mock('../../src/utils/logger', () => ({
 
 jest.mock('../../src/services/discord/DiscordService');
 jest.mock('../../src/services/api/ApiService');
+jest.mock('../../src/utils/serverConfigManager');
 
 describe('BattleService Integration', () => {
   let battleService: BattleService;
@@ -35,6 +37,14 @@ describe('BattleService Integration', () => {
     mockDiscordService.updateBattleMessage = jest.fn().mockResolvedValue(undefined);
     mockDiscordService.getServerIds = jest.fn().mockReturnValue(['server1']);
     mockDiscordService.deleteBattleMessage = jest.fn().mockResolvedValue(undefined);
+    
+    // Mock ServerConfigManager - return default config with bountyThreshold: 0
+    (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
+      channelId: 'channel-123',
+      roleIds: ['role1'],
+      enabled: true,
+      bountyThreshold: 0,
+    });
   });
 
   describe('processBattles', () => {
@@ -60,7 +70,8 @@ describe('BattleService Integration', () => {
         'server1',
         ['role1'],
         '1',
-        expect.any(String)
+        expect.any(String),
+        3.5 // totalBounty (1.5 + 2.0)
       );
     });
 

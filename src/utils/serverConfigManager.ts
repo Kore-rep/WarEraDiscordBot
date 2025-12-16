@@ -15,7 +15,7 @@ interface ServersJsonStructure {
  * Uses an in-memory cache for efficiency
  */
 export class ServerConfigManager {
-  private static readonly SERVERS_FILE_PATH = path.join(process.cwd(), 'servers.json');
+  private static readonly SERVERS_FILE_PATH = path.join(process.cwd(), '/config/servers.json');
   private static configCache: Map<string, ServerConfig> | null = null;
 
   /**
@@ -53,6 +53,7 @@ export class ServerConfigManager {
           channelId: serverConfig.channelId,
           roleIds: serverConfig.roleIds.filter(id => id && id.trim().length > 0),
           enabled: serverConfig.enabled,
+          bountyThreshold: serverConfig.bountyThreshold,
         });
       }
 
@@ -103,6 +104,7 @@ export class ServerConfigManager {
         channelId: '',
         roleIds: [],
         enabled: true,
+        bountyThreshold: 0,
       };
 
       // Merge with new config
@@ -110,6 +112,7 @@ export class ServerConfigManager {
         channelId: config.channelId !== undefined ? config.channelId : existingConfig.channelId,
         roleIds: config.roleIds !== undefined ? config.roleIds : existingConfig.roleIds,
         enabled: config.enabled !== undefined ? config.enabled : existingConfig.enabled,
+        bountyThreshold: config.bountyThreshold !== undefined ? config.bountyThreshold : existingConfig.bountyThreshold,
       };
 
       // Update in-memory cache
