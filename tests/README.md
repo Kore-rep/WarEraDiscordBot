@@ -65,7 +65,7 @@ The test suite covers:
 #### Config
 - ✅ Load valid configuration
 - ✅ Validate required environment variables
-- ✅ Parse servers.json
+- ✅ Parse config/serverConfig.json with feature-based structure
 - ✅ Handle invalid configurations
 
 ### Integration Tests

@@ -35,11 +35,14 @@ export class DiscordService {
       logger.info(`Initializing Discord service for ${serverConfigs.length} server(s)...`);
 
       for (const [serverId, serverConfig] of serverConfigs) {
-        await this.initializeServerChannel(serverId, serverConfig.channelId);
+        // Initialize channel for bounty battles if configured
+        if (serverConfig.bountyBattles?.channelId) {
+          await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
+        }
       }
 
       if (this.channels.size === 0) {
-        logger.warn('Failed to initialize any channels. Check your servers.json configuration or add servers via /bountybattles config set');
+        logger.warn('Failed to initialize any channels. Check your serverConfig.json configuration or add servers via /bountybattles config set');
       } else {
         logger.info(`Discord service initialized. Connected to ${this.channels.size} channel(s)`);
       }
@@ -59,21 +62,21 @@ export class DiscordService {
   async initializeServerChannel(serverId: string, channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
-      
-      if (!channel) {
+          
+          if (!channel) {
         logger.warn(`Channel with ID ${channelId} not found for server ${serverId}`);
         return;
-      }
+          }
 
-      if (!channel.isTextBased()) {
+          if (!channel.isTextBased()) {
         logger.warn(`Channel with ID ${channelId} is not a text channel for server ${serverId}`);
         return;
-      }
+          }
 
-      this.channels.set(serverId, channel as TextChannel);
-      logger.info(`Initialized channel for server ${serverId}: ${(channel as TextChannel).name}`);
-    } catch (error) {
-      logger.error(`Failed to initialize channel for server ${serverId}`, error);
+          this.channels.set(serverId, channel as TextChannel);
+          logger.info(`Initialized channel for server ${serverId}: ${(channel as TextChannel).name}`);
+        } catch (error) {
+          logger.error(`Failed to initialize channel for server ${serverId}`, error);
       // Don't throw - this is recoverable
     }
   }
@@ -137,12 +140,12 @@ export class DiscordService {
     // If channel not initialized, try to initialize it now
     if (!channel) {
       const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (serverConfig) {
-        await this.initializeServerChannel(serverId, serverConfig.channelId);
+      if (serverConfig?.bountyBattles?.channelId) {
+        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
         channel = this.channels.get(serverId);
       }
-      
-      if (!channel) {
+    
+    if (!channel) {
         throw new Error(`Channel not initialized for server ${serverId}. Server may not be configured or channel is invalid.`);
       }
     }
@@ -157,7 +160,7 @@ export class DiscordService {
 
       // Check bounty threshold to determine if roles should be mentioned
       const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      const bountyThreshold = serverConfig?.bountyThreshold ?? 0;
+      const bountyThreshold = serverConfig?.bountyBattles?.bountyThreshold ?? 0;
       const shouldMentionRoles = totalBounty >= bountyThreshold;
       
       // Only mention roles if threshold is met
@@ -234,15 +237,15 @@ export class DiscordService {
     // If channel not initialized, try to initialize it now
     if (!channel) {
       const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (serverConfig) {
-        await this.initializeServerChannel(serverId, serverConfig.channelId);
+      if (serverConfig?.bountyBattles?.channelId) {
+        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
         channel = this.channels.get(serverId);
       }
+    }
       
-      if (!channel) {
-        logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
-        return;
-      }
+    if (!channel) {
+      logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
+      return;
     }
 
     const messageId = this.messageTracker.getMessageId(serverId, battleId);
@@ -338,6 +341,38 @@ export class DiscordService {
   }
 
   /**
+   * Send a message to a specific channel
+   * 
+   * @param serverId - Discord server ID
+   * @param channelId - Discord channel ID
+   * @param content - Message content
+   * @returns Message ID if successful, null otherwise
+   */
+  async sendMessageToChannel(serverId: string, channelId: string, content: string): Promise<string | null> {
+    try {
+      // Try to get channel from cache first
+      let channel = this.channels.get(serverId);
+      
+      // If not in cache or different channel, fetch it
+      if (!channel || channel.id !== channelId) {
+        const fetchedChannel = await this.client.channels.fetch(channelId);
+        if (!fetchedChannel?.isTextBased()) {
+          logger.error(`Channel ${channelId} is not a text channel`);
+          return null;
+        }
+        channel = fetchedChannel as TextChannel;
+      }
+
+      const message = await channel.send(content);
+      logger.debug(`Sent message to channel ${channelId} in server ${serverId}`);
+      return message.id;
+    } catch (error) {
+      logger.error(`Failed to send message to channel ${channelId} in server ${serverId}`, error);
+      return null;
+    }
+  }
+
+  /**
    * Load persisted battle messages from battles.json and restore in-memory tracking
    * Also validates that messages still exist and deletes stale entries
    */
@@ -362,8 +397,8 @@ export class DiscordService {
 
           // Get or initialize the channel
           let channel = this.channels.get(entry.serverId);
-          if (!channel) {
-            await this.initializeServerChannel(entry.serverId, serverConfig.channelId);
+          if (!channel && serverConfig.bountyBattles?.channelId) {
+            await this.initializeServerChannel(entry.serverId, serverConfig.bountyBattles.channelId);
             channel = this.channels.get(entry.serverId);
           }
 

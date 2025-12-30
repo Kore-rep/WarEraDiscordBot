@@ -31,8 +31,12 @@ describe('Config', () => {
       const serversConfig = {
         servers: {
           'server1': {
-            channelId: 'channel1',
-            roleIds: ['role1', 'role2'],
+            bountyBattles: {
+              channelId: 'channel1',
+              roleIds: ['role1', 'role2'],
+              enabled: true,
+              bountyThreshold: 0,
+            },
           },
         },
       };
@@ -47,8 +51,13 @@ describe('Config', () => {
       expect(config.api.baseUrl).toBe('https://api.test.com');
       expect(config.discord.servers.size).toBe(1);
       expect(config.discord.servers.get('server1')).toEqual({
-        channelId: 'channel1',
-        roleIds: ['role1', 'role2'],
+        bountyBattles: {
+          channelId: 'channel1',
+          roleIds: ['role1', 'role2'],
+          enabled: true,
+          bountyThreshold: 0,
+        },
+        reports: undefined,
       });
     });
 
@@ -78,7 +87,7 @@ describe('Config', () => {
 
       mockFs.existsSync.mockReturnValue(false);
 
-      expect(() => loadConfig()).toThrow('servers.json file not found');
+      expect(() => loadConfig()).toThrow('serverConfig.json file not found');
     });
 
     it('should throw error when servers.json is invalid JSON', () => {
@@ -108,8 +117,12 @@ describe('Config', () => {
       const serversConfig = {
         servers: {
           'server1': {
-            channelId: 'channel1',
-            roleIds: [],
+            bountyBattles: {
+              channelId: 'channel1',
+              roleIds: [],
+              enabled: true,
+              bountyThreshold: 0,
+            },
           },
         },
       };
@@ -119,7 +132,7 @@ describe('Config', () => {
 
       const config = loadConfig();
 
-      expect(config.discord.servers.get('server1')?.roleIds).toEqual([]);
+      expect(config.discord.servers.get('server1')?.bountyBattles?.roleIds).toEqual([]);
     });
 
     it('should allow empty servers configuration', () => {

@@ -40,7 +40,7 @@ src/
 - **Purpose**: Configuration management
 - **Responsibilities**:
   - Load environment variables
-  - Parse servers.json
+  - Parse config/serverConfig.json
   - Validate configuration
   - Provide typed configuration object
 - **Dependencies**: None
@@ -193,17 +193,31 @@ MessageTracker → Remove tracking
 - `POLLING_INTERVAL_MINUTES`: Polling frequency
 - `API_BASE_URL`: WarEra API base URL
 
-### Server Configuration (servers.json)
+### Server Configuration (config/serverConfig.json)
 ```json
 {
   "servers": {
     "SERVER_ID": {
-      "channelId": "CHANNEL_ID",
-      "roleIds": ["ROLE_ID_1", "ROLE_ID_2"]
+      "bountyBattles": {
+        "channelId": "CHANNEL_ID",
+        "roleIds": ["ROLE_ID_1", "ROLE_ID_2"],
+        "enabled": true,
+        "bountyThreshold": 10.0
+      },
+      "reports": {
+        "channelId": "REPORTS_CHANNEL_ID",
+        "enabled": false,
+        "schedule": "0 9 */2 * *"
+      }
     }
   }
 }
 ```
+
+**Feature-based Configuration:**
+- Each feature (bountyBattles, reports, etc.) has its own config namespace
+- Features can be independently enabled/disabled per server
+- Features can use different channels
 
 ## Message Management
 

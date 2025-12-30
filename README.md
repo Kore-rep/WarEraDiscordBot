@@ -11,9 +11,10 @@ A TypeScript Discord bot that performs periodic API requests using the WarEra SD
   - Battle moneyPool is replenished (increases)
   - Battle moneyPer1kDamages value changes
 - ✅ **Multi-server support** with per-server configuration
+- ✅ **User activity tracking** - Monitor specific users and get notified when inactive
 - ✅ Battle state tracking to detect changes
 - ✅ Comprehensive error handling and logging
-- ✅ Modular structure ready for slash commands
+- ✅ Slash commands for configuration and management
 - ✅ Docker support for Azure deployment
 
 ## Prerequisites
@@ -85,36 +86,63 @@ API_BASE_URL=https://api.example.com
 
 ### 3. Configure Server Settings
 
-Copy the example servers configuration file:
+**Note:** Server configuration is now managed via Discord slash commands (`/bountybattles config set`) for a better user experience. However, you can still manually configure the `config/serverConfig.json` file if needed.
 
-```bash
-copy servers.json.example servers.json
+**Option A: Using Slash Commands (Recommended)**
+
+After starting the bot, use the `/bountybattles config set` command in your Discord server:
+
+```
+/bountybattles config set channel:#battles role:@Fighters threshold:10.0
 ```
 
-Edit `servers.json` and configure each Discord server:
+**Option B: Manual Configuration**
+
+Create `config/serverConfig.json` based on the example:
+
+```bash
+mkdir config
+copy serverConfig.json.example config\serverConfig.json
+```
+
+Edit `config/serverConfig.json`:
 
 ```json
 {
   "servers": {
-    "YOUR_SERVER_ID_1": {
-      "channelId": "YOUR_CHANNEL_ID_1",
-      "roleIds": ["ROLE_ID_1", "ROLE_ID_2"]
-    },
-    "YOUR_SERVER_ID_2": {
-      "channelId": "YOUR_CHANNEL_ID_2",
-      "roleIds": ["ROLE_ID_3"]
+    "YOUR_SERVER_ID": {
+      "bountyBattles": {
+        "channelId": "YOUR_CHANNEL_ID",
+        "roleIds": ["ROLE_ID_1"],
+        "enabled": true,
+        "bountyThreshold": 10.0
+      },
+      "reports": {
+        "channelId": "REPORTS_CHANNEL_ID",
+        "enabled": false,
+        "schedule": "0 9 */2 * *"
+      }
     }
   }
 }
 ```
 
-**Configuration Notes:**
-- Each server entry requires:
-  - **Server ID**: The Discord server (guild) ID
-  - **channelId**: The channel ID where the bot will send messages
-  - **roleIds**: Array of role IDs to mention (can be empty `[]` if you want to extract from battle data)
-- You can add as many servers as needed
-- The bot will poll the API once and send messages to all configured servers that have relevant battles
+**Configuration Structure:**
+- `bountyBattles` - Settings for bounty battle notifications
+  - `channelId` - Channel for battle notifications
+  - `roleIds` - Roles to mention (empty array = no mentions)
+  - `enabled` - Enable/disable notifications (default: true)
+  - `bountyThreshold` - Min total bounty to trigger role mentions (default: 0)
+- `reports` - Settings for periodic reports (future feature)
+  - `channelId` - Channel for reports
+  - `enabled` - Enable/disable reports
+  - `schedule` - Cron schedule for reports
+- `userTracking` - Settings for user inactivity tracking
+  - `enabled` - Enable/disable user tracking (default: true)
+  - `users` - Array of tracked users:
+    - `userId` - War Era user ID to track
+    - `channelId` - Channel for inactivity notifications
+    - `inactivityDays` - Days of inactivity before notification (default: 2)
 
 ### 4. Build the Project
 
@@ -153,8 +181,10 @@ npm start
 │   │   ├── discord/
 │   │   │   ├── DiscordService.ts         # Discord API interactions
 │   │   │   └── MessageTracker.ts         # Message ID tracking
-│   │   └── polling/
-│   │       └── PollingService.ts         # Periodic polling scheduler
+│   │   ├── polling/
+│   │   │   └── PollingService.ts         # Periodic polling scheduler
+│   │   └── userTracking/
+│   │       └── UserTrackingService.ts    # User inactivity tracking
 │   └── utils/
 │       └── logger.ts                     # Winston logger configuration
 ├── tests/                                # Test suite (not in Docker)
@@ -164,7 +194,9 @@ npm start
 ├── dist/                                 # Compiled JavaScript (generated)
 ├── coverage/                             # Test coverage reports (generated)
 ├── .env.example                          # Example environment variables
-├── servers.json.example                  # Example server configuration
+├── serverConfig.json.example             # Example server configuration
+├── config/
+│   └── serverConfig.json                 # Active server configuration (gitignored)
 ├── Dockerfile                            # Docker configuration for Azure
 ├── jest.config.js                        # Jest test configuration
 ├── ARCHITECTURE.md                       # Detailed architecture documentation
@@ -231,6 +263,92 @@ extractRoleIdsByServer(battles: BattleDTO[]): Map<string, string[]> {
 }
 ```
 
+## Available Slash Commands
+
+### Bounty Battle Commands
+
+- `/bountybattles config set` - Configure bounty battle notifications
+  - `channel` - Channel for battle notifications
+  - `role` - Role to mention (optional)
+  - `threshold` - Minimum bounty to trigger role mentions (optional)
+
+- `/bountybattles config view` - View current bounty battle configuration
+
+- `/bountybattles enable` - Enable bounty battle notifications
+
+- `/bountybattles disable` - Disable bounty battle notifications
+
+### User Tracking Commands
+
+- `/user tracking add` - Start tracking a user for inactivity
+  - `userid` - War Era user ID to track (required)
+  - `channel` - Channel for inactivity notifications (required)
+  - `inactivitydays` - Days of inactivity before notification (optional, default: 2)
+
+- `/user tracking remove` - Stop tracking a user
+  - `userid` - War Era user ID to stop tracking
+
+- `/user tracking list` - List all tracked users and their status
+
+**Example:**
+```
+/user tracking add userid:12345 channel:#admin-alerts inactivitydays:3
+```
+
+This will track user ID 12345 and send a notification to #admin-alerts if they haven't been active for 3 days.
+
+## Available Slash Commands
+
+### Bounty Battles Commands
+
+- `/bountybattles config set` - Configure bounty battle notifications
+  - `channel`: Channel for battle notifications
+  - `role`: Role to mention (optional)
+  - `threshold`: Minimum bounty to trigger mentions (optional)
+- `/bountybattles config view` - View current bounty battles configuration
+- `/bountybattles enable` - Enable bounty battle notifications
+- `/bountybattles disable` - Disable bounty battle notifications
+
+### User Tracking Commands
+
+- `/user tracking add` - Start tracking a user for inactivity
+  - `userid`: War Era user ID to track (required)
+  - `channel`: Channel for inactivity notifications (required)
+  - `mentions`: Users/roles to mention in notifications (optional, space-separated)
+  - `inactivitydays`: Days of inactivity before notification (optional, default: 2)
+  - **Immediately fetches and reports the user's current status**
+- `/user tracking remove` - Stop tracking a user
+  - `userid`: War Era user ID **or username** to stop tracking (required)
+- `/user tracking list` - List all tracked users with their current status
+  - Shows username, last activity, and whether they're currently inactive
+
+**Example usage:**
+```
+# Track a user with mentions
+/user tracking add userid:123456 channel:#alerts mentions:@Admin @Moderators inactivitydays:3
+
+# Track without mentions
+/user tracking add userid:789012 channel:#alerts inactivitydays:2
+
+# View all tracked users
+/user tracking list
+
+# Remove by user ID or username
+/user tracking remove userid:123456
+/user tracking remove userid:PlayerName
+```
+
+**Features:**
+- ✅ Immediate status check when adding a user
+- ✅ Mentions specific users/roles when sending notifications
+- ✅ Stores username for easy reference
+- ✅ Shows active/inactive status in list view
+- ✅ Hourly automated checks
+- ✅ Smart notification system - only notifies once per inactivity period
+- ✅ Automatically resets when user returns online
+- ✅ Smart notification system - only notifies once per inactivity period
+- ✅ Automatically resets when user returns online
+
 ## Adding Slash Commands
 
 The bot is structured to easily add slash commands. Here's a basic example:
@@ -278,7 +396,7 @@ this.client.commands.set(pingCommand.data.name, pingCommand);
 3. Configure environment variables in Azure Portal:
    - Go to your App Service → Configuration → Application Settings
    - Add all variables from `.env`
-   - Upload `servers.json` file to your deployment (or configure via environment variables)
+   - Upload `config/serverConfig.json` file to your deployment (or use slash commands to configure)
 
 ### Option 2: Azure Container Instances
 
@@ -310,13 +428,17 @@ RUN npm install ./sdk
 | `POLLING_INTERVAL_MINUTES` | Minutes between API requests | Yes |
 | `API_BASE_URL` | Base URL for API (optional) | No |
 
-**Server Configuration (`servers.json`):**
+**Server Configuration (`config/serverConfig.json`):**
 
 | Field | Description | Required |
 |-------|-------------|----------|
 | `servers` | Object mapping server IDs to configurations | Yes |
-| `servers[serverId].channelId` | Channel ID for this server | Yes |
-| `servers[serverId].roleIds` | Array of role IDs to mention | Yes (can be empty) |
+| `servers[serverId].bountyBattles` | Bounty battle notification settings | No |
+| `servers[serverId].bountyBattles.channelId` | Channel ID for notifications | Yes (if bountyBattles configured) |
+| `servers[serverId].bountyBattles.roleIds` | Array of role IDs to mention | Yes (can be empty) |
+| `servers[serverId].bountyBattles.enabled` | Enable/disable notifications | No (default: true) |
+| `servers[serverId].bountyBattles.bountyThreshold` | Min bounty for role mentions | No (default: 0) |
+| `servers[serverId].reports` | Report settings (future feature) | No |
 
 ## Logging
 
@@ -330,6 +452,7 @@ Logs are output to the console with timestamps and log levels. The bot logs:
 - When battles are fetched from the API
 - When changes are detected (new battles, replenished moneyPool, changed moneyPer1kDamages)
 - When notifications are sent to Discord servers
+- User activity checks and inactivity notifications
 - Battle tracking statistics
 
 ## Error Handling
@@ -355,9 +478,10 @@ The bot includes error handling for:
 - Check bot has permission to access the channels
 
 **Channel not found:**
-- Verify `channelId` in `servers.json` is correct for the specific server
+- Verify `channelId` in `config/serverConfig.json` is correct for the specific server
+- Or use `/bountybattles config view` to check current configuration
 - Ensure bot is in the server and has access to the channel
-- Check that the server ID in `servers.json` matches the actual Discord server ID
+- Check that the server ID in configuration matches the actual Discord server ID
 
 **API calls fail:**
 - Check `API_BASE_URL` if required

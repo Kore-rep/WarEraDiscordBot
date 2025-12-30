@@ -10,6 +10,9 @@ dist/
 .env.*.local
 
 # Server configuration (contains sensitive IDs)
+config/serverConfig.json
+
+# Legacy server configuration (for backwards compatibility)
 servers.json
 
 # Battle message tracking (generated at runtime)

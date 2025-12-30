@@ -5,6 +5,7 @@ import { DiscordService } from '../services/discord/DiscordService';
 
 // Import all command groups
 import { bountyBattlesCommand } from './bountyBattles';
+import { userTrackingCommand } from './userTracking';
 
 /**
  * Manages slash command registration and execution
@@ -28,6 +29,7 @@ export class CommandHandler {
   private loadCommands(): void {
     const commandList: Command[] = [
       bountyBattlesCommand,
+      userTrackingCommand,
       // Add more commands here as they are created
     ];
 

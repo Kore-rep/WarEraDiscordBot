@@ -1,0 +1,25 @@
+{
+  "servers": {
+    "SERVER_ID_1": {
+      "bountyBattles": {
+        "channelId": "CHANNEL_ID_1",
+        "roleIds": ["ROLE_ID_1", "ROLE_ID_2"],
+        "enabled": true,
+        "bountyThreshold": 10.0
+      },
+      "reports": {
+        "enabled": false,
+        "channelId": "REPORT_CHANNEL_ID",
+        "intervalDays": 7
+      }
+    },
+    "SERVER_ID_2": {
+      "bountyBattles": {
+        "channelId": "CHANNEL_ID_2",
+        "roleIds": ["ROLE_ID_3"],
+        "enabled": true,
+        "bountyThreshold": 0
+      }
+    }
+  }
+}

@@ -23,20 +23,20 @@ export const bountyBattlesCommand: Command = {
             .addChannelOption(option =>
               option
                 .setName('channel')
-                .setDescription('The channel where battle updates will be posted')
-                .setRequired(true)
+                .setDescription('Channel for notifications (leave empty to keep current)')
+                .setRequired(false)
                 .addChannelTypes(ChannelType.GuildText)
             )
             .addRoleOption(option =>
               option
                 .setName('role')
-                .setDescription('The role to mention for battle updates (optional)')
+                .setDescription('Role to mention (empty=keep, @null=remove)')
                 .setRequired(false)
             )
             .addNumberOption(option =>
               option
                 .setName('threshold')
-                .setDescription('Minimum total bounty to trigger role mentions (default: 0)')
+                .setDescription('Min bounty for role mentions (empty=keep)')
                 .setRequired(false)
                 .setMinValue(0)
             )
@@ -90,17 +90,26 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       return;
     }
 
-    // Get the channel option
-    const channel = interaction.options.getChannel('channel', true);
-    
-    // Get the role option (optional)
+    // Get options (all optional now)
+    const channel = interaction.options.getChannel('channel', false);
     const role = interaction.options.getRole('role', false);
-    
-    // Get the threshold option (optional)
     const threshold = interaction.options.getNumber('threshold', false);
 
-    // Validate channel is a text channel
-    if (channel.type !== ChannelType.GuildText) {
+    // Get current server config
+    const currentConfig = ServerConfigManager.getServerConfig(interaction.guildId);
+    const currentBountyConfig = currentConfig?.bountyBattles;
+
+    // If no current config exists and no channel provided, require channel
+    if (!currentBountyConfig && !channel) {
+      await interaction.reply({
+        content: 'No configuration exists yet. Please specify a channel to get started.\n\nExample: `/bountybattles config set channel:#bounty-battles`',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Validate channel if provided
+    if (channel && channel.type !== ChannelType.GuildText) {
       await interaction.reply({
         content: 'Please select a text channel.',
         ephemeral: true,
@@ -108,24 +117,36 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       return;
     }
 
-    // Get current server config
-    const currentConfig = ServerConfigManager.getServerConfig(interaction.guildId);
-
+    // Determine new channel ID (use provided or keep existing)
+    const newChannelId = channel ? channel.id : currentBountyConfig!.channelId;
+    
     // Check if channel is changing
-    const channelChanged = currentConfig && currentConfig.channelId !== channel.id;
+    const channelChanged = currentBountyConfig && channel && currentBountyConfig.channelId !== channel.id;
 
     // Build new role IDs array
-    const roleIds = role ? [role.id] : (currentConfig?.roleIds || []);
+    let roleIds: string[];
     
-    // Determine bounty threshold
-    const bountyThreshold = threshold !== null ? threshold : (currentConfig?.bountyThreshold ?? 0);
+    if (role) {
+      // Check if user wants to remove the role (by selecting a role named "null")
+      if (role.name.toLowerCase() === 'null') {
+        roleIds = []; // Remove all roles
+      } else {
+        roleIds = [role.id]; // Set new role
+      }
+    } else {
+      // No role provided, preserve existing
+      roleIds = currentBountyConfig?.roleIds || [];
+    }
+    
+    // Determine bounty threshold (use provided or keep existing)
+    const bountyThreshold = threshold !== null ? threshold : (currentBountyConfig?.bountyThreshold ?? 0);
 
-    // Update server configuration (enable by default if new)
+    // Update bounty battles configuration (enable by default if new)
     // This updates both in-memory cache and disk
-    ServerConfigManager.updateServerConfig(interaction.guildId, {
-      channelId: channel.id,
+    ServerConfigManager.updateBountyBattlesConfig(interaction.guildId, {
+      channelId: newChannelId,
       roleIds: roleIds,
-      enabled: currentConfig?.enabled !== undefined ? currentConfig.enabled : true,
+      enabled: currentBountyConfig?.enabled !== undefined ? currentBountyConfig.enabled : true,
       bountyThreshold: bountyThreshold,
     });
 
@@ -135,18 +156,26 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       logger.info(`Cleared message tracking for server ${interaction.guildId} due to channel change`);
     }
 
-      // Build confirmation message
-      let confirmationMessage = `Bounty battle notifications configured!\n\n`;
-      confirmationMessage += `**Channel:** <#${channel.id}>\n`;
-      confirmationMessage += `**Bounty Threshold:** ${bountyThreshold}\n`;
-      
-      if (role) {
-        confirmationMessage += `**Role:** <@&${role.id}>`;
-      } else if (roleIds.length > 0) {
-        confirmationMessage += `**Roles:** ${roleIds.map(id => `<@&${id}>`).join(', ')}`;
-      } else {
-        confirmationMessage += `**Role:** None (no role will be mentioned)`;
-      }
+    // Build confirmation message
+    let confirmationMessage = `Bounty battle notifications configured!\n\n`;
+    confirmationMessage += `**Channel:** <#${newChannelId}>\n`;
+    confirmationMessage += `**Bounty Threshold:** ${bountyThreshold}\n`;
+    
+    if (roleIds.length > 0) {
+      confirmationMessage += `**Roles:** ${roleIds.map(id => `<@&${id}>`).join(', ')}`;
+    } else {
+      confirmationMessage += `**Role:** None`;
+    }
+
+    // Add info about what was updated
+    const updates: string[] = [];
+    if (channel) updates.push('channel');
+    if (role) updates.push(role.name.toLowerCase() === 'null' ? 'role (removed)' : 'role');
+    if (threshold !== null) updates.push('threshold');
+    
+    if (updates.length > 0) {
+      confirmationMessage += `\n\n*Updated: ${updates.join(', ')}*`;
+    }
 
     // Send ephemeral confirmation message
     await interaction.reply({
@@ -155,7 +184,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     });
 
     logger.info(
-      `Server ${interaction.guildId} configured: channel=${channel.id}, roles=[${roleIds.join(', ')}]`
+      `Server ${interaction.guildId} configured: channel=${newChannelId}, roles=[${roleIds.join(', ')}], threshold=${bountyThreshold}`
     );
   } catch (error) {
     logger.error('Error executing bountybattles config set command', error);
@@ -183,8 +212,9 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
 
     // Get current server config
     const config = ServerConfigManager.getServerConfig(interaction.guildId);
+    const bountyBattlesConfig = config?.bountyBattles;
 
-    if (!config) {
+    if (!bountyBattlesConfig) {
         await interaction.reply({
           content: 'No bounty battles configuration found for this server.\n\nUse `/bountybattles config set` to set it up.',
           ephemeral: true,
@@ -193,17 +223,17 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
       }
 
       // Build configuration display message
-      const isEnabled = config.enabled !== false; // Default to true if not set
+      const isEnabled = bountyBattlesConfig.enabled !== false; // Default to true if not set
       const statusText = isEnabled ? 'Enabled' : 'Disabled';
-      const bountyThreshold = config.bountyThreshold ?? 0;
+      const bountyThreshold = bountyBattlesConfig.bountyThreshold ?? 0;
       
       let message = `**Bounty Battles Configuration**\n\n`;
       message += `**Status:** ${statusText}\n`;
-      message += `**Channel:** <#${config.channelId}>\n`;
+      message += `**Channel:** <#${bountyBattlesConfig.channelId}>\n`;
       message += `**Bounty Threshold:** ${bountyThreshold}\n`;
       
-      if (config.roleIds && config.roleIds.length > 0) {
-        message += `**Roles:** ${config.roleIds.map(id => `<@&${id}>`).join(', ')}`;
+      if (bountyBattlesConfig.roleIds && bountyBattlesConfig.roleIds.length > 0) {
+        message += `**Roles:** ${bountyBattlesConfig.roleIds.map(id => `<@&${id}>`).join(', ')}`;
       } else {
         message += `**Roles:** None (no role will be mentioned)`;
       }
@@ -242,7 +272,7 @@ async function handleEnable(interaction: ChatInputCommandInteraction): Promise<v
     // Get current server config
     const config = ServerConfigManager.getServerConfig(interaction.guildId);
 
-    if (!config) {
+    if (!config?.bountyBattles) {
         await interaction.reply({
           content: 'No bounty battles configuration found for this server.\n\nUse `/bountybattles config set` to set it up first.',
           ephemeral: true,
@@ -250,9 +280,9 @@ async function handleEnable(interaction: ChatInputCommandInteraction): Promise<v
         return;
       }
 
-      // Update server configuration to enable
+      // Update bounty battles configuration to enable
       // This updates both in-memory cache and disk
-      ServerConfigManager.updateServerConfig(interaction.guildId, {
+      ServerConfigManager.updateBountyBattlesConfig(interaction.guildId, {
         enabled: true,
       });
 
@@ -290,7 +320,7 @@ async function handleDisable(interaction: ChatInputCommandInteraction): Promise<
     // Get current server config
     const config = ServerConfigManager.getServerConfig(interaction.guildId);
 
-    if (!config) {
+    if (!config?.bountyBattles) {
         await interaction.reply({
           content: 'No bounty battles configuration found for this server.\n\nUse `/bountybattles config set` to set it up first.',
           ephemeral: true,
@@ -298,9 +328,9 @@ async function handleDisable(interaction: ChatInputCommandInteraction): Promise<
         return;
       }
 
-      // Update server configuration to disable
+      // Update bounty battles configuration to disable
       // This updates both in-memory cache and disk
-      ServerConfigManager.updateServerConfig(interaction.guildId, {
+      ServerConfigManager.updateBountyBattlesConfig(interaction.guildId, {
         enabled: false,
       });
 

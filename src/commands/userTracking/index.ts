@@ -1,0 +1,1 @@
+export { userTrackingCommand } from './userTracking';

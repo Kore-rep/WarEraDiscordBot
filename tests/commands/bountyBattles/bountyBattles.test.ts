@@ -64,18 +64,21 @@ describe('bountyBattlesCommand', () => {
       };
       const mockRole = {
         id: 'role-456',
+        name: 'Fighters',
       };
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(mockRole);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-123',
         roleIds: ['role-456'],
         enabled: true,
+        bountyThreshold: 0,
       });
       expect(mockReply).toHaveBeenCalledWith({
         content: expect.stringContaining('configured'),
@@ -91,14 +94,16 @@ describe('bountyBattlesCommand', () => {
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-789',
         roleIds: [],
         enabled: true,
+        bountyThreshold: 0,
       });
     });
 
@@ -108,21 +113,26 @@ describe('bountyBattlesCommand', () => {
         type: ChannelType.GuildText,
       };
       const existingConfig = {
-        channelId: 'old-channel',
-        roleIds: ['existing-role-1', 'existing-role-2'],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'old-channel',
+          roleIds: ['existing-role-1', 'existing-role-2'],
+          enabled: true,
+          bountyThreshold: 10,
+        },
       };
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-new',
         roleIds: ['existing-role-1', 'existing-role-2'],
         enabled: true,
+        bountyThreshold: 10,
       });
     });
 
@@ -133,23 +143,29 @@ describe('bountyBattlesCommand', () => {
       };
       const mockRole = {
         id: 'role-456',
+        name: 'Fighters',
       };
       const existingConfig = {
-        channelId: 'old-channel',
-        roleIds: ['old-role'],
-        enabled: false,
+        bountyBattles: {
+          channelId: 'old-channel',
+          roleIds: ['old-role'],
+          enabled: false,
+          bountyThreshold: 5,
+        },
       };
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
       (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(mockRole);
+      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-123',
         roleIds: ['role-456'],
         enabled: false, // Should preserve disabled status
+        bountyThreshold: 5, // Should preserve existing threshold
       });
     });
 
@@ -163,7 +179,7 @@ describe('bountyBattlesCommand', () => {
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(ServerConfigManager.updateBountyBattlesConfig).not.toHaveBeenCalled();
       expect(mockReply).toHaveBeenCalledWith({
         content: expect.stringContaining('text channel'),
         ephemeral: true,
@@ -175,7 +191,7 @@ describe('bountyBattlesCommand', () => {
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(ServerConfigManager.updateBountyBattlesConfig).not.toHaveBeenCalled();
       expect(mockReply).toHaveBeenCalledWith({
         content: expect.stringContaining('server'),
         ephemeral: true,
@@ -196,7 +212,7 @@ describe('bountyBattlesCommand', () => {
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
 
       // Should update ServerConfigManager (which updates in-memory cache)
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalled();
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalled();
     });
 
     it('should clear message tracking when channel changes', async () => {
@@ -205,9 +221,12 @@ describe('bountyBattlesCommand', () => {
         type: ChannelType.GuildText,
       };
       const existingConfig = {
-        channelId: 'old-channel-123',
-        roleIds: ['role-1'],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'old-channel-123',
+          roleIds: ['role-1'],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
@@ -227,9 +246,12 @@ describe('bountyBattlesCommand', () => {
         type: ChannelType.GuildText,
       };
       const existingConfig = {
-        channelId: 'same-channel-123',
-        roleIds: ['role-1'],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'same-channel-123',
+          roleIds: ['role-1'],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
@@ -251,9 +273,12 @@ describe('bountyBattlesCommand', () => {
 
     it('should display configuration when it exists', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: ['role-1', 'role-2'],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: ['role-1', 'role-2'],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -271,9 +296,12 @@ describe('bountyBattlesCommand', () => {
 
     it('should show enabled status correctly', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: [],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: [],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -287,9 +315,12 @@ describe('bountyBattlesCommand', () => {
 
     it('should show disabled status correctly', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: [],
-        enabled: false,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: [],
+          enabled: false,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -303,8 +334,11 @@ describe('bountyBattlesCommand', () => {
 
     it('should default to enabled when status is not set', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: [],
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: [],
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -346,16 +380,19 @@ describe('bountyBattlesCommand', () => {
 
     it('should enable notifications for configured server', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: ['role-1'],
-        enabled: false,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: ['role-1'],
+          enabled: false,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         enabled: true,
       });
       expect(mockReply).toHaveBeenCalledWith({
@@ -369,7 +406,7 @@ describe('bountyBattlesCommand', () => {
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(ServerConfigManager.updateBountyBattlesConfig).not.toHaveBeenCalled();
       expect(mockReply).toHaveBeenCalledWith({
         content: expect.stringContaining('No bounty battles configuration'),
         ephemeral: true,
@@ -378,9 +415,12 @@ describe('bountyBattlesCommand', () => {
 
     it('should update in-memory cache after enabling', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: [],
-        enabled: false,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: [],
+          enabled: false,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -388,7 +428,7 @@ describe('bountyBattlesCommand', () => {
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       // Should update ServerConfigManager (which updates in-memory cache)
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith(
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith(
         'test-guild-id',
         { enabled: true }
       );
@@ -414,16 +454,19 @@ describe('bountyBattlesCommand', () => {
 
     it('should disable notifications for configured server', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: ['role-1'],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: ['role-1'],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith('test-guild-id', {
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         enabled: false,
       });
       expect(mockReply).toHaveBeenCalledWith({
@@ -437,7 +480,7 @@ describe('bountyBattlesCommand', () => {
 
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
-      expect(ServerConfigManager.updateServerConfig).not.toHaveBeenCalled();
+      expect(ServerConfigManager.updateBountyBattlesConfig).not.toHaveBeenCalled();
       expect(mockReply).toHaveBeenCalledWith({
         content: expect.stringContaining('No bounty battles configuration'),
         ephemeral: true,
@@ -446,9 +489,12 @@ describe('bountyBattlesCommand', () => {
 
     it('should update in-memory cache after disabling', async () => {
       const mockConfig = {
-        channelId: 'channel-123',
-        roleIds: [],
-        enabled: true,
+        bountyBattles: {
+          channelId: 'channel-123',
+          roleIds: [],
+          enabled: true,
+          bountyThreshold: 0,
+        },
       };
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(mockConfig);
@@ -456,7 +502,7 @@ describe('bountyBattlesCommand', () => {
       await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       // Should update ServerConfigManager (which updates in-memory cache)
-      expect(ServerConfigManager.updateServerConfig).toHaveBeenCalledWith(
+      expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith(
         'test-guild-id',
         { enabled: false }
       );

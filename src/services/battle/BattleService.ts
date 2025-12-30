@@ -78,8 +78,8 @@ export class BattleService {
       try {
         // Check if notifications are enabled for this server
         const serverConfig = ServerConfigManager.getServerConfig(serverId);
-        if (serverConfig && serverConfig.enabled === false) {
-          logger.debug(`Skipping server ${serverId} - notifications are disabled`);
+        if (serverConfig?.bountyBattles && serverConfig.bountyBattles.enabled === false) {
+          logger.debug(`Skipping server ${serverId} - bounty battle notifications are disabled`);
           continue;
         }
         // Update each changed battle

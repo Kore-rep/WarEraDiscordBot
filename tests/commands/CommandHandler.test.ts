@@ -10,6 +10,15 @@ jest.mock('discord.js', () => {
     put: jest.fn().mockResolvedValue(undefined),
   }));
 
+  const mockSlashCommandBuilder = jest.fn().mockImplementation(() => ({
+    setName: jest.fn().mockReturnThis(),
+    setDescription: jest.fn().mockReturnThis(),
+    setDefaultMemberPermissions: jest.fn().mockReturnThis(),
+    setDMPermission: jest.fn().mockReturnThis(),
+    addSubcommandGroup: jest.fn().mockReturnThis(),
+    toJSON: jest.fn().mockReturnValue({}),
+  }));
+
   return {
     Client: jest.fn(),
     Events: {
@@ -20,13 +29,17 @@ jest.mock('discord.js', () => {
     Routes: {
       applicationCommands: jest.fn((clientId) => `/applications/${clientId}/commands`),
     },
+    SlashCommandBuilder: mockSlashCommandBuilder,
+    ChannelType: {
+      GuildText: 0,
+    },
   };
 });
 
 // Mock DiscordService
 jest.mock('../../src/services/discord/DiscordService');
 
-// Mock the command
+// Mock the commands
 jest.mock('../../src/commands/bountyBattles/bountyBattles', () => ({
   bountyBattlesCommand: {
     data: {
@@ -35,6 +48,20 @@ jest.mock('../../src/commands/bountyBattles/bountyBattles', () => ({
       toJSON: jest.fn().mockReturnValue({
         name: 'bountybattles',
         description: 'Manage bounty battles',
+      }),
+    },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/userTracking/userTracking', () => ({
+  userTrackingCommand: {
+    data: {
+      name: 'user',
+      description: 'Manage user tracking',
+      toJSON: jest.fn().mockReturnValue({
+        name: 'user',
+        description: 'Manage user tracking',
       }),
     },
     execute: jest.fn(),
@@ -77,8 +104,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load bountyBattles command', () => {
-      expect(commandHandler.getCommandCount()).toBe(1);
+    it('should load both bountyBattles and user tracking commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(2);
     });
   });
 
@@ -257,7 +284,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(1);
+      expect(commandHandler.getCommandCount()).toBe(2);
     });
   });
 });

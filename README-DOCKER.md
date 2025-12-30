@@ -128,7 +128,7 @@ docker pull docker.io/myuser/warera-discord-bot:1.0.0
 docker run -d \
   --name warera-bot \
   --env-file .env \
-  -v $(pwd)/servers.json:/app/servers.json \
+  -v $(pwd)/config/serverConfig.json:/app/config/serverConfig.json \
   -v $(pwd)/battles.json:/app/battles.json \
   docker.io/myuser/warera-discord-bot:1.0.0
 ```
@@ -136,7 +136,7 @@ docker run -d \
 ## Volumes
 
 The bot uses two JSON files for persistence:
-- `servers.json` - Server configurations
+- `config/serverConfig.json` - Server configurations
 - `battles.json` - Battle message tracking
 
 Mount these as volumes to persist data across container restarts:
@@ -145,7 +145,7 @@ Mount these as volumes to persist data across container restarts:
 docker run -d \
   --name warera-bot \
   --env-file .env \
-  -v /path/to/servers.json:/app/servers.json \
+  -v /path/to/config/serverConfig.json:/app/config/serverConfig.json \
   -v /path/to/battles.json:/app/battles.json \
   --restart unless-stopped \
   docker.io/myuser/warera-discord-bot:1.0.0

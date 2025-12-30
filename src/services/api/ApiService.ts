@@ -215,8 +215,8 @@ export class ApiService {
       // This means all servers will get notifications if there are any battles
       // Messages will be sent without mentions if roleIds is empty
       // Replace with actual logic based on your battle data structure
-      if (battles.length > 0) {
-        roleIdsByServer.set(serverId, serverConfig.roleIds || []);
+      if (battles.length > 0 && serverConfig.bountyBattles) {
+        roleIdsByServer.set(serverId, serverConfig.bountyBattles.roleIds || []);
       }
     }
     

@@ -5,13 +5,55 @@ import { ServerConfigManager } from '../utils/serverConfigManager';
 dotenv.config();
 
 /**
- * Configuration for a single Discord server
+ * Configuration for bounty battles feature per server
  */
-export interface ServerConfig {
+export interface BountyBattlesConfig {
   channelId: string;
   roleIds: string[];
   enabled?: boolean; // Whether bounty battle notifications are enabled (default: true)
   bountyThreshold?: number; // Minimum total bounty (attacker + defender) to trigger role mentions (default: 0)
+}
+
+/**
+ * Configuration for reports feature per server
+ */
+export interface ReportsConfig {
+  channelId?: string;
+  enabled?: boolean;
+  schedule?: string; // Cron schedule or interval
+}
+
+/**
+ * A single tracked user configuration
+ */
+export interface TrackedUser {
+  userId: string;
+  username: string; // War Era username
+  channelId: string;
+  inactivityDays: number; // Number of days of inactivity before notification (default: 2)
+  mentionIds?: string[]; // Full Discord mention strings to include in notifications (e.g., ['<@123>', '<@&456>'])
+  reported?: boolean; // Whether inactivity has been reported (reset when user becomes active)
+  lastChecked?: string; // ISO timestamp of last check
+  lastActive?: string; // ISO timestamp of user's last activity from API
+}
+
+/**
+ * Configuration for user tracking feature per server
+ */
+export interface UserTrackingConfig {
+  enabled?: boolean;
+  users: TrackedUser[];
+}
+
+/**
+ * Configuration for a single Discord server
+ * Contains feature-specific configurations
+ */
+export interface ServerConfig {
+  bountyBattles?: BountyBattlesConfig;
+  reports?: ReportsConfig;
+  userTracking?: UserTrackingConfig;
+  // Add more feature configs here as needed
 }
 
 /**
@@ -42,7 +84,7 @@ function loadServerConfigs(): Map<string, ServerConfig> {
 }
 
 /**
- * Validates and loads configuration from environment variables and servers.json
+ * Validates and loads configuration from environment variables and serverConfig.json
  * Throws an error if required variables are missing
  */
 export function loadConfig(): BotConfig {

@@ -155,7 +155,7 @@ describe('BattleMessageTracker', () => {
       expect(battles.get('server1:battle1')?.messageId).toBe('message1');
     });
 
-    it('should create file if it does not exist', () => {
+    it('should return empty map if file does not exist', () => {
       // Delete the file if it exists
       if (fs.existsSync(testBattlesFile)) {
         fs.unlinkSync(testBattlesFile);
@@ -164,7 +164,8 @@ describe('BattleMessageTracker', () => {
       const battles = BattleMessageTracker.loadBattles();
 
       expect(battles.size).toBe(0);
-      expect(fs.existsSync(testBattlesFile)).toBe(true);
+      // File should not be created by loadBattles(), only by write operations
+      expect(fs.existsSync(testBattlesFile)).toBe(false);
     });
 
     it('should handle corrupted JSON file', () => {

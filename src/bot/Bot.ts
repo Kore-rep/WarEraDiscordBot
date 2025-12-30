@@ -6,6 +6,7 @@ import { DiscordService } from '../services/discord/DiscordService';
 import { PollingService } from '../services/polling/PollingService';
 import { MessageTracker } from '../services/discord/MessageTracker';
 import { BattleService } from '../services/battle/BattleService';
+import { UserTrackingService } from '../services/userTracking';
 import { CommandHandler } from '../commands';
 
 /**
@@ -18,6 +19,7 @@ export class Bot {
   private discordService: DiscordService;
   private battleService: BattleService;
   private pollingService: PollingService;
+  private userTrackingService: UserTrackingService;
   private commandHandler: CommandHandler;
   private isRunning = false;
 
@@ -39,6 +41,7 @@ export class Bot {
     this.discordService = new DiscordService(this.client, messageTracker);
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.pollingService = new PollingService(config, this.battleService);
+    this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService);
 
     // Set up event handlers
@@ -67,7 +70,10 @@ export class Bot {
         // Start periodic polling via polling service
         this.pollingService.start();
         
-        logger.info('Bot is ready and polling has started');
+        // Start user tracking service
+        this.userTrackingService.start();
+        
+        logger.info('Bot is ready, polling and user tracking have started');
       } catch (error) {
         logger.error('Failed to initialize bot services', error);
         // Don't exit - let the bot try to recover
@@ -126,6 +132,9 @@ export class Bot {
 
     // Stop polling service
     this.pollingService.stop();
+    
+    // Stop user tracking service
+    this.userTrackingService.stop();
 
     // Destroy Discord client
     this.client.destroy();

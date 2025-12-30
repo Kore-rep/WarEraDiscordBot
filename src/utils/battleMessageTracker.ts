@@ -24,7 +24,7 @@ interface BattlesJsonStructure {
  * This allows the bot to recover message tracking after restarts
  */
 export class BattleMessageTracker {
-  private static readonly BATTLES_FILE_PATH = path.join(process.cwd(), 'battles.json');
+  private static readonly BATTLES_FILE_PATH = path.join(process.cwd(), '/config/battles.json');
 
   /**
    * Load all battle messages from battles.json

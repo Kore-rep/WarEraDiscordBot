@@ -100,7 +100,7 @@ Tests the configuration loading and validation:
 
 - ✅ Load valid configuration
 - ✅ Validate required environment variables (DISCORD_TOKEN, POLLING_INTERVAL_MINUTES)
-- ✅ Parse servers.json correctly
+- ✅ Parse config/serverConfig.json correctly with nested feature configs
 - ✅ Throw errors for missing/invalid configuration
 - ✅ Handle servers with no role IDs
 

@@ -95,9 +95,12 @@ describe('BattleService', () => {
       );
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        channelId: 'channel-1',
-        roleIds: ['role-1'],
-        enabled: false,
+        bountyBattles: {
+          channelId: 'channel-1',
+          roleIds: ['role-1'],
+          enabled: false,
+          bountyThreshold: 0,
+        },
       });
 
       await battleService.processBattles();
@@ -117,9 +120,12 @@ describe('BattleService', () => {
       );
 
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        channelId: 'channel-1',
-        roleIds: ['role-1'],
-        // enabled is undefined - should default to true
+        bountyBattles: {
+          channelId: 'channel-1',
+          roleIds: ['role-1'],
+          // enabled is undefined - should default to true
+          bountyThreshold: 0,
+        },
       });
 
       await battleService.processBattles();
@@ -163,15 +169,21 @@ describe('BattleService', () => {
       (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation((serverId) => {
         if (serverId === 'server-enabled') {
           return {
-            channelId: 'channel-1',
-            roleIds: ['role-1'],
-            enabled: true,
+            bountyBattles: {
+              channelId: 'channel-1',
+              roleIds: ['role-1'],
+              enabled: true,
+              bountyThreshold: 0,
+            },
           };
         } else if (serverId === 'server-disabled') {
           return {
-            channelId: 'channel-2',
-            roleIds: ['role-2'],
-            enabled: false,
+            bountyBattles: {
+              channelId: 'channel-2',
+              roleIds: ['role-2'],
+              enabled: false,
+              bountyThreshold: 0,
+            },
           };
         }
         return null;
