@@ -1,0 +1,2 @@
+export { scanForCommand } from './scanFor';
+

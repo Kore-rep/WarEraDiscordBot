@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, ChannelType, InteractionContextType } from 'discord.js';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { TrackedUser } from '../../config/config';
 import { logger } from '../../utils/logger';
@@ -11,8 +11,7 @@ export function createCommandBuilder(name: string, description: string): SlashCo
   return new SlashCommandBuilder()
     .setName(name)
     .setDescription(description)
-    .setDefaultMemberPermissions('0') // Administrator only
-    .setDMPermission(false);
+    .setContexts(InteractionContextType.Guild);
 }
 
 export const userTrackingCommand = {

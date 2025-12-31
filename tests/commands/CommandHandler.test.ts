@@ -68,6 +68,20 @@ jest.mock('../../src/commands/userTracking/userTracking', () => ({
   },
 }));
 
+jest.mock('../../src/commands/scanFor/scanFor', () => ({
+  scanForCommand: {
+    data: {
+      name: 'scanfor',
+      description: 'Scan large groups of objects and return results',
+      toJSON: jest.fn().mockReturnValue({
+        name: 'scanfor',
+        description: 'Scan large groups of objects and return results',
+      }),
+    },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -104,8 +118,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load both bountyBattles and user tracking commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(2);
+    it('should load bountyBattles, user tracking, and scanfor commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(3);
     });
   });
 
@@ -284,7 +298,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(2);
+      expect(commandHandler.getCommandCount()).toBe(3);
     });
   });
 });

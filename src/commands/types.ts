@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, SlashCommandBuilder, PermissionFlagsBits, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, SlashCommandBuilder, PermissionFlagsBits, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder, InteractionContextType } from 'discord.js';
 import { DiscordService } from '../services/discord/DiscordService';
 
 /**
@@ -17,5 +17,5 @@ export function createCommandBuilder(name: string, description: string): SlashCo
     .setName(name)
     .setDescription(description)
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .setDMPermission(false);
+    .setContexts(InteractionContextType.Guild);
 }

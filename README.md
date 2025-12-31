@@ -346,8 +346,44 @@ This will track user ID 12345 and send a notification to #admin-alerts if they h
 - ✅ Hourly automated checks
 - ✅ Smart notification system - only notifies once per inactivity period
 - ✅ Automatically resets when user returns online
-- ✅ Smart notification system - only notifies once per inactivity period
-- ✅ Automatically resets when user returns online
+
+### Scan Commands
+
+- `/scanfor country nopresident` - Scan all countries for presidents nearing inactivity
+  - Scans all countries and checks government data
+  - Uses **batch requests** to efficiently fetch all president activity data at once
+  - Reports presidents within 3 hours of reaching 2-day inactivity (45-48 hours)
+  - Shows country name, president username, hours since active, and hours until inactive
+  - Provides real-time progress updates during scan
+
+**Example usage:**
+```
+/scanfor country nopresident
+```
+
+**Example output:**
+```
+Country President Activity Scan Complete
+
+- Total countries scanned: 150
+- Countries with presidents: 142
+- Countries without presidents: 8
+- Presidents nearing 2-day inactivity (45-48h): 3
+
+⚠️ Presidents Approaching Inactivity (45-48 hours):
+
+France (ID: `abc123`)
+└─ President: Napoleon (`user456`)
+└─ Last active: 46 hours ago
+└─ Inactive in: ~2 hour(s)
+```
+
+**Features:**
+- ✅ Efficient batch requests for fast processing
+- ✅ Real-time progress updates (Phase 1: Governments, Phase 2: User data)
+- ✅ Accurate time estimates based on country count
+- ✅ Respects API rate limits (10 req/sec for governments)
+- ✅ Early warning system for president inactivity
 
 ## Adding Slash Commands
 
