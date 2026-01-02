@@ -16,7 +16,10 @@ jest.mock('discord.js', () => {
     setDescription: jest.fn().mockReturnThis(),
     setDefaultMemberPermissions: jest.fn().mockReturnThis(),
     setDMPermission: jest.fn().mockReturnThis(),
+    setContexts: jest.fn().mockReturnThis(),
     addSubcommandGroup: jest.fn().mockReturnThis(),
+    addSubcommand: jest.fn().mockReturnThis(),
+    addStringOption: jest.fn().mockReturnThis(),
     toJSON: jest.fn().mockReturnValue({}),
   }));
 
@@ -33,6 +36,11 @@ jest.mock('discord.js', () => {
     SlashCommandBuilder: mockSlashCommandBuilder,
     ChannelType: {
       GuildText: 0,
+    },
+    InteractionContextType: {
+      Guild: 0,
+      BotDM: 1,
+      PrivateChannel: 2,
     },
   };
 });
@@ -86,6 +94,21 @@ jest.mock('../../src/commands/scanFor/scanFor', () => ({
   },
 }));
 
+jest.mock('../../src/commands/countryGroup/countryGroup', () => ({
+  countryGroupCommand: {
+    data: {
+      name: 'countrygroup',
+      description: 'Manage country groups for filtered scans',
+      toJSON: jest.fn().mockReturnValue({
+        name: 'countrygroup',
+        description: 'Manage country groups for filtered scans',
+      }),
+    },
+    execute: jest.fn(),
+  },
+  handleCountryGroupModal: jest.fn(),
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -128,8 +151,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load bountyBattles, user tracking, and scanfor commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(3);
+    it('should load bountyBattles, user tracking, scanfor, and countrygroup commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(4);
     });
   });
 
@@ -199,6 +222,7 @@ describe('CommandHandler', () => {
       const interactionHandler = mockClient.on.mock.calls[0][1];
       const mockInteraction = {
         isChatInputCommand: jest.fn().mockReturnValue(false),
+        isModalSubmit: jest.fn().mockReturnValue(false),
       };
 
       await interactionHandler(mockInteraction);
@@ -308,7 +332,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(3);
+      expect(commandHandler.getCommandCount()).toBe(4);
     });
   });
 });

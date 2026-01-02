@@ -46,6 +46,26 @@ export interface UserTrackingConfig {
 }
 
 /**
+ * A country in a country group
+ */
+export interface GroupedCountry {
+  countryId: string;
+  countryName: string;
+}
+
+/**
+ * A named group of countries
+ */
+export interface CountryGroup {
+  id: string; // Unique identifier for the group
+  name: string; // User-friendly name
+  countries: GroupedCountry[]; // Array of countries in this group
+  createdBy: string; // Discord user ID who created it
+  createdAt: string; // ISO timestamp
+  updatedAt: string; // ISO timestamp
+}
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -53,6 +73,7 @@ export interface ServerConfig {
   bountyBattles?: BountyBattlesConfig;
   reports?: ReportsConfig;
   userTracking?: UserTrackingConfig;
+  countryGroups?: CountryGroup[];
   // Add more feature configs here as needed
 }
 

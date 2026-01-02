@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ServerConfig, BountyBattlesConfig, TrackedUser } from '../config/config';
+import { ServerConfig, BountyBattlesConfig, TrackedUser, CountryGroup, GroupedCountry } from '../config/config';
 import { logger } from './logger';
 
 /**
@@ -63,6 +63,7 @@ export class ServerConfigManager {
             enabled: serverConfig.userTracking.enabled,
             users: serverConfig.userTracking.users || [],
           } : undefined,
+          countryGroups: serverConfig.countryGroups || [],
         });
       }
 
@@ -198,6 +199,10 @@ export class ServerConfigManager {
         ...config.userTracking,
         users: config.userTracking.users.map(u => ({ ...u })),
       } : undefined,
+      countryGroups: config.countryGroups ? config.countryGroups.map(g => ({
+        ...g,
+        countries: g.countries.map(c => ({ ...c })),
+      })) : [],
     };
   }
 
@@ -345,5 +350,167 @@ export class ServerConfigManager {
   static getTrackedUsers(serverId: string): TrackedUser[] {
     const config = this.getServerConfig(serverId);
     return config?.userTracking?.users || [];
+  }
+
+  /**
+   * Get all country groups for a specific server
+   */
+  static getCountryGroups(serverId: string): CountryGroup[] {
+    const config = this.getServerConfig(serverId);
+    return config?.countryGroups || [];
+  }
+
+  /**
+   * Get a specific country group by name for a server
+   */
+  static getCountryGroup(serverId: string, groupName: string): CountryGroup | undefined {
+    const groups = this.getCountryGroups(serverId);
+    return groups.find(g => g.name.toLowerCase() === groupName.toLowerCase());
+  }
+
+  /**
+   * Create a new country group for a server
+   */
+  static createCountryGroup(serverId: string, group: CountryGroup): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingGroups = existingServerConfig.countryGroups || [];
+
+      // Check if group name already exists
+      const exists = existingGroups.some(g => g.name.toLowerCase() === group.name.toLowerCase());
+      if (exists) {
+        throw new Error(`Country group "${group.name}" already exists`);
+      }
+
+      // Add new group
+      existingGroups.push(group);
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        countryGroups: existingGroups,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Created country group "${group.name}" for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to create country group', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a country group from a server
+   */
+  static deleteCountryGroup(serverId: string, groupName: string): boolean {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      if (!existingServerConfig || !existingServerConfig.countryGroups) {
+        return false;
+      }
+
+      const originalLength = existingServerConfig.countryGroups.length;
+      existingServerConfig.countryGroups = existingServerConfig.countryGroups.filter(
+        g => g.name.toLowerCase() !== groupName.toLowerCase()
+      );
+
+      const removed = existingServerConfig.countryGroups.length < originalLength;
+
+      if (removed) {
+        // Update in-memory cache
+        this.configCache!.set(serverId, existingServerConfig);
+
+        // Write to disk
+        this.writeConfigsToDisk();
+
+        logger.info(`Deleted country group "${groupName}" from server ${serverId}`);
+      }
+
+      return removed;
+    } catch (error) {
+      logger.error('Failed to delete country group', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add countries to an existing group
+   */
+  static addCountriesToGroup(serverId: string, groupName: string, countries: GroupedCountry[]): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      if (!existingServerConfig || !existingServerConfig.countryGroups) {
+        throw new Error('Country group not found');
+      }
+
+      const group = existingServerConfig.countryGroups.find(
+        g => g.name.toLowerCase() === groupName.toLowerCase()
+      );
+
+      if (!group) {
+        throw new Error(`Country group "${groupName}" not found`);
+      }
+
+      // Add countries that don't already exist in the group
+      for (const country of countries) {
+        const exists = group.countries.some(c => c.countryId === country.countryId);
+        if (!exists) {
+          group.countries.push(country);
+        }
+      }
+
+      group.updatedAt = new Date().toISOString();
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Added ${countries.length} countries to group "${groupName}" in server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to add countries to group', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove countries from a group
+   */
+  static removeCountriesFromGroup(serverId: string, groupName: string, countryIds: string[]): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      if (!existingServerConfig || !existingServerConfig.countryGroups) {
+        throw new Error('Country group not found');
+      }
+
+      const group = existingServerConfig.countryGroups.find(
+        g => g.name.toLowerCase() === groupName.toLowerCase()
+      );
+
+      if (!group) {
+        throw new Error(`Country group "${groupName}" not found`);
+      }
+
+      const originalLength = group.countries.length;
+      group.countries = group.countries.filter(c => !countryIds.includes(c.countryId));
+
+      if (group.countries.length < originalLength) {
+        group.updatedAt = new Date().toISOString();
+
+        // Update in-memory cache
+        this.configCache!.set(serverId, existingServerConfig);
+
+        // Write to disk
+        this.writeConfigsToDisk();
+
+        logger.info(`Removed countries from group "${groupName}" in server ${serverId}`);
+      }
+    } catch (error) {
+      logger.error('Failed to remove countries from group', error);
+      throw error;
+    }
   }
 }

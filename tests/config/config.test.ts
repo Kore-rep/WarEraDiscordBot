@@ -58,6 +58,8 @@ describe('Config', () => {
           bountyThreshold: 0,
         },
         reports: undefined,
+        userTracking: undefined,
+        countryGroups: [],
       });
     });
 

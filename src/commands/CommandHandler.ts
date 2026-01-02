@@ -8,6 +8,7 @@ import { ApiService } from '../services/api/ApiService';
 import { bountyBattlesCommand } from './bountyBattles';
 import { userTrackingCommand } from './userTracking';
 import { scanForCommand } from './scanFor';
+import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 
 /**
  * Manages slash command registration and execution
@@ -35,6 +36,7 @@ export class CommandHandler {
       bountyBattlesCommand,
       userTrackingCommand,
       scanForCommand,
+      countryGroupCommand,
       // Add more commands here as they are created
     ];
 
@@ -71,16 +73,21 @@ export class CommandHandler {
   }
 
   /**
-   * Set up interaction handler for slash commands
+   * Set up interaction handler for slash commands and modals
    */
   setupInteractionHandler(): void {
     this.client.on(Events.InteractionCreate, async (interaction) => {
-      // Only handle chat input commands (slash commands)
-      if (!interaction.isChatInputCommand()) {
+      // Handle chat input commands (slash commands)
+      if (interaction.isChatInputCommand()) {
+        await this.handleCommand(interaction);
         return;
       }
 
-      await this.handleCommand(interaction);
+      // Handle modal submissions
+      if (interaction.isModalSubmit()) {
+        await this.handleModalSubmit(interaction);
+        return;
+      }
     });
 
     logger.info('Interaction handler set up successfully');
@@ -122,6 +129,35 @@ export class CommandHandler {
         await interaction.followUp({
           content: errorMessage,
           ephemeral: true,
+        });
+      }
+    }
+  }
+
+  /**
+   * Handle a modal submission
+   */
+  private async handleModalSubmit(interaction: any): Promise<void> {
+    try {
+      const customId = interaction.customId;
+
+      // Check if this is a country group modal
+      if (customId.startsWith('countrygroup-')) {
+        await handleCountryGroupModal(interaction, this.apiService);
+        return;
+      }
+
+      // Unknown modal
+      logger.warn(`Unknown modal submission: ${customId}`);
+    } catch (error) {
+      logger.error('Error handling modal submission', error);
+      
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'An error occurred while processing your modal submission.',
+          ephemeral: true,
+        }).catch(() => {
+          // Silently fail if we can't respond
         });
       }
     }

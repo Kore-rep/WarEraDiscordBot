@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
 import { GetAllCountriesResponse, GetGovernmentByCountryIdResponse, GetUserLiteResponse } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ServerConfigManager } from '../../../utils/serverConfigManager';
 
 /**
  * Handle /scanfor country nopresident
@@ -13,11 +14,53 @@ export async function handleCountryNoPresident(interaction: ChatInputCommandInte
 
   try {
     const apiClient = apiService.getClient();
+    const groupName = interaction.options.getString('group');
+    const serverId = interaction.guildId!;
 
-    // Step 1: Get all countries
-    logger.info('Fetching all countries...');
-    const countriesResponse = await apiClient.country.getAllCountries() as GetAllCountriesResponse;
-    const countries = countriesResponse.result.data;
+    // Step 1: Get countries (either all or from a group)
+    let countries: any[];
+    let scanScope = 'all countries';
+
+    if (groupName) {
+      // Get countries from the specified group
+      const group = ServerConfigManager.getCountryGroup(serverId, groupName);
+      
+      if (!group) {
+        await interaction.editReply({
+          content: `Country group "**${groupName}**" not found. Use \`/countrygroup list\` to see available groups.`,
+        });
+        return;
+      }
+
+      if (group.countries.length === 0) {
+        await interaction.editReply({
+          content: `Country group "**${groupName}**" has no countries. Use \`/countrygroup add ${groupName}\` to add countries.`,
+        });
+        return;
+      }
+
+      // Fetch full country data for countries in the group
+      logger.info(`Fetching ${group.countries.length} countries from group "${groupName}"...`);
+      const countryIds = group.countries.map(c => c.countryId);
+      
+      // Fetch countries individually (we could batch this if needed)
+      const countryPromises = countryIds.map(id => apiClient.country.getCountryById(id));
+      const countryResponses = await Promise.all(countryPromises);
+      
+      countries = countryResponses
+        .map(response => response.result.data)
+        .filter(country => country !== null && country !== undefined);
+      
+      scanScope = `group "${groupName}" (${countries.length} countries)`;
+      logger.info(`Scanning ${countries.length} countries from group "${groupName}"`);
+    } else {
+      // Get all countries
+      logger.info('Fetching all countries...');
+      const countriesResponse = await apiClient.country.getAllCountries() as GetAllCountriesResponse;
+      countries = countriesResponse.result.data;
+      logger.info(`Found ${countries.length} total countries to scan`);
+    }
+
     const countryCount = countries.length;
 
     if (countryCount === 0) {
@@ -52,6 +95,7 @@ export async function handleCountryNoPresident(interaction: ChatInputCommandInte
     await interaction.editReply({
       content: 
         `**Country President Activity Scan Initiated**\n\n` +
+        `- Scan scope: ${scanScope}\n` +
         `- Total countries: ${countryCount}\n` +
         `- Estimated time: ~${timeEstimate}\n` +
         `- Status: Scanning governments...\n\n` +
@@ -208,6 +252,7 @@ export async function handleCountryNoPresident(interaction: ChatInputCommandInte
 
     // Step 6: Format and send results
     let resultMessage = `**Country President Activity Scan Complete**\n\n`;
+    resultMessage += `- Scan scope: ${scanScope}\n`;
     resultMessage += `- Total countries scanned: ${countryCount}\n`;
     resultMessage += `- Countries with presidents: ${countriesWithPresidents.length}\n`;
     resultMessage += `- Countries without presidents: ${countriesWithoutPresidents.length}\n`;
@@ -215,7 +260,7 @@ export async function handleCountryNoPresident(interaction: ChatInputCommandInte
 
     // Show countries without ANY government (no president, no congress) - CRITICAL
     if (countriesWithNoGovernment.length > 0) {
-      resultMessage += `**🚨 CRITICAL: Countries With NO President AND NO Congress:**\n\n`;
+      resultMessage += `**Countries With no President AND no Congress:**\n\n`;
 
       // Discord has a 2000 character limit, so limit the list
       const maxCriticalToShow = 10;
@@ -242,7 +287,7 @@ export async function handleCountryNoPresident(interaction: ChatInputCommandInte
       for (const country of countriesToShow) {
         const congressInfo = country.congressMemberCount > 0 
           ? ` - Congress: ${country.congressMemberCount} member${country.congressMemberCount !== 1 ? 's' : ''}`
-          : ` - 🚨 NO CONGRESS`;
+          : ` - NO CONGRESS`;
         resultMessage += `- **${country.countryName}** (ID: \`${country.countryId}\`)${congressInfo}\n`;
       }
 

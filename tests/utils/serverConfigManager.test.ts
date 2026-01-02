@@ -84,6 +84,8 @@ describe('ServerConfigManager', () => {
           bountyThreshold: 0,
         },
         reports: undefined,
+        userTracking: undefined,
+        countryGroups: [],
       });
       expect(configs.get('test-server-2')).toEqual({
         bountyBattles: {
@@ -93,6 +95,8 @@ describe('ServerConfigManager', () => {
           bountyThreshold: 10,
         },
         reports: undefined,
+        userTracking: undefined,
+        countryGroups: [],
       });
     });
 
@@ -137,6 +141,8 @@ describe('ServerConfigManager', () => {
           bountyThreshold: 0,
         },
         reports: undefined,
+        userTracking: undefined,
+        countryGroups: [],
       });
     });
 

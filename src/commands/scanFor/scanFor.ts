@@ -21,6 +21,12 @@ export const scanForCommand = {
           subcommand
             .setName('nopresident')
             .setDescription('Find all countries without an active president')
+            .addStringOption(option =>
+              option
+                .setName('group')
+                .setDescription('Filter to a specific country group (optional)')
+                .setRequired(false)
+            )
         )
     )
     .addSubcommandGroup(group =>
