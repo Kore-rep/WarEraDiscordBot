@@ -1,12 +1,13 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder, PermissionFlagsBits, SlashCommandOptionsOnlyBuilder, SlashCommandSubcommandsOnlyBuilder, InteractionContextType } from 'discord.js';
 import { DiscordService } from '../services/discord/DiscordService';
+import { ApiService } from '../services/api/ApiService';
 
 /**
  * Interface for slash command definitions
  */
 export interface Command {
   data: SlashCommandBuilder | SlashCommandOptionsOnlyBuilder | SlashCommandSubcommandsOnlyBuilder;
-  execute: (interaction: ChatInputCommandInteraction, discordService?: DiscordService) => Promise<void>;
+  execute: (interaction: ChatInputCommandInteraction, discordService?: DiscordService, apiService?: ApiService) => Promise<void>;
 }
 
 /**

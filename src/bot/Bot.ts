@@ -42,7 +42,7 @@ export class Bot {
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.pollingService = new PollingService(config, this.battleService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
-    this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService);
+    this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 
     // Set up event handlers
     this.setupEventHandlers();

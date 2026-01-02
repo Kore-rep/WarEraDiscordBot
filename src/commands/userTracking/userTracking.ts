@@ -2,7 +2,8 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, ChannelType, Interact
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { TrackedUser } from '../../config/config';
 import { logger } from '../../utils/logger';
-import { createAPI } from 'warera-sdk';
+import { DiscordService } from '../../services/discord/DiscordService';
+import { ApiService } from '../../services/api/ApiService';
 
 /**
  * Command builder for /user tracking
@@ -70,7 +71,7 @@ export const userTrackingCommand = {
         )
     ),
 
-  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  async execute(interaction: ChatInputCommandInteraction, _discordService?: DiscordService, apiService?: ApiService): Promise<void> {
     try {
       // Ensure command is used in a guild
       if (!interaction.guildId) {
@@ -81,12 +82,21 @@ export const userTrackingCommand = {
         return;
       }
 
+      // Ensure apiService is provided
+      if (!apiService) {
+        await interaction.reply({
+          content: 'API service is not available. Please contact an administrator.',
+          ephemeral: true,
+        });
+        return;
+      }
+
       const subcommandGroup = interaction.options.getSubcommandGroup();
       const subcommand = interaction.options.getSubcommand();
 
       if (subcommandGroup === 'tracking') {
         if (subcommand === 'add') {
-          await handleTrackingAdd(interaction);
+          await handleTrackingAdd(interaction, apiService);
         } else if (subcommand === 'remove') {
           await handleTrackingRemove(interaction);
         } else if (subcommand === 'list') {
@@ -109,7 +119,7 @@ export const userTrackingCommand = {
 /**
  * Handle /user tracking add
  */
-async function handleTrackingAdd(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiService: ApiService): Promise<void> {
   const userId = interaction.options.getString('userid', true);
   const channel = interaction.options.getChannel('channel', true);
   const mentionsString = interaction.options.getString('mentions');
@@ -130,7 +140,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction): Prom
 
   try {
     // Fetch user data from API to get username and current status
-    const apiClient = createAPI({ baseUrl: process.env.API_BASE_URL });
+    const apiClient = apiService.getClient();
     const apiResponse = await apiClient.user.getUserLite(userId);
     const userData = apiResponse.result.data;
     const username = userData.username;

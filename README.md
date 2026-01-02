@@ -169,6 +169,19 @@ npm start
 │   ├── index.ts                          # Application entry point
 │   ├── bot/
 │   │   └── Bot.ts                        # Main bot orchestrator
+│   ├── commands/
+│   │   ├── CommandHandler.ts             # Command registration & routing
+│   │   ├── types.ts                      # Command type definitions
+│   │   ├── bountyBattles/                # Bounty battle commands
+│   │   │   └── bountyBattles.ts
+│   │   ├── userTracking/                 # User tracking commands
+│   │   │   └── userTracking.ts
+│   │   └── scanFor/                      # Scan commands (modular structure)
+│   │       ├── scanFor.ts                # Main command router
+│   │       ├── country/                  # Country scan subcommands
+│   │       │   └── nopresident.ts        # Scan for countries without presidents
+│   │       └── company/                  # Company scan subcommands
+│   │           └── production.ts         # Analyze company production
 │   ├── config/
 │   │   └── config.ts                     # Configuration loading and validation
 │   ├── services/
@@ -186,17 +199,22 @@ npm start
 │   │   └── userTracking/
 │   │       └── UserTrackingService.ts    # User inactivity tracking
 │   └── utils/
-│       └── logger.ts                     # Winston logger configuration
+│       ├── logger.ts                     # Winston logger configuration
+│       ├── serverConfigManager.ts        # Server configuration management
+│       └── battleMessageTracker.ts       # Battle message persistence
 ├── tests/                                # Test suite (not in Docker)
 │   ├── config/                           # Configuration tests
+│   ├── commands/                         # Command tests
 │   ├── services/                         # Service unit tests
+│   ├── utils/                            # Utility tests
 │   └── integration/                      # Integration tests
 ├── dist/                                 # Compiled JavaScript (generated)
 ├── coverage/                             # Test coverage reports (generated)
 ├── .env.example                          # Example environment variables
 ├── serverConfig.json.example             # Example server configuration
 ├── config/
-│   └── serverConfig.json                 # Active server configuration (gitignored)
+│   ├── serverConfig.json                 # Active server configuration (gitignored)
+│   └── battles.json                      # Battle message tracking (gitignored)
 ├── Dockerfile                            # Docker configuration for Azure
 ├── jest.config.js                        # Jest test configuration
 ├── ARCHITECTURE.md                       # Detailed architecture documentation
@@ -204,6 +222,16 @@ npm start
 ├── tsconfig.json                         # TypeScript configuration
 └── README.md                             # This file
 ```
+
+### Command Structure
+
+The scanFor commands follow a **modular folder structure** for better maintainability:
+
+- Each subcommand group (e.g., `country`, `company`) has its own folder
+- Each subcommand (e.g., `nopresident`, `production`) is in a separate file
+- The main `scanFor.ts` file acts as a router that imports and delegates to the handlers
+
+This structure makes it easy to add new scan commands without bloating a single file.
 
 ## Testing
 
@@ -349,12 +377,16 @@ This will track user ID 12345 and send a notification to #admin-alerts if they h
 
 ### Scan Commands
 
-- `/scanfor country nopresident` - Scan all countries for presidents nearing inactivity
-  - Scans all countries and checks government data
-  - Uses **batch requests** to efficiently fetch all president activity data at once
-  - Reports presidents within 3 hours of reaching 2-day inactivity (45-48 hours)
-  - Shows country name, president username, hours since active, and hours until inactive
-  - Provides real-time progress updates during scan
+#### `/scanfor country nopresident`
+Scan all countries for presidents nearing inactivity and identify countries without government
+
+- Scans all countries and checks government data
+- Uses **batch requests** to efficiently fetch all president activity data at once
+- Reports presidents within 3 hours of reaching 3-day inactivity (69-72 hours)
+- Shows country name, president username, hours since active, and hours until inactive
+- **Lists countries without presidents** and their congress member counts
+- **Highlights critical countries** with no president AND no congress members
+- Provides real-time progress updates during scan
 
 **Example usage:**
 ```
@@ -368,13 +400,24 @@ Country President Activity Scan Complete
 - Total countries scanned: 150
 - Countries with presidents: 142
 - Countries without presidents: 8
-- Presidents nearing 2-day inactivity (45-48h): 3
+- Presidents nearing 3-day inactivity (69-72h): 3
 
-⚠️ Presidents Approaching Inactivity (45-48 hours):
+🚨 CRITICAL: Countries With NO President AND NO Congress:
 
-France (ID: `abc123`)
-└─ President: Napoleon (`user456`)
-└─ Last active: 46 hours ago
+- **Anarchy Land** (ID: `xyz789`)
+- **Abandoned State** (ID: `def456`)
+
+Countries Without Presidents:
+
+- **France** (ID: `abc123`) - Congress: 5 members
+- **Germany** (ID: `ghi789`) - Congress: 3 members
+- **Italy** (ID: `jkl012`) - 🚨 NO CONGRESS
+
+⚠️ Presidents Approaching Inactivity (69-72 hours):
+
+Spain (ID: `mno345`)
+└─ President: Alfonso (`user678`)
+└─ Last active: 70 hours ago
 └─ Inactive in: ~2 hour(s)
 ```
 
@@ -383,7 +426,53 @@ France (ID: `abc123`)
 - ✅ Real-time progress updates (Phase 1: Governments, Phase 2: User data)
 - ✅ Accurate time estimates based on country count
 - ✅ Respects API rate limits (10 req/sec for governments)
-- ✅ Early warning system for president inactivity
+- ✅ Early warning system for president inactivity (3-day threshold)
+- ✅ **Congress member counts** for countries without presidents
+- ✅ **Critical alerts** for countries with no government at all
+
+#### `/scanfor company production`
+Analyze company production across all items in the game
+
+- **Phase 1:** Fetches all company IDs using pagination (100 companies per page)
+- **Phase 2:** Gets company details to determine production items (10 companies at a time)
+- Counts how many companies produce each item type
+- Results sorted by count (highest to lowest)
+- Real-time progress updates with percentage completion
+- Uses efficient pagination to retrieve all companies directly
+
+**Example usage:**
+```
+/scanfor company production
+```
+
+**Example output:**
+```
+Company Production Analysis Complete
+
+- Total companies: 6,789
+- Item types produced: 25
+
+Companies by Item Type:
+
+Fish: 1,234
+Iron: 987
+Wheat: 856
+Oil: 654
+Steel: 543
+...
+```
+
+**Features:**
+- ✅ **Efficient pagination** - fetches 100 companies per page using nextCursor
+- ✅ **Direct company access** - no need to fetch countries or users first
+- ✅ **Large-scale scanning** - handles 5,000-10,000 companies efficiently
+- ✅ **Batch request optimization** - processes company details in batches of 10
+- ✅ **URI length management** - keeps batch sizes small to avoid 414 errors
+- ✅ **Real-time progress reporting** - shows current phase and percentage
+- ✅ **Rate limit friendly** - includes delays between requests
+- ✅ **Sorted results** - items ordered by production volume
+
+**Note:** This command is much faster than the previous approach! Typically completes in 2-5 minutes for large games.
 
 ## Adding Slash Commands
 

@@ -2,6 +2,7 @@ import { CommandHandler } from '../../src/commands/CommandHandler';
 import { Events } from 'discord.js';
 import { bountyBattlesCommand } from '../../src/commands/bountyBattles/bountyBattles';
 import { DiscordService } from '../../src/services/discord/DiscordService';
+import { ApiService } from '../../src/services/api/ApiService';
 
 // Mock discord.js
 jest.mock('discord.js', () => {
@@ -38,6 +39,9 @@ jest.mock('discord.js', () => {
 
 // Mock DiscordService
 jest.mock('../../src/services/discord/DiscordService');
+
+// Mock ApiService
+jest.mock('../../src/services/api/ApiService');
 
 // Mock the commands
 jest.mock('../../src/commands/bountyBattles/bountyBattles', () => ({
@@ -95,6 +99,7 @@ jest.mock('../../src/utils/logger', () => ({
 describe('CommandHandler', () => {
   let mockClient: any;
   let mockDiscordService: jest.Mocked<DiscordService>;
+  let mockApiService: jest.Mocked<ApiService>;
   let commandHandler: CommandHandler;
   const mockToken = 'test-token';
 
@@ -110,7 +115,12 @@ describe('CommandHandler', () => {
       clearServerTracking: jest.fn(),
     } as any;
 
-    commandHandler = new CommandHandler(mockClient, mockToken, mockDiscordService);
+    mockApiService = {
+      getClient: jest.fn(),
+      createBatchClient: jest.fn(),
+    } as any;
+
+    commandHandler = new CommandHandler(mockClient, mockToken, mockDiscordService, mockApiService);
   });
 
   describe('initialization', () => {
@@ -150,7 +160,7 @@ describe('CommandHandler', () => {
         put: jest.fn().mockRejectedValue(mockPutError),
       }));
 
-      const newHandler = new CommandHandler(mockClient, mockToken, mockDiscordService);
+      const newHandler = new CommandHandler(mockClient, mockToken, mockDiscordService, mockApiService);
 
       await expect(newHandler.registerCommands()).rejects.toThrow('Registration failed');
     });
@@ -180,7 +190,7 @@ describe('CommandHandler', () => {
 
       await interactionHandler(mockInteraction);
 
-      expect(bountyBattlesCommand.execute).toHaveBeenCalledWith(mockInteraction, mockDiscordService);
+      expect(bountyBattlesCommand.execute).toHaveBeenCalledWith(mockInteraction, mockDiscordService, mockApiService);
     });
 
     it('should ignore non-chat-input interactions', async () => {
