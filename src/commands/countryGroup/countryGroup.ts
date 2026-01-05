@@ -374,7 +374,7 @@ export async function handleCountryGroupModal(interaction: any, apiService: ApiS
   try {
     // Fetch all countries from API
     const apiClient = apiService.getClient();
-    const countriesResponse = await apiClient.country.getAllCountries();
+    const countriesResponse = await apiClient.country.getAllCountries({cache: {ttl: 60000 * 60 }});
     const allCountries = countriesResponse.result.data;
 
     // Match country names (case-insensitive)

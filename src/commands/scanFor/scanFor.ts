@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, InteractionContextTyp
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
-import { handleCountryNoPresident } from './country/nopresident';
+import { handleCountryNoGovernment } from './country/nogovernment';
 import { handleCompanyProduction } from './company/production';
 
 /**
@@ -19,8 +19,8 @@ export const scanForCommand = {
         .setDescription('Scan countries')
         .addSubcommand(subcommand =>
           subcommand
-            .setName('nopresident')
-            .setDescription('Find all countries without an active president')
+            .setName('nogovernment')
+            .setDescription('Find countries with no or partial governments approaching inactivity')
             .addStringOption(option =>
               option
                 .setName('group')
@@ -64,8 +64,8 @@ export const scanForCommand = {
       const subcommand = interaction.options.getSubcommand();
 
       if (subcommandGroup === 'country') {
-        if (subcommand === 'nopresident') {
-          await handleCountryNoPresident(interaction, apiService);
+        if (subcommand === 'nogovernment') {
+          await handleCountryNoGovernment(interaction, apiService);
         }
       } else if (subcommandGroup === 'company') {
         if (subcommand === 'production') {

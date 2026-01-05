@@ -179,7 +179,7 @@ npm start
 │   │   └── scanFor/                      # Scan commands (modular structure)
 │   │       ├── scanFor.ts                # Main command router
 │   │       ├── country/                  # Country scan subcommands
-│   │       │   └── nopresident.ts        # Scan for countries without presidents
+│   │       │   └── nogovernment.ts       # Scan for countries with no/partial governments
 │   │       └── company/                  # Company scan subcommands
 │   │           └── production.ts         # Analyze company production
 │   ├── config/
@@ -228,7 +228,7 @@ npm start
 The scanFor commands follow a **modular folder structure** for better maintainability:
 
 - Each subcommand group (e.g., `country`, `company`) has its own folder
-- Each subcommand (e.g., `nopresident`, `production`) is in a separate file
+- Each subcommand (e.g., `nogovernment`, `production`) is in a separate file
 - The main `scanFor.ts` file acts as a router that imports and delegates to the handlers
 
 This structure makes it easy to add new scan commands without bloating a single file.
@@ -377,58 +377,72 @@ This will track user ID 12345 and send a notification to #admin-alerts if they h
 
 ### Scan Commands
 
-#### `/scanfor country nopresident`
-Scan all countries for presidents nearing inactivity and identify countries without government
+#### `/scanfor country nogovernment`
+Scan countries to identify those with no government or partial governments approaching inactivity
 
-- Scans all countries and checks government data
-- Uses **batch requests** to efficiently fetch all president activity data at once
-- Reports presidents within 3 hours of reaching 3-day inactivity (69-72 hours)
-- Shows country name, president username, hours since active, and hours until inactive
-- **Lists countries without presidents** and their congress member counts
-- **Highlights critical countries** with no president AND no congress members
+- **Optional:** Filter by country group using the `group` parameter
+- Scans all countries and checks for all government members (president, congress)
+- Categorizes countries by government size:
+  - **No government**: 0 members (president and congress)
+  - **Partial government**: 1-3 members total
+  - **Full cabinet**: 4+ members (not checked for inactivity)
+- For partial governments, uses **batch requests** to fetch activity data
+- Reports partial government members within 3 hours of reaching 3-day inactivity (69-72 hours)
+- Shows country details, member count, usernames, hours since active, and hours until inactive
 - Provides real-time progress updates during scan
 
 **Example usage:**
 ```
-/scanfor country nopresident
+# Scan all countries
+/scanfor country nogovernment
+
+# Scan a specific country group
+/scanfor country nogovernment group:EU
 ```
 
 **Example output:**
 ```
-Country President Activity Scan Complete
+Country Government Scan Complete
 
+- Scan scope: all countries
 - Total countries scanned: 150
-- Countries with presidents: 142
-- Countries without presidents: 8
-- Presidents nearing 3-day inactivity (69-72h): 3
+- Countries with no government: 5
+- Countries with partial government (1-3 members): 12
+- Countries with full cabinet (4+ members): 133
+- Partial governments with members nearing inactivity: 3
 
-🚨 CRITICAL: Countries With NO President AND NO Congress:
+Countries With No Government:
 
 - **Anarchy Land** (ID: `xyz789`)
 - **Abandoned State** (ID: `def456`)
+- **Empty Nation** (ID: `ghi012`)
 
-Countries Without Presidents:
+Countries With Partial Government (1-3 members):
 
-- **France** (ID: `abc123`) - Congress: 5 members
-- **Germany** (ID: `ghi789`) - Congress: 3 members
-- **Italy** (ID: `jkl012`) - 🚨 NO CONGRESS
+- **France** (2 members) - ID: `abc123`
+- **Germany** (3 members) - ID: `ghi789`
+- **Italy** (1 member) - ID: `jkl012`
 
-⚠️ Presidents Approaching Inactivity (69-72 hours):
+⚠️ Partial Governments With Members Approaching Inactivity (69-72 hours):
 
-Spain (ID: `mno345`)
-└─ President: Alfonso (`user678`)
-└─ Last active: 70 hours ago
-└─ Inactive in: ~2 hour(s)
+**Spain** (2 members total, 1 approaching inactivity)
+└─ **Alfonso** (`user678`) - Last active: 70h ago, inactive in: ~2h
+
+**Portugal** (3 members total, 2 approaching inactivity)
+└─ **Maria** (`user789`) - Last active: 71h ago, inactive in: ~1h
+└─ **João** (`user890`) - Last active: 69h ago, inactive in: ~3h
 ```
 
 **Features:**
+- ✅ **Country group filtering** - Scan only specific sets of countries
+- ✅ Categorizes countries by government size (none, partial, full)
 - ✅ Efficient batch requests for fast processing
 - ✅ Real-time progress updates (Phase 1: Governments, Phase 2: User data)
 - ✅ Accurate time estimates based on country count
 - ✅ Respects API rate limits (10 req/sec for governments)
-- ✅ Early warning system for president inactivity (3-day threshold)
-- ✅ **Congress member counts** for countries without presidents
-- ✅ **Critical alerts** for countries with no government at all
+- ✅ Early warning system for partial government inactivity (3-day threshold)
+- ✅ Only checks activity for countries with 1-3 government members
+- ✅ Full cabinets (4+ members) are not checked for efficiency
 
 #### `/scanfor company production`
 Analyze company production across all items in the game
@@ -473,6 +487,59 @@ Steel: 543
 - ✅ **Sorted results** - items ordered by production volume
 
 **Note:** This command is much faster than the previous approach! Typically completes in 2-5 minutes for large games.
+
+#### `/countrygroup` Commands
+Manage custom country groups for filtered scanning operations
+
+**Creating a group:**
+1. Run `/countrygroup create name:GroupName`
+2. A modal will appear asking for country names
+3. Enter comma-separated country names (e.g., `France, Germany, Italy`)
+4. The bot validates names against the War Era API
+5. Group is created with matched countries
+
+**Managing groups:**
+- `/countrygroup list` - View all groups for your server
+- `/countrygroup view name:GroupName` - See detailed info and country list
+- `/countrygroup add name:GroupName` - Add more countries to an existing group
+- `/countrygroup remove name:GroupName` - Remove countries from a group
+- `/countrygroup delete name:GroupName` - Delete an entire group
+
+**Using groups with scan commands:**
+```
+/scanfor country nogovernment group:EU
+```
+
+**Features:**
+- ✅ Modal-based input for easy country entry
+- ✅ Case-insensitive country name matching
+- ✅ Automatic validation against War Era API
+- ✅ Shows warnings for unmatched country names
+- ✅ Includes reference link to warera.wiki/country
+- ✅ Server-specific groups (each Discord server has its own)
+- ✅ Timestamps for creation and last update
+- ✅ Detailed view with country IDs
+
+**Example workflow:**
+```
+# Create a group for EU countries
+/countrygroup create name:EU
+(Modal appears: "France, Germany, Italy, Spain")
+
+# View the group
+/countrygroup view name:EU
+
+# Scan only EU countries for government issues
+/scanfor country nogovernment group:EU
+
+# Add more countries
+/countrygroup add name:EU
+(Modal appears: "Poland, Netherlands")
+
+# Remove a country
+/countrygroup remove name:EU
+(Modal appears: "Spain")
+```
 
 ## Adding Slash Commands
 
