@@ -37,6 +37,12 @@ export const scanForCommand = {
           subcommand
             .setName('production')
             .setDescription('Count how many companies produce each item')
+            .addStringOption(option =>
+              option
+                .setName('country')
+                .setDescription('Filter to companies in a specific country (optional)')
+                .setRequired(false)
+            )
         )
     ),
 

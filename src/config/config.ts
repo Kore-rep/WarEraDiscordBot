@@ -87,6 +87,7 @@ export interface BotConfig {
   };
   api: {
     baseUrl?: string;
+    apiKey?: string;
     // Add other API config options as needed
   };
   polling: {
@@ -138,6 +139,7 @@ export function loadConfig(): BotConfig {
     },
     api: {
       baseUrl: process.env.API_BASE_URL,
+      apiKey: process.env.WARERA_API_KEY,
     },
     polling: {
       intervalMinutes: interval,

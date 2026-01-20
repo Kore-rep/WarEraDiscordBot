@@ -140,7 +140,7 @@ describe('CommandHandler', () => {
 
     mockApiService = {
       getClient: jest.fn(),
-      createBatchClient: jest.fn(),
+      getBatchClient: jest.fn(),
     } as any;
 
     commandHandler = new CommandHandler(mockClient, mockToken, mockDiscordService, mockApiService);

@@ -2,6 +2,8 @@ import { createAPI, APIClient } from "warera-sdk";
 import { logger } from "../../utils/logger";
 import { BotConfig } from "../../config/config";
 import { ServerConfigManager } from "../../utils/serverConfigManager";
+import { InMemoryCacheProvider } from "./InMemoryCacheProvider";
+import { SharedRateLimiter } from "./SharedRateLimiter";
 
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<
@@ -24,33 +26,49 @@ type RegionDTO = GetRegionsObjectResponse["result"]["data"][string];
 export class ApiService {
   private client: APIClient;
   private config: BotConfig;
-  private batchClient: APIClient;
+  private batchClient: APIClient; // For battle polling operations
+  private cacheProvider: InMemoryCacheProvider;
+  private sharedRateLimiter: SharedRateLimiter;
 
   constructor(config: BotConfig) {
     this.config = config;
 
-    // Initialize the SDK client
-    // You can customize the config based on your needs
-    this.client = createAPI({
-      baseUrl: config.api.baseUrl,
-      rateLimit: {
-        maxRequests: 100,
-        windowMs: 60000,
-        backoffThreshold: 0.7,
-        maxBackoffMs: 3000,
-      },
-      cache: undefined
-      // Add other config options as needed:
-      // cache: { ... },
-      // rateLimit: { ... },
-      // batch: false,
-    });
-    this.batchClient = createAPI({
-      baseUrl: this.config.api.baseUrl,
-      batch: true, // Enable batch mode
+    // Create a shared cache provider instance for all clients
+    this.cacheProvider = new InMemoryCacheProvider();
+
+    // Create a shared rate limiter that will be used by all clients
+    // This ensures consistent rate limit tracking across all API clients
+    this.sharedRateLimiter = new SharedRateLimiter({
+      maxRequests: 300,
+      windowMs: 60000,
+      backoffThreshold: 0.8,
+      maxBackoffMs: 3000,
     });
 
-    logger.info("API Service initialized");
+    // Initialize the SDK client with shared rate limiter
+    this.client = createAPI({
+      baseUrl: config.api.baseUrl,
+      apiKey: config.api.apiKey,
+      rateLimiter: this.sharedRateLimiter, // Use shared rate limiter
+      cache: this.cacheProvider,
+    });
+    
+    // Initialize batch client for battle polling
+    // Each createAPI() call creates a NEW RequestContext instance with its own isolated queue
+    // This client will have its own separate queue, preventing conflicts with commands
+    this.batchClient = createAPI({
+      baseUrl: this.config.api.baseUrl,
+      apiKey: this.config.api.apiKey,
+      batch: true, // Enable batch mode
+      rateLimiter: this.sharedRateLimiter, // Shared rate limiter (shared tracking across all clients)
+      cache: this.cacheProvider, // Shared cache (shared data across all clients)
+    });
+
+    // Note: We don't create a single commandBatchClient here because each command
+    // needs its own isolated batch client instance to prevent conflicts when
+    // multiple commands run concurrently. Use createCommandBatchClient() instead.
+
+    logger.info("API Service initialized with shared rate limiter");
   }
 
   /**
@@ -71,19 +89,36 @@ export class ApiService {
         `Fetching country information for ${countryIds.length} country/countries...`
       );
 
+      // Log rate limit status before making requests
+      const rateLimitStatusBefore = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatusBefore) {
+        logger.debug(
+          `Rate limit status (before): ${rateLimitStatusBefore.requestCount}/${rateLimitStatusBefore.maxRequests} requests (${rateLimitStatusBefore.usagePercent}% usage), at limit: ${rateLimitStatusBefore.isAtLimit}, backoff: ${rateLimitStatusBefore.currentBackoffMs}ms`
+        );
+      }
+
       // Remove duplicates
       const uniqueCountryIds = [...new Set(countryIds)];
 
       // Queue all country requests (they return promises that resolve when batch executes)
+      // Note: SDK expects TTL in milliseconds for batch mode
       const countryPromises = uniqueCountryIds.map((countryId) => {
         return this.batchClient.country.getCountryById(countryId, {
-          cache: { ttl: 86400 },
+          cache: { ttl: 86400 * 1000 }, // 24 hours in milliseconds
         });
       });
 
       // Execute all queued batch requests at once
       // This will resolve all the promises above
       await this.batchClient.runBatch();
+
+      // Log rate limit status after making requests
+      const rateLimitStatusAfter = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatusAfter) {
+        logger.debug(
+          `Rate limit status (after): ${rateLimitStatusAfter.requestCount}/${rateLimitStatusAfter.maxRequests} requests (${rateLimitStatusAfter.usagePercent}% usage), at limit: ${rateLimitStatusAfter.isAtLimit}, backoff: ${rateLimitStatusAfter.currentBackoffMs}ms`
+        );
+      }
 
       // Wait for all promises to resolve and map results
       const results = await Promise.all(countryPromises);
@@ -107,7 +142,16 @@ export class ApiService {
       );
       return countryMap;
     } catch (error) {
-      logger.error("Failed to fetch countries from API", error);
+      // Log error with rate limit status
+      const rateLimitStatus = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatus) {
+        logger.error(
+          `Failed to fetch countries from API. Rate limit status: ${rateLimitStatus.requestCount}/${rateLimitStatus.maxRequests} requests (${rateLimitStatus.usagePercent}% usage), at limit: ${rateLimitStatus.isAtLimit}, backoff: ${rateLimitStatus.currentBackoffMs}ms`,
+          error
+        );
+      } else {
+        logger.error("Failed to fetch countries from API", error);
+      }
       throw error;
     }
   }
@@ -124,8 +168,25 @@ export class ApiService {
     try {
       logger.debug("Fetching regions object from API...");
 
+      // Log rate limit status before making request
+      const rateLimitStatusBefore = this.client.getRateLimitStatus();
+      if (rateLimitStatusBefore) {
+        logger.debug(
+          `Rate limit status (before): ${rateLimitStatusBefore.requestCount}/${rateLimitStatusBefore.maxRequests} requests (${rateLimitStatusBefore.usagePercent}% usage), at limit: ${rateLimitStatusBefore.isAtLimit}, backoff: ${rateLimitStatusBefore.currentBackoffMs}ms`
+        );
+      }
+
+      // Note: SDK expects TTL in milliseconds
       const response: GetRegionsObjectResponse =
-        await this.client.region.getRegionsObject({ cache: { ttl: 86400 } });
+        await this.client.region.getRegionsObject({ cache: { ttl: 86400 * 1000 } }); // 24 hours in milliseconds
+
+      // Log rate limit status after making request
+      const rateLimitStatusAfter = this.client.getRateLimitStatus();
+      if (rateLimitStatusAfter) {
+        logger.debug(
+          `Rate limit status (after): ${rateLimitStatusAfter.requestCount}/${rateLimitStatusAfter.maxRequests} requests (${rateLimitStatusAfter.usagePercent}% usage), at limit: ${rateLimitStatusAfter.isAtLimit}, backoff: ${rateLimitStatusAfter.currentBackoffMs}ms`
+        );
+      }
       const regionsData = response.result.data;
 
       // Convert Record<string, RegionDTO> to Map
@@ -136,7 +197,16 @@ export class ApiService {
       logger.info(`Fetched ${regionMap.size} region(s) from API`);
       return regionMap;
     } catch (error) {
-      logger.error("Failed to fetch regions from API", error);
+      // Log error with rate limit status
+      const rateLimitStatus = this.client.getRateLimitStatus();
+      if (rateLimitStatus) {
+        logger.error(
+          `Failed to fetch regions from API. Rate limit status: ${rateLimitStatus.requestCount}/${rateLimitStatus.maxRequests} requests (${rateLimitStatus.usagePercent}% usage), at limit: ${rateLimitStatus.isAtLimit}, backoff: ${rateLimitStatus.currentBackoffMs}ms`,
+          error
+        );
+      } else {
+        logger.error("Failed to fetch regions from API", error);
+      }
       throw error;
     }
   }
@@ -156,11 +226,48 @@ export class ApiService {
     try {
       logger.debug("Fetching active battles from API...");
 
-      // Call the battles.getBattles endpoint with isActive: true
-      const response: GetBattlesResponse = await this.client.battle.getBattles({
-        isActive: true,
-      });
+      // Log rate limit status before making requests
+      const rateLimitStatusBefore = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatusBefore) {
+        logger.debug(
+          `Rate limit status (before): ${rateLimitStatusBefore.requestCount}/${rateLimitStatusBefore.maxRequests} requests (${rateLimitStatusBefore.usagePercent}% usage), at limit: ${rateLimitStatusBefore.isAtLimit}, backoff: ${rateLimitStatusBefore.currentBackoffMs}ms`
+        );
+      }
 
+      // Calculate cache TTL for battles: slightly less than polling interval to ensure
+      // cache expires just before the next poll. Convert minutes to milliseconds and subtract 30 seconds buffer.
+      // SDK expects TTL in milliseconds and now respects custom TTL in batch mode
+      const pollingIntervalMs = this.config.polling.intervalMinutes * 60 * 1000;
+      const battlesCacheTtl = Math.max(30000, pollingIntervalMs - 30000); // Minimum 30 seconds (30000ms)
+
+      // Batch independent requests: getBattles() and getRegionsObject() can be batched together
+      // since they don't depend on each other (saves 1 request toward rate limit)
+      // Use singleton batch client to ensure cache and rate limits are tracked correctly
+      const battlesPromise = this.batchClient.battle.getBattles(
+        { isActive: true },
+        { cache: { ttl: battlesCacheTtl } }
+      );
+      // SDK expects TTL in milliseconds
+      const regionsPromise = this.batchClient.region.getRegionsObject({ cache: { ttl: 86400 * 1000 } }); // 24 hours in milliseconds
+      
+      // Execute batch (both requests count as 1 request toward rate limit)
+      await this.batchClient.runBatch();
+
+      // Log rate limit status after making requests
+      const rateLimitStatusAfter = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatusAfter) {
+        logger.debug(
+          `Rate limit status (after): ${rateLimitStatusAfter.requestCount}/${rateLimitStatusAfter.maxRequests} requests (${rateLimitStatusAfter.usagePercent}% usage), at limit: ${rateLimitStatusAfter.isAtLimit}, backoff: ${rateLimitStatusAfter.currentBackoffMs}ms`
+        );
+      }
+      
+      // Get results
+      const [battlesResponse, regionsResponse] = await Promise.all([
+        battlesPromise,
+        regionsPromise
+      ]);
+
+      const response = battlesResponse as GetBattlesResponse;
       const allBattles = response.result.data.items;
       logger.debug(`Fetched ${allBattles.length} active battle(s) from API`);
 
@@ -196,12 +303,26 @@ export class ApiService {
       // Fetch country information using batch requests
       const countries = await this.fetchCountries(Array.from(countryIds));
 
-      // Fetch regions information (expensive call, but needed for region names)
-      const regions = await this.fetchRegions();
+      // Process regions response
+      const regionsData = (regionsResponse as GetRegionsObjectResponse).result.data;
+      const regions = new Map<string, RegionDTO>();
+      for (const [regionId, region] of Object.entries(regionsData)) {
+        regions.set(regionId, region);
+      }
+      logger.info(`Fetched ${regions.size} region(s) from API`);
 
       return { battles: filteredBattles, countries, regions };
     } catch (error) {
-      logger.error("Failed to fetch battles from API", error);
+      // Log error with rate limit status
+      const rateLimitStatus = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatus) {
+        logger.error(
+          `Failed to fetch battles from API. Rate limit status: ${rateLimitStatus.requestCount}/${rateLimitStatus.maxRequests} requests (${rateLimitStatus.usagePercent}% usage), at limit: ${rateLimitStatus.isAtLimit}, backoff: ${rateLimitStatus.currentBackoffMs}ms`,
+          error
+        );
+      } else {
+        logger.error("Failed to fetch battles from API", error);
+      }
       throw error;
     }
   }
@@ -259,15 +380,42 @@ export class ApiService {
   }
 
   /**
-   * Create a new batch-enabled API client for batch operations
-   * Note: Each batch client should be used for one batch operation and then discarded
+   * Get the batch-enabled API client for battle polling operations
+   * This client has its own isolated queue to prevent conflicts with commands
    * 
-   * @returns A new APIClient with batch mode enabled
+   * @returns The APIClient with batch mode enabled for battle polling
    */
-  createBatchClient(): APIClient {
+  getBatchClient(): APIClient {
+    return this.batchClient;
+  }
+
+  /**
+   * Create a new batch-enabled API client for command operations
+   * Each command should call this to get its own isolated batch client instance
+   * This prevents conflicts when multiple commands run concurrently
+   * 
+   * Each call creates a NEW instance with its own isolated queue, so commands
+   * don't interfere with each other or with battle polling.
+   * 
+   * @returns A new APIClient with batch mode enabled for commands
+   */
+  createCommandBatchClient(): APIClient {
     return createAPI({
       baseUrl: this.config.api.baseUrl,
-      batch: true,
+      apiKey: this.config.api.apiKey,
+      batch: true, // Enable batch mode
+      rateLimiter: this.sharedRateLimiter, // Shared rate limiter (shared tracking across all clients)
+      cache: this.cacheProvider, // Shared cache (shared data across all clients)
     });
+  }
+
+  /**
+   * Get the shared rate limiter instance
+   * Useful for monitoring rate limit status across all clients
+   * 
+   * @returns The shared rate limiter instance
+   */
+  getSharedRateLimiter(): SharedRateLimiter {
+    return this.sharedRateLimiter;
   }
 }
