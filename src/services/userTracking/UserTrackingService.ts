@@ -178,7 +178,7 @@ export class UserTrackingService {
       const message = 
         `${mentionString}**User Inactivity Alert**\n\n` +
         `User **${username}** (ID: \`${trackedUser.userId}\`) has been inactive.\n\n` +
-        `- Last connection: <t:${Math.floor(lastConnection.getTime() / 1000)}:R> ` +
+        `- Last connection: <t:${Math.floor(lastConnection.getTime() / 1000)}:F> ` +
         `(${daysSinceConnection} day${daysSinceConnection !== 1 ? 's' : ''} ago)\n` +
         `- Inactivity threshold: ${trackedUser.inactivityDays} day${trackedUser.inactivityDays !== 1 ? 's' : ''}\n\n` +
         `This user may need attention or follow-up.`;

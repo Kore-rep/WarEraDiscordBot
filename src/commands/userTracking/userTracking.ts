@@ -77,7 +77,6 @@ export const userTrackingCommand = {
       if (!interaction.guildId) {
         await interaction.reply({
           content: 'This command can only be used in a server.',
-          ephemeral: true,
         });
         return;
       }
@@ -86,7 +85,6 @@ export const userTrackingCommand = {
       if (!apiService) {
         await interaction.reply({
           content: 'API service is not available. Please contact an administrator.',
-          ephemeral: true,
         });
         return;
       }
@@ -109,7 +107,6 @@ export const userTrackingCommand = {
       if (!interaction.replied) {
         await interaction.reply({
           content: 'An error occurred while processing your request.',
-          ephemeral: true,
         });
       }
     }
@@ -130,13 +127,12 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
   if (channel.type !== ChannelType.GuildText) {
     await interaction.reply({
       content: 'Please select a text channel.',
-      ephemeral: true,
     });
     return;
   }
 
   // Defer reply since we'll be making an API call
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply();
 
   try {
     // Fetch user data from API to get username and current status
@@ -198,7 +194,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
         const notificationMessage = 
           `${mentionString}**User Inactivity Alert**\n\n` +
           `User **${username}** (ID: \`${userId}\`) has been inactive.\n\n` +
-          `- Last connection: <t:${Math.floor(lastConnection.getTime() / 1000)}:R> ` +
+          `- Last connection: <t:${Math.floor(lastConnection.getTime() / 1000)}:F> ` +
           `(${daysSinceConnection} day${daysSinceConnection !== 1 ? 's' : ''} ago)\n` +
           `- Inactivity threshold: ${inactivityDays} day${inactivityDays !== 1 ? 's' : ''}\n\n` +
           `This user may need attention or follow-up.`;
@@ -226,7 +222,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
     }
     
     replyMessage += `\n**Current Status:**\n`;
-    replyMessage += `- Last active: <t:${Math.floor(lastConnection.getTime() / 1000)}:R> `;
+    replyMessage += `- Last active: <t:${Math.floor(lastConnection.getTime() / 1000)}:F> `;
     replyMessage += `(${daysSinceConnection} day${daysSinceConnection !== 1 ? 's' : ''} ago)\n`;
     
     if (isAlreadyInactive) {
@@ -262,7 +258,6 @@ async function handleTrackingRemove(interaction: ChatInputCommandInteraction): P
   if (!userToRemove) {
     await interaction.reply({
       content: `User \`${userIdOrUsername}\` is not currently being tracked.`,
-      ephemeral: true,
     });
     return;
   }
@@ -272,13 +267,11 @@ async function handleTrackingRemove(interaction: ChatInputCommandInteraction): P
   if (removed) {
     await interaction.reply({
       content: `Stopped tracking user **${userToRemove.username}** (\`${userToRemove.userId}\`).`,
-      ephemeral: true,
     });
     logger.info(`User tracking removed: ${userToRemove.username} (${userToRemove.userId}) from server ${serverId}`);
   } else {
     await interaction.reply({
       content: `Failed to remove user \`${userIdOrUsername}\` from tracking.`,
-      ephemeral: true,
     });
   }
 }
@@ -293,7 +286,6 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction): Pro
   if (trackedUsers.length === 0) {
     await interaction.reply({
       content: 'No users are currently being tracked.\n\nUse `/user tracking add` to start tracking a user.',
-      ephemeral: true,
     });
     return;
   }
@@ -322,7 +314,7 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction): Pro
       const daysSinceActive = Math.floor(
         (now.getTime() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)
       );
-      message += `- Last active: <t:${Math.floor(lastActiveDate.getTime() / 1000)}:R>`;
+      message += `- Last active: <t:${Math.floor(lastActiveDate.getTime() / 1000)}:F>`;
       message += ` (${daysSinceActive} day${daysSinceActive !== 1 ? 's' : ''} ago)`;
       
       if (daysSinceActive >= user.inactivityDays) {
@@ -340,6 +332,5 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction): Pro
 
   await interaction.reply({
     content: message,
-    ephemeral: true,
   });
 }

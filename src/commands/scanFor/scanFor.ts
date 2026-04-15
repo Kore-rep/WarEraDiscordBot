@@ -3,6 +3,9 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { handleCountryNoGovernment } from './country/nogovernment';
+import { handleCountryLowPop } from './country/lowpop';
+import { handleCountryEthicsScan } from './country/ethics';
+import { ETHIC_SLASH_CHOICES } from './country/partyEthicsMapping';
 import { handleCompanyProduction } from './company/production';
 
 /**
@@ -26,6 +29,36 @@ export const scanForCommand = {
                 .setName('group')
                 .setDescription('Filter to a specific country group (optional)')
                 .setRequired(false)
+            )
+        )
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('lowpop')
+            .setDescription('List countries with active population below a threshold')
+            .addIntegerOption(option =>
+              option
+                .setName('max_citizens')
+                .setDescription('Return countries with active population strictly less than this number')
+                .setRequired(true)
+                .setMinValue(0)
+            )
+            .addStringOption(option =>
+              option
+                .setName('group')
+                .setDescription('Filter to a specific country group (optional)')
+                .setRequired(false)
+            )
+        )
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('ethics')
+            .setDescription('Find countries whose ruling party matches a given ethic label')
+            .addStringOption(option =>
+              option
+                .setName('ethic')
+                .setDescription('Ruling party ethic to match')
+                .setRequired(true)
+                .addChoices(...ETHIC_SLASH_CHOICES)
             )
         )
     )
@@ -72,6 +105,10 @@ export const scanForCommand = {
       if (subcommandGroup === 'country') {
         if (subcommand === 'nogovernment') {
           await handleCountryNoGovernment(interaction, apiService);
+        } else if (subcommand === 'lowpop') {
+          await handleCountryLowPop(interaction, apiService);
+        } else if (subcommand === 'ethics') {
+          await handleCountryEthicsScan(interaction, apiService);
         }
       } else if (subcommandGroup === 'company') {
         if (subcommand === 'production') {

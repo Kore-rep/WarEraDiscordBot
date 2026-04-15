@@ -14,6 +14,7 @@ export class BattleService {
   private battleFormatter: BattleFormatter;
   private discordService: DiscordService;
   private apiService: ApiService;
+  private persistedBattleMessagesLoaded = false;
 
   constructor(
     discordService: DiscordService,
@@ -35,6 +36,14 @@ export class BattleService {
       // Fetch data from API (battles, countries, and regions)
       const { battles: allBattles, countries, regions } = await this.apiService.fetchBattles();
       logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
+
+      const activeIds = new Set(allBattles.map(b => b._id));
+      this.discordService.pruneInactiveBattleTracking(activeIds);
+
+      if (!this.persistedBattleMessagesLoaded) {
+        await this.discordService.loadPersistedBattles();
+        this.persistedBattleMessagesLoaded = true;
+      }
 
       // Detect changes (new battles, pool increases, pool depletions, or changed moneyPer1kDamages)
       // Note: normal pool decreases trigger message updates but are not logged (only increases and depletions are logged)
@@ -108,6 +117,15 @@ export class BattleService {
           // Calculate total bounty for threshold check
           const totalBounty = (battleChange.battle.attacker.moneyPer1kDamages || 0) + 
                              (battleChange.battle.defender.moneyPer1kDamages || 0);
+
+          // If server has minBountyToSend set and bounty is below it, do not send/update message at all
+          const minBountyToSend = serverConfig?.bountyBattles?.minBountyToSend;
+          if (minBountyToSend != null && minBountyToSend > 0 && totalBounty < minBountyToSend) {
+            logger.debug(
+              `Skipping battle ${battleChange.battle._id} for server ${serverId}: totalBounty ${totalBounty} below minBountyToSend ${minBountyToSend}`
+            );
+            continue;
+          }
 
           // Update the message in Discord (will create new if deleted above)
           await this.discordService.updateBattleMessage(

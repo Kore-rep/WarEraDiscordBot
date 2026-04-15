@@ -40,6 +40,13 @@ export const bountyBattlesCommand: Command = {
                 .setRequired(false)
                 .setMinValue(0)
             )
+            .addNumberOption(option =>
+              option
+                .setName('min')
+                .setDescription('Min bounty to send a message at all; below this no message is sent (empty=keep, 0=send all)')
+                .setRequired(false)
+                .setMinValue(0)
+            )
         )
         .addSubcommand(subcommand =>
           subcommand
@@ -94,6 +101,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     const channel = interaction.options.getChannel('channel', false);
     const role = interaction.options.getRole('role', false);
     const threshold = interaction.options.getNumber('threshold', false);
+    const minBountyToSend = interaction.options.getNumber('min', false);
 
     // Get current server config
     const currentConfig = ServerConfigManager.getServerConfig(interaction.guildId);
@@ -140,6 +148,8 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     
     // Determine bounty threshold (use provided or keep existing)
     const bountyThreshold = threshold !== null ? threshold : (currentBountyConfig?.bountyThreshold ?? 0);
+    // minBountyToSend: undefined = not set (send all), 0 = send all, >0 = only send if totalBounty >= value
+    const resolvedMinBountyToSend = minBountyToSend !== null ? minBountyToSend : currentBountyConfig?.minBountyToSend;
 
     // Update bounty battles configuration (enable by default if new)
     // This updates both in-memory cache and disk
@@ -148,6 +158,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       roleIds: roleIds,
       enabled: currentBountyConfig?.enabled !== undefined ? currentBountyConfig.enabled : true,
       bountyThreshold: bountyThreshold,
+      minBountyToSend: resolvedMinBountyToSend,
     });
 
     // If channel changed, clear message tracking for this server so it starts fresh
@@ -160,7 +171,11 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     let confirmationMessage = `Bounty battle notifications configured!\n\n`;
     confirmationMessage += `**Channel:** <#${newChannelId}>\n`;
     confirmationMessage += `**Bounty Threshold:** ${bountyThreshold}\n`;
-    
+        const minDisplay = resolvedMinBountyToSend !== undefined && resolvedMinBountyToSend !== null
+      ? (resolvedMinBountyToSend === 0 ? '0 (send all)' : resolvedMinBountyToSend)
+      : 'None (send all)';
+    confirmationMessage += `**Min bounty to send:** ${minDisplay}\n`;
+
     if (roleIds.length > 0) {
       confirmationMessage += `**Roles:** ${roleIds.map(id => `<@&${id}>`).join(', ')}`;
     } else {
@@ -172,6 +187,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     if (channel) updates.push('channel');
     if (role) updates.push(role.name.toLowerCase() === 'null' ? 'role (removed)' : 'role');
     if (threshold !== null) updates.push('threshold');
+    if (minBountyToSend !== null) updates.push('min');
     
     if (updates.length > 0) {
       confirmationMessage += `\n\n*Updated: ${updates.join(', ')}*`;
@@ -184,7 +200,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     });
 
     logger.info(
-      `Server ${interaction.guildId} configured: channel=${newChannelId}, roles=[${roleIds.join(', ')}], threshold=${bountyThreshold}`
+      `Server ${interaction.guildId} configured: channel=${newChannelId}, roles=[${roleIds.join(', ')}], threshold=${bountyThreshold}, minBountyToSend=${resolvedMinBountyToSend ?? 'none'}`
     );
   } catch (error) {
     logger.error('Error executing bountybattles config set command', error);
@@ -226,12 +242,16 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
       const isEnabled = bountyBattlesConfig.enabled !== false; // Default to true if not set
       const statusText = isEnabled ? 'Enabled' : 'Disabled';
       const bountyThreshold = bountyBattlesConfig.bountyThreshold ?? 0;
-      
+      const minBountyToSendDisplay = bountyBattlesConfig.minBountyToSend !== undefined && bountyBattlesConfig.minBountyToSend !== null
+        ? bountyBattlesConfig.minBountyToSend
+        : 'None (send all)';
+
       let message = `**Bounty Battles Configuration**\n\n`;
       message += `**Status:** ${statusText}\n`;
       message += `**Channel:** <#${bountyBattlesConfig.channelId}>\n`;
       message += `**Bounty Threshold:** ${bountyThreshold}\n`;
-      
+      message += `**Min bounty to send:** ${minBountyToSendDisplay}\n`;
+
       if (bountyBattlesConfig.roleIds && bountyBattlesConfig.roleIds.length > 0) {
         message += `**Roles:** ${bountyBattlesConfig.roleIds.map(id => `<@&${id}>`).join(', ')}`;
       } else {

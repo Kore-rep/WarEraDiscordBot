@@ -179,6 +179,28 @@ describe('BattleMessageTracker', () => {
     });
   });
 
+  describe('pruneInactiveBattles', () => {
+    it('should remove entries for battles not in the active set', () => {
+      BattleMessageTracker.setBattleMessage('server1', 'battle-old', 'm1');
+      BattleMessageTracker.setBattleMessage('server1', 'battle-new', 'm2');
+
+      const removed = BattleMessageTracker.pruneInactiveBattles(new Set(['battle-new']));
+
+      expect(removed).toEqual(
+        expect.arrayContaining([{ serverId: 'server1', battleId: 'battle-old' }])
+      );
+      const battles = BattleMessageTracker.loadBattles();
+      expect(battles.has('server1:battle-new')).toBe(true);
+      expect(battles.has('server1:battle-old')).toBe(false);
+    });
+
+    it('should return empty array when all battles are active', () => {
+      BattleMessageTracker.setBattleMessage('server1', 'b1', 'm1');
+      const removed = BattleMessageTracker.pruneInactiveBattles(new Set(['b1']));
+      expect(removed).toEqual([]);
+    });
+  });
+
   describe('clearAll', () => {
     it('should clear all battle messages', () => {
       BattleMessageTracker.setBattleMessage('server1', 'battle1', 'message1');

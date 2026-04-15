@@ -109,6 +109,20 @@ jest.mock('../../src/commands/countryGroup/countryGroup', () => ({
   handleCountryGroupModal: jest.fn(),
 }));
 
+jest.mock('../../src/commands/spectre/spectre', () => ({
+  spectreCommand: {
+    data: {
+      name: 'spectre',
+      description: 'Military monitoring',
+      toJSON: jest.fn().mockReturnValue({
+        name: 'spectre',
+        description: 'Military monitoring',
+      }),
+    },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -151,8 +165,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load bountyBattles, user tracking, scanfor, and countrygroup commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(4);
+    it('should load bountyBattles, user tracking, scanfor, countrygroup, and spectre commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(5);
     });
   });
 
@@ -332,7 +346,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(4);
+      expect(commandHandler.getCommandCount()).toBe(5);
     });
   });
 });

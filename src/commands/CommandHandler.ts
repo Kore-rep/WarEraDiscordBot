@@ -9,6 +9,7 @@ import { bountyBattlesCommand } from './bountyBattles';
 import { userTrackingCommand } from './userTracking';
 import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
+import { spectreCommand } from './spectre/spectre';
 
 /**
  * Manages slash command registration and execution
@@ -37,7 +38,7 @@ export class CommandHandler {
       userTrackingCommand,
       scanForCommand,
       countryGroupCommand,
-      // Add more commands here as they are created
+      spectreCommand,
     ];
 
     for (const command of commandList) {

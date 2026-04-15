@@ -7,6 +7,7 @@ import { PollingService } from '../services/polling/PollingService';
 import { MessageTracker } from '../services/discord/MessageTracker';
 import { BattleService } from '../services/battle/BattleService';
 import { UserTrackingService } from '../services/userTracking';
+import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
 
 /**
@@ -18,6 +19,7 @@ export class Bot {
   private apiService: ApiService;
   private discordService: DiscordService;
   private battleService: BattleService;
+  private spectreService: SpectreService;
   private pollingService: PollingService;
   private userTrackingService: UserTrackingService;
   private commandHandler: CommandHandler;
@@ -40,7 +42,8 @@ export class Bot {
     this.apiService = new ApiService(config);
     this.discordService = new DiscordService(this.client, messageTracker);
     this.battleService = new BattleService(this.discordService, this.apiService);
-    this.pollingService = new PollingService(config, this.battleService);
+    this.spectreService = new SpectreService(this.apiService, this.discordService);
+    this.pollingService = new PollingService(config, this.battleService, this.spectreService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 

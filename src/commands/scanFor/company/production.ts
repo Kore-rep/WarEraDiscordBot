@@ -221,8 +221,6 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
         lastUpdateTime = now;
       }
 
-      // Small delay between chunks
-      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     // Step 5: Format and send results

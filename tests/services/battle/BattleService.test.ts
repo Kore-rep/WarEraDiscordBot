@@ -28,6 +28,8 @@ describe('BattleService', () => {
       updateBattleMessage: jest.fn(),
       deleteBattleMessage: jest.fn(),
       getServerIds: jest.fn(),
+      pruneInactiveBattleTracking: jest.fn(),
+      loadPersistedBattles: jest.fn().mockResolvedValue(undefined),
     } as any;
 
     mockApiService = {
@@ -80,7 +82,34 @@ describe('BattleService', () => {
 
       await battleService.processBattles();
 
+      expect(mockDiscordService.pruneInactiveBattleTracking).toHaveBeenCalledWith(
+        new Set(['battle-1'])
+      );
+      expect(mockDiscordService.loadPersistedBattles).toHaveBeenCalledTimes(1);
       expect(mockDiscordService.updateBattleMessage).toHaveBeenCalled();
+    });
+
+    it('should load persisted battles only once across multiple processBattles calls', async () => {
+      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
+        battles: [mockBattle],
+        countries: mockCountries,
+        regions: mockRegions,
+      });
+
+      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
+        new Map([['server-1', ['role-1']]])
+      );
+
+      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
+        channelId: 'channel-1',
+        roleIds: ['role-1'],
+        enabled: true,
+      });
+
+      await battleService.processBattles();
+      await battleService.processBattles();
+
+      expect(mockDiscordService.loadPersistedBattles).toHaveBeenCalledTimes(1);
     });
 
     it('should skip battles for disabled servers', async () => {

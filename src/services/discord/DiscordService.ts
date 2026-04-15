@@ -46,9 +46,6 @@ export class DiscordService {
       } else {
         logger.info(`Discord service initialized. Connected to ${this.channels.size} channel(s)`);
       }
-      
-      // Load persisted battle messages from battles.json
-      await this.loadPersistedBattles();
     } catch (error) {
       logger.error('Failed to initialize Discord service', error);
       throw error;
@@ -292,6 +289,23 @@ export class DiscordService {
   }
 
   /**
+   * Send a message to a channel by ID (fetch). Used when the target is not the server's default bounty channel.
+   */
+  async sendMessageToChannelById(channelId: string, message: string): Promise<void> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) {
+        throw new Error(`Channel ${channelId} is not a text channel`);
+      }
+      await (channel as TextChannel).send(message);
+      logger.debug(`Sent message to channel ${channelId}`);
+    } catch (error) {
+      logger.error(`Failed to send message to channel ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the channel for a specific server
    * 
    * @param serverId - Discord server ID
@@ -348,6 +362,24 @@ export class DiscordService {
    * @param content - Message content
    * @returns Message ID if successful, null otherwise
    */
+  /**
+   * Remove tracking for battles that are no longer returned by the battles API.
+   * Updates battles.json and the in-memory message map; does not delete Discord messages.
+   */
+  pruneInactiveBattleTracking(activeBattleIds: ReadonlySet<string>): void {
+    const removed = BattleMessageTracker.pruneInactiveBattles(activeBattleIds);
+    for (const { serverId, battleId } of removed) {
+      this.messageTracker.removeBattle(serverId, battleId);
+    }
+  }
+
+  /**
+   * Restore persisted battle message IDs from battles.json (call after prune on first poll — see BattleService).
+   */
+  async loadPersistedBattles(): Promise<void> {
+    await this.loadPersistedBattlesInternal();
+  }
+
   async sendMessageToChannel(serverId: string, channelId: string, content: string): Promise<string | null> {
     try {
       // Try to get channel from cache first
@@ -376,7 +408,7 @@ export class DiscordService {
    * Load persisted battle messages from battles.json and restore in-memory tracking
    * Also validates that messages still exist and deletes stale entries
    */
-  private async loadPersistedBattles(): Promise<void> {
+  private async loadPersistedBattlesInternal(): Promise<void> {
     try {
       const battles = BattleMessageTracker.loadBattles();
       logger.info(`Loading ${battles.size} persisted battle message(s) from battles.json`);

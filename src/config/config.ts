@@ -12,6 +12,7 @@ export interface BountyBattlesConfig {
   roleIds: string[];
   enabled?: boolean; // Whether bounty battle notifications are enabled (default: true)
   bountyThreshold?: number; // Minimum total bounty (attacker + defender) to trigger role mentions (default: 0)
+  minBountyToSend?: number; // Minimum total bounty to send a message at all; below this no message is sent (default: none)
 }
 
 /**
@@ -66,6 +67,24 @@ export interface CountryGroup {
 }
 
 /**
+ * One monitored country for /spectre (buildings or resistance)
+ */
+export interface SpectreCountryMonitorEntry {
+  countryId: string;
+  countryName: string;
+  channelId: string;
+  enabled: boolean;
+}
+
+/**
+ * Spectre (military monitoring) feature per server
+ */
+export interface SpectreConfig {
+  buildingMonitors: SpectreCountryMonitorEntry[];
+  resistanceMonitors: SpectreCountryMonitorEntry[];
+}
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -74,7 +93,7 @@ export interface ServerConfig {
   reports?: ReportsConfig;
   userTracking?: UserTrackingConfig;
   countryGroups?: CountryGroup[];
-  // Add more feature configs here as needed
+  spectre?: SpectreConfig;
 }
 
 /**

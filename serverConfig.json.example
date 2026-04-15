@@ -26,6 +26,24 @@
             "lastActive": "2025-01-01T00:00:00.000Z"
           }
         ]
+      },
+      "spectre": {
+        "buildingMonitors": [
+          {
+            "countryId": "COUNTRY_OBJECT_ID",
+            "countryName": "Country Name",
+            "channelId": "SPECTRE_ALERT_CHANNEL_ID",
+            "enabled": true
+          }
+        ],
+        "resistanceMonitors": [
+          {
+            "countryId": "COUNTRY_OBJECT_ID",
+            "countryName": "Country Name",
+            "channelId": "SPECTRE_ALERT_CHANNEL_ID",
+            "enabled": true
+          }
+        ]
       }
     },
     "SERVER_ID_2": {

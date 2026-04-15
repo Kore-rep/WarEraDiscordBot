@@ -79,6 +79,34 @@ export class BattleMessageTracker {
   }
 
   /**
+   * Remove persisted rows for battles not in the active API list.
+   * Does not delete messages in Discord.
+   */
+  static pruneInactiveBattles(activeBattleIds: ReadonlySet<string>): { serverId: string; battleId: string }[] {
+    try {
+      const battles = this.loadBattles();
+      const removed: { serverId: string; battleId: string }[] = [];
+
+      for (const [key, entry] of battles.entries()) {
+        if (!activeBattleIds.has(entry.battleId)) {
+          battles.delete(key);
+          removed.push({ serverId: entry.serverId, battleId: entry.battleId });
+        }
+      }
+
+      if (removed.length > 0) {
+        this.writeBattlesToDisk(battles);
+        logger.info(`Pruned ${removed.length} inactive battle message(s) from battles.json`);
+      }
+
+      return removed;
+    } catch (error) {
+      logger.error('Failed to prune inactive battles from battles.json', error);
+      return [];
+    }
+  }
+
+  /**
    * Remove a battle message entry
    */
   static removeBattleMessage(serverId: string, battleId: string): void {

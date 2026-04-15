@@ -37,6 +37,8 @@ describe('BattleService Integration', () => {
     mockDiscordService.updateBattleMessage = jest.fn().mockResolvedValue(undefined);
     mockDiscordService.getServerIds = jest.fn().mockReturnValue(['server1']);
     mockDiscordService.deleteBattleMessage = jest.fn().mockResolvedValue(undefined);
+    mockDiscordService.pruneInactiveBattleTracking = jest.fn();
+    mockDiscordService.loadPersistedBattles = jest.fn().mockResolvedValue(undefined);
     
     // Mock ServerConfigManager - return default config with bountyThreshold: 0
     (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({

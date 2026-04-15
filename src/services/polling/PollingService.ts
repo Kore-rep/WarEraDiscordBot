@@ -1,6 +1,7 @@
 import { logger } from '../../utils/logger';
 import { BotConfig } from '../../config/config';
 import { BattleService } from '../battle/BattleService';
+import { SpectreService } from '../spectre/SpectreService';
 
 /**
  * Service that handles periodic polling
@@ -9,16 +10,19 @@ import { BattleService } from '../battle/BattleService';
 export class PollingService {
   private config: BotConfig;
   private battleService: BattleService;
+  private spectreService: SpectreService;
   private pollingInterval: NodeJS.Timeout | null = null;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private isRunning = false;
 
   constructor(
     config: BotConfig,
-    battleService: BattleService
+    battleService: BattleService,
+    spectreService: SpectreService
   ) {
     this.config = config;
     this.battleService = battleService;
+    this.spectreService = spectreService;
   }
 
   /**
@@ -79,15 +83,19 @@ export class PollingService {
   private async executePollingCycle(): Promise<void> {
     try {
       logger.debug('Starting polling cycle...');
-      
-      // Delegate all battle processing to BattleService
+
       await this.battleService.processBattles();
-      
-      logger.debug('Polling cycle completed successfully');
     } catch (error) {
-      logger.error('Polling cycle failed', error);
-      // Don't throw - allow the bot to continue and try again next interval
+      logger.error('Polling cycle (battles) failed', error);
     }
+
+    try {
+      await this.spectreService.runSpectreCycle();
+    } catch (error) {
+      logger.error('Polling cycle (Spectre) failed', error);
+    }
+
+    logger.debug('Polling cycle completed');
   }
 
   /**

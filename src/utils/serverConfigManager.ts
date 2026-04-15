@@ -1,6 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ServerConfig, BountyBattlesConfig, TrackedUser, CountryGroup, GroupedCountry } from '../config/config';
+import {
+  ServerConfig,
+  BountyBattlesConfig,
+  TrackedUser,
+  CountryGroup,
+  GroupedCountry,
+  SpectreCountryMonitorEntry,
+} from '../config/config';
 import { logger } from './logger';
 
 /**
@@ -51,12 +58,29 @@ export class ServerConfigManager {
           }
         }
 
+        const validateSpectreMonitors = (arr: SpectreCountryMonitorEntry[] | undefined, label: string) => {
+          if (!arr) {
+            return;
+          }
+          if (!Array.isArray(arr)) {
+            throw new Error(`Server ${serverId} spectre.${label} must be an array`);
+          }
+          for (const m of arr) {
+            if (!m.countryId?.trim() || !m.countryName?.trim() || !m.channelId?.trim()) {
+              throw new Error(`Server ${serverId} spectre ${label} entry is missing countryId, countryName, or channelId`);
+            }
+          }
+        };
+        validateSpectreMonitors(serverConfig.spectre?.buildingMonitors, 'buildingMonitors');
+        validateSpectreMonitors(serverConfig.spectre?.resistanceMonitors, 'resistanceMonitors');
+
         serversMap.set(serverId, {
           bountyBattles: serverConfig.bountyBattles ? {
             channelId: serverConfig.bountyBattles.channelId,
             roleIds: serverConfig.bountyBattles.roleIds.filter(id => id && id.trim().length > 0),
             enabled: serverConfig.bountyBattles.enabled,
             bountyThreshold: serverConfig.bountyBattles.bountyThreshold,
+            minBountyToSend: serverConfig.bountyBattles.minBountyToSend,
           } : undefined,
           reports: serverConfig.reports,
           userTracking: serverConfig.userTracking ? {
@@ -64,6 +88,20 @@ export class ServerConfigManager {
             users: serverConfig.userTracking.users || [],
           } : undefined,
           countryGroups: serverConfig.countryGroups || [],
+          spectre: serverConfig.spectre ? {
+            buildingMonitors: (serverConfig.spectre.buildingMonitors || []).map(m => ({
+              countryId: m.countryId,
+              countryName: m.countryName,
+              channelId: m.channelId,
+              enabled: m.enabled !== false,
+            })),
+            resistanceMonitors: (serverConfig.spectre.resistanceMonitors || []).map(m => ({
+              countryId: m.countryId,
+              countryName: m.countryName,
+              channelId: m.channelId,
+              enabled: m.enabled !== false,
+            })),
+          } : undefined,
         });
       }
 
@@ -124,6 +162,7 @@ export class ServerConfigManager {
         roleIds: config.roleIds !== undefined ? config.roleIds : existingBountyConfig.roleIds,
         enabled: config.enabled !== undefined ? config.enabled : existingBountyConfig.enabled,
         bountyThreshold: config.bountyThreshold !== undefined ? config.bountyThreshold : existingBountyConfig.bountyThreshold,
+        minBountyToSend: config.minBountyToSend !== undefined ? config.minBountyToSend : existingBountyConfig.minBountyToSend,
       };
 
       // Update in-memory cache
@@ -203,7 +242,136 @@ export class ServerConfigManager {
         ...g,
         countries: g.countries.map(c => ({ ...c })),
       })) : [],
+      spectre: config.spectre ? {
+        buildingMonitors: (config.spectre.buildingMonitors || []).map(m => ({ ...m })),
+        resistanceMonitors: (config.spectre.resistanceMonitors || []).map(m => ({ ...m })),
+      } : undefined,
     };
+  }
+
+  /**
+   * Add or update a Spectre border building monitor for a server
+   */
+  static upsertSpectreBuildingMonitor(serverId: string, entry: SpectreCountryMonitorEntry): void {
+    try {
+      if (this.configCache === null) {
+        this.loadConfigs();
+      }
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const spectre = existingServerConfig.spectre || {
+        buildingMonitors: [],
+        resistanceMonitors: [],
+      };
+      const monitors = [...spectre.buildingMonitors];
+      const idx = monitors.findIndex(m => m.countryId === entry.countryId);
+      if (idx >= 0) {
+        monitors[idx] = entry;
+      } else {
+        monitors.push(entry);
+      }
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        spectre: {
+          buildingMonitors: monitors,
+          resistanceMonitors: spectre.resistanceMonitors,
+        },
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Upserted Spectre building monitor for country ${entry.countryId} on server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to upsert Spectre building monitor', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add or update a Spectre resistance monitor for a server
+   */
+  static upsertSpectreResistanceMonitor(serverId: string, entry: SpectreCountryMonitorEntry): void {
+    try {
+      if (this.configCache === null) {
+        this.loadConfigs();
+      }
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const spectre = existingServerConfig.spectre || {
+        buildingMonitors: [],
+        resistanceMonitors: [],
+      };
+      const monitors = [...spectre.resistanceMonitors];
+      const idx = monitors.findIndex(m => m.countryId === entry.countryId);
+      if (idx >= 0) {
+        monitors[idx] = entry;
+      } else {
+        monitors.push(entry);
+      }
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        spectre: {
+          buildingMonitors: spectre.buildingMonitors,
+          resistanceMonitors: monitors,
+        },
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Upserted Spectre resistance monitor for country ${entry.countryId} on server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to upsert Spectre resistance monitor', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove Spectre monitors (buildings and/or resistance) for a country by id or case-insensitive name.
+   * @returns removed country id, or null if none matched
+   */
+  static removeSpectreMonitorByCountry(serverId: string, countryIdOrName: string): string | null {
+    try {
+      if (this.configCache === null) {
+        this.loadConfigs();
+      }
+
+      const existingServerConfig = this.configCache!.get(serverId);
+      const spectre = existingServerConfig?.spectre;
+      if (!spectre) {
+        return null;
+      }
+
+      const trimmed = countryIdOrName.trim();
+      const needle = trimmed.toLowerCase();
+      const match = (m: SpectreCountryMonitorEntry) =>
+        m.countryId === trimmed || m.countryName.toLowerCase() === needle;
+
+      const inBuildings = spectre.buildingMonitors.find(match);
+      const inResistance = spectre.resistanceMonitors.find(match);
+      const removed = inBuildings || inResistance;
+      if (!removed) {
+        return null;
+      }
+
+      const countryId = removed.countryId;
+      const buildingMonitors = spectre.buildingMonitors.filter(m => m.countryId !== countryId);
+      const resistanceMonitors = spectre.resistanceMonitors.filter(m => m.countryId !== countryId);
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        spectre: {
+          buildingMonitors,
+          resistanceMonitors,
+        },
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Removed Spectre monitor(s) for ${countryId} on server ${serverId}`);
+      return countryId;
+    } catch (error) {
+      logger.error('Failed to remove Spectre monitor', error);
+      throw error;
+    }
   }
 
   /**
