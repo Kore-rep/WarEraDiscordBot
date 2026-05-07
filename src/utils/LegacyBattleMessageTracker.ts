@@ -1,3 +1,13 @@
+/**
+ * @deprecated This file is part of the legacy message tracking system that has been removed.
+ * 
+ * The new SimpleBountyTracker system uses a fire-and-forget approach for bounty alerts
+ * and does not persist Discord message IDs or track messages across restarts.
+ * 
+ * This file is preserved for potential rollback purposes only.
+ * DO NOT USE unless reverting to the legacy message tracking system.
+ */
+
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './logger';
@@ -20,10 +30,12 @@ interface BattlesJsonStructure {
 }
 
 /**
- * Manages persisted battle message tracking in battles.json
- * This allows the bot to recover message tracking after restarts
+ * @deprecated Legacy manager for persisted battle message tracking in battles.json
+ * This allowed the bot to recover message tracking after restarts.
+ * 
+ * The new system does not track messages, so this is no longer needed.
  */
-export class BattleMessageTracker {
+export class LegacyBattleMessageTracker {
   private static readonly BATTLES_FILE_PATH = path.join(process.cwd(), '/config/battles.json');
 
   /**

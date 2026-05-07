@@ -8,9 +8,8 @@ export type MilitaryUpgradeSnapshot = Pick<
   'level' | 'status' | 'investedMoney' | 'lastUpgradeAt' | 'willBeActiveAt' | 'statusChangedAt'
 >;
 
-/** Per-region serialized building state for diffing */
+/** Per-region serialized building state for diffing (bunker/base upgrades only; not region baseDevelopment) */
 export interface RegionBuildingSnapshot {
-  baseDevelopment: number;
   /** From `upgrade.getUpgradeByTypeAndEntity("bunker", regionId)` */
   bunker: MilitaryUpgradeSnapshot | null;
   /** From `upgrade.getUpgradeByTypeAndEntity("base", regionId)` */

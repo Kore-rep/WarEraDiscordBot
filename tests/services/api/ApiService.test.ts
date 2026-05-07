@@ -97,7 +97,9 @@ describe('ApiService Cache Integration', () => {
       // Get the value - should log cache hit
       await cacheProvider.get('test-cache-key');
 
-      expect(logger.debug).toHaveBeenCalledWith('Cache hit for key: test-cache-key');
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Cache hit for key: test-cache-key (no expiration)'
+      );
     });
 
     it('should handle cache misses without logging', async () => {
@@ -187,6 +189,7 @@ describe('ApiService Cache Integration', () => {
           }),
         },
         runBatch: jest.fn().mockResolvedValue(undefined),
+        getRateLimitStatus: jest.fn().mockReturnValue(null),
       };
       mockCreateAPI.mockReturnValue(mockBatchClient);
     });
@@ -214,7 +217,7 @@ describe('ApiService Cache Integration', () => {
       // Verify getBattles was called with correct TTL
       // Expected: (5 * 60 * 1000) - 30000 = 300000 - 30000 = 270000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 270000 } }
       );
     });
@@ -240,7 +243,7 @@ describe('ApiService Cache Integration', () => {
 
       // Expected: max(30000, (0.5 * 60 * 1000) - 30000) = max(30000, 30000 - 30000) = max(30000, 0) = 30000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 30000 } }
       );
     });
@@ -266,7 +269,7 @@ describe('ApiService Cache Integration', () => {
 
       // Expected: (1 * 60 * 1000) - 30000 = 60000 - 30000 = 30000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 30000 } }
       );
     });
@@ -292,7 +295,7 @@ describe('ApiService Cache Integration', () => {
 
       // Expected: (10 * 60 * 1000) - 30000 = 600000 - 30000 = 570000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 570000 } }
       );
     });
@@ -318,8 +321,85 @@ describe('ApiService Cache Integration', () => {
 
       // Expected: (2.5 * 60 * 1000) - 30000 = 150000 - 30000 = 120000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 120000 } }
+      );
+    });
+
+    it('fetches every page until nextCursor is absent', async () => {
+      const minimalBattle = (id: string) => ({
+        _id: id,
+        attacker: { country: 'country-1', moneyPer1kDamages: 1, moneyPool: 1 },
+        defender: { country: 'country-2', moneyPer1kDamages: 1, moneyPool: 1 },
+      });
+
+      mockBatchClient = {
+        battle: {
+          getBattles: jest
+            .fn()
+            .mockResolvedValueOnce({
+              result: {
+                data: {
+                  items: [minimalBattle('b1')],
+                  nextCursor: 'cursor-page-2',
+                },
+              },
+            })
+            .mockResolvedValueOnce({
+              result: {
+                data: {
+                  items: [minimalBattle('b2')],
+                },
+              },
+            }),
+        },
+        country: {
+          getCountryById: jest.fn().mockResolvedValue({
+            result: {
+              data: { _id: 'country-1', name: 'Test Country' },
+            },
+          }),
+        },
+        region: {
+          getRegionsObject: jest.fn().mockResolvedValue({
+            result: {
+              data: {},
+            },
+          }),
+        },
+        runBatch: jest.fn().mockResolvedValue(undefined),
+        getRateLimitStatus: jest.fn().mockReturnValue(null),
+      };
+      mockCreateAPI.mockReturnValue(mockBatchClient);
+
+      const config: BotConfig = {
+        api: {
+          baseUrl: 'https://api.test.com',
+          apiKey: 'test-api-key',
+        },
+        discord: {
+          token: 'test-token',
+          servers: new Map(),
+        },
+        polling: {
+          intervalMinutes: 5,
+        },
+      };
+
+      apiService = new ApiService(config);
+      const result = await apiService.fetchBattles();
+
+      expect(result.battles.length).toBe(2);
+      expect(mockBatchClient.battle.getBattles).toHaveBeenCalledTimes(2);
+      expect(mockBatchClient.battle.getBattles).toHaveBeenNthCalledWith(
+        1,
+        { isActive: true, limit: 100 },
+        { cache: { ttl: 270000 } }
+      );
+      expect(mockBatchClient.battle.getBattles).toHaveBeenNthCalledWith(
+        2,
+        { isActive: true, limit: 100, cursor: 'cursor-page-2' },
+        { cache: { ttl: 270000 } }
       );
     });
   });
@@ -386,6 +466,7 @@ describe('ApiService Cache Integration', () => {
           }),
         },
         runBatch: jest.fn().mockResolvedValue(undefined),
+        getRateLimitStatus: jest.fn().mockReturnValue(null),
       };
       
       mockCreateAPI.mockReturnValue(mockBatchClient);
@@ -422,14 +503,14 @@ describe('ApiService Cache Integration', () => {
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledTimes(1);
       
       // Verify the cache key exists
-      const cacheKey = 'battle.getBattles:{"isActive":true}';
+      const cacheKey = 'battle.getBattles:{"isActive":true,"limit":100}';
       const cachedValue = await cacheProvider.get(cacheKey);
       expect(cachedValue).toBeDefined();
       expect(cacheProvider.size()).toBeGreaterThan(0);
 
       // Verify TTL was set correctly (30000 milliseconds minimum)
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: 30000 } }
       );
 
@@ -478,7 +559,7 @@ describe('ApiService Cache Integration', () => {
       // Immediately fetch again - should still be cached (SDK would use cache)
       // Note: In real SDK, the cache check happens before the API call
       // For this test, we verify the cache entry exists and hasn't expired
-      const cacheKey = 'battle.getBattles:{"isActive":true}';
+      const cacheKey = 'battle.getBattles:{"isActive":true,"limit":100}';
       const cachedValue = await cacheProvider.get(cacheKey);
       expect(cachedValue).toBeDefined();
       
@@ -521,7 +602,7 @@ describe('ApiService Cache Integration', () => {
       // First fetch at time 0
       await apiService.fetchBattles();
       
-      const cacheKey = 'battle.getBattles:{"isActive":true}';
+      const cacheKey = 'battle.getBattles:{"isActive":true,"limit":100}';
       
       // Verify cache exists
       const cachedValue = await cacheProvider.get(cacheKey);
@@ -529,7 +610,7 @@ describe('ApiService Cache Integration', () => {
       
       // Verify TTL was set correctly (30000 milliseconds minimum)
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
-        { isActive: true },
+        { isActive: true, limit: 100 },
         { cache: { ttl: expectedTtl } }
       );
       

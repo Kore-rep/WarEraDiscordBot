@@ -1,0 +1,1 @@
+export { contractsCommand } from './contracts';

@@ -1,4 +1,4 @@
-import { Client, Events, REST, Routes, ChatInputCommandInteraction } from 'discord.js';
+import { Client, Events, REST, Routes, ChatInputCommandInteraction, ButtonInteraction } from 'discord.js';
 import { Command } from './types';
 import { logger } from '../utils/logger';
 import { DiscordService } from '../services/discord/DiscordService';
@@ -6,6 +6,7 @@ import { ApiService } from '../services/api/ApiService';
 
 // Import all command groups
 import { bountyBattlesCommand } from './bountyBattles';
+import { contractsCommand } from './contracts';
 import { userTrackingCommand } from './userTracking';
 import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
@@ -35,6 +36,7 @@ export class CommandHandler {
   private loadCommands(): void {
     const commandList: Command[] = [
       bountyBattlesCommand,
+      contractsCommand,
       userTrackingCommand,
       scanForCommand,
       countryGroupCommand,
@@ -87,6 +89,12 @@ export class CommandHandler {
       // Handle modal submissions
       if (interaction.isModalSubmit()) {
         await this.handleModalSubmit(interaction);
+        return;
+      }
+
+      // Handle button interactions
+      if (interaction.isButton()) {
+        await this.handleButtonInteraction(interaction);
         return;
       }
     });
@@ -159,6 +167,41 @@ export class CommandHandler {
           ephemeral: true,
         }).catch(() => {
           // Silently fail if we can't respond
+        });
+      }
+    }
+  }
+
+  /**
+   * Handle a button interaction
+   */
+  private async handleButtonInteraction(interaction: ButtonInteraction): Promise<void> {
+    try {
+      // Parse the custom ID to determine the handler
+      const [command] = interaction.customId.split(':');
+      
+      if (command === 'builds') {
+        // Handle builds command button interactions
+        const { handleBuildsButtonInteraction } = await import('./scanFor/country/buildsButtonHandler');
+        await handleBuildsButtonInteraction(interaction, this.apiService!);
+      } else {
+        logger.warn(`Unknown button interaction: ${interaction.customId}`);
+        await interaction.reply({
+          content: 'Unknown button interaction.',
+          ephemeral: true,
+        });
+      }
+    } catch (error) {
+      logger.error('Error handling button interaction:', error);
+      
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({
+          content: 'An error occurred while processing your request.',
+          ephemeral: true,
+        });
+      } else if (interaction.deferred && !interaction.replied) {
+        await interaction.editReply({
+          content: 'An error occurred while processing your request.',
         });
       }
     }

@@ -1,5 +1,19 @@
+/**
+ * @deprecated This is the legacy battle formatter system that has been replaced by SimpleBattleFormatter.
+ * 
+ * This file is preserved for potential rollback purposes. The system was replaced due to complexity:
+ * - Complex ANSI formatting with damage/points bars, colors, and change history
+ * - Detailed battle formatting logic with truncation and character limits  
+ * - Change log formatting and timestamp handling
+ * 
+ * The new SimpleBattleFormatter provides clean, minimal bounty alert messages
+ * without the complex visual formatting.
+ * 
+ * DO NOT USE THIS CLASS unless reverting to the legacy system.
+ * Use SimpleBattleFormatter instead.
+ */
 
-import { ChangeEntry } from './BattleTracker';
+import { ChangeEntry } from './LegacyBattleTracker';
 
 // Infer types from SDK method return types
 type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
@@ -359,9 +373,11 @@ function formatSingleBattle(
 }
 
 /**
- * BattleFormatter class for formatting battle messages
+ * @deprecated Legacy BattleFormatter class for formatting battle messages
+ * 
+ * Use SimpleBattleFormatter instead for new bounty alert system.
  */
-export class BattleFormatter {
+export class LegacyBattleFormatter {
   /**
    * Format battle details into a single Discord message
    * Automatically trims change history if message exceeds 2000 characters

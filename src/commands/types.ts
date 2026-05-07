@@ -10,13 +10,29 @@ export interface Command {
   execute: (interaction: ChatInputCommandInteraction, discordService?: DiscordService, apiService?: ApiService) => Promise<void>;
 }
 
+export type CreateCommandBuilderOptions = {
+  /** When false, any member who can use slash commands may run it (still subject to channel overwrites). Default true. */
+  requireAdmin?: boolean;
+};
+
 /**
  * Helper to create a command builder with common settings
  */
-export function createCommandBuilder(name: string, description: string): SlashCommandBuilder {
-  return new SlashCommandBuilder()
+export function createCommandBuilder(
+  name: string,
+  description: string,
+  options?: CreateCommandBuilderOptions
+): SlashCommandBuilder {
+  const builder = new SlashCommandBuilder()
     .setName(name)
     .setDescription(description)
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .setContexts(InteractionContextType.Guild);
+
+  if (options?.requireAdmin === false) {
+    builder.setDefaultMemberPermissions(null);
+  } else {
+    builder.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+  }
+
+  return builder;
 }

@@ -6,6 +6,7 @@ import { handleCountryNoGovernment } from './country/nogovernment';
 import { handleCountryLowPop } from './country/lowpop';
 import { handleCountryEthicsScan } from './country/ethics';
 import { ETHIC_SLASH_CHOICES } from './country/partyEthicsMapping';
+import { handleCountryBuilds } from './country/builds';
 import { handleCompanyProduction } from './company/production';
 
 /**
@@ -61,6 +62,24 @@ export const scanForCommand = {
                 .addChoices(...ETHIC_SLASH_CHOICES)
             )
         )
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('builds')
+            .setDescription('Analyze player builds and modes for a country')
+            .addStringOption(option =>
+              option
+                .setName('country')
+                .setDescription('Country name or ID')
+                .setRequired(true)
+            )
+            .addIntegerOption(option =>
+              option
+                .setName('min_level')
+                .setDescription('Minimum player level to include')
+                .setRequired(true)
+                .setMinValue(1)
+            )
+        )
     )
     .addSubcommandGroup(group =>
       group
@@ -109,6 +128,8 @@ export const scanForCommand = {
           await handleCountryLowPop(interaction, apiService);
         } else if (subcommand === 'ethics') {
           await handleCountryEthicsScan(interaction, apiService);
+        } else if (subcommand === 'builds') {
+          await handleCountryBuilds(interaction, apiService);
         }
       } else if (subcommandGroup === 'company') {
         if (subcommand === 'production') {

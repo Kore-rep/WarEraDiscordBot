@@ -1,3 +1,18 @@
+/**
+ * @deprecated This is the legacy battle tracker system that has been replaced by SimpleBountyTracker.
+ * 
+ * This file is preserved for potential rollback purposes. The system was replaced due to complexity:
+ * - Complex state tracking for damage/points tracking, change history, and state management
+ * - Discord message ID tracking and editing logic
+ * - File-based message persistence
+ * 
+ * The new SimpleBountyTracker uses a fire-and-forget approach with bountyEffectiveAt timestamps
+ * for much cleaner and simpler bounty alerts.
+ * 
+ * DO NOT USE THIS CLASS unless reverting to the legacy system.
+ * Use SimpleBountyTracker instead.
+ */
+
 import { logger } from '../../utils/logger';
 
 // Infer types from SDK method return types
@@ -39,9 +54,12 @@ export interface BattleChange {
 }
 
 /**
- * Service for tracking battle states and detecting changes
+ * @deprecated Legacy service for tracking battle states and detecting changes
+ * 
+ * This has been replaced by SimpleBountyTracker which uses bountyEffectiveAt for simpler tracking.
+ * Preserved for rollback purposes only.
  */
-export class BattleTracker {
+export class LegacyBattleTracker {
   private battleStates: Map<string, BattleState> = new Map(); // battleId -> BattleState
 
   /**
@@ -292,4 +310,3 @@ export class BattleTracker {
     logger.info('Cleared all tracked battle states');
   }
 }
-

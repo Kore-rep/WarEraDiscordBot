@@ -1,4 +1,4 @@
-import { BattleMessageTracker } from '../../src/utils/battleMessageTracker';
+import { LegacyBattleMessageTracker as BattleMessageTracker } from '../../src/utils/LegacyBattleMessageTracker';
 import * as fs from 'fs';
 import * as path from 'path';
 

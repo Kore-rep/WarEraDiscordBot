@@ -80,14 +80,18 @@ function resolveAlertChannel(
 }
 
 export const spectreCommand: Command = {
-  data: createCommandBuilder('spectre', 'Military monitoring (border buildings, resistance, etc.)').addSubcommandGroup(group =>
+  data: createCommandBuilder('spectre', 'Military monitoring (border buildings, resistance, etc.)', {
+    requireAdmin: false,
+  }).addSubcommandGroup(group =>
     group
       .setName('monitor')
       .setDescription('Configure Spectre monitoring')
       .addSubcommand(sub =>
         sub
           .setName('buildings')
-          .setDescription('Track base/bunker changes on border regions for a country')
+          .setDescription(
+            'Bunker/base changes in foreign regions bordering the monitored country.'
+          )
           .addStringOption(opt =>
             opt.setName('country').setDescription('Exact country name').setRequired(true)
           )
@@ -132,7 +136,7 @@ export const spectreCommand: Command = {
         .addSubcommand(sub =>
           sub
             .setName('buildings')
-            .setDescription('Border bunker/base snapshot from the latest poll')
+            .setDescription('Bunker/base snapshot for foreign regions neighboring this country (latest poll)')
             .addStringOption(opt =>
               opt.setName('country').setDescription('Exact country name').setRequired(true)
             )
@@ -333,10 +337,10 @@ async function handleSnapshotBuildings(
 
     if (Object.keys(snaps).length === 0) {
       const hint = monitored
-        ? 'The border building monitor is on—wait for the next poll cycle to store a snapshot.'
+        ? 'The neighbor-region building monitor is on—wait for the next poll cycle to store a snapshot.'
         : 'Enable `/spectre monitor buildings` for this country and wait for a poll.';
       await interaction.editReply({
-        content: `No border building snapshot stored for **${country.name}** (\`${country._id}\`). ${hint}`,
+        content: `No building snapshot for foreign regions neighboring **${country.name}** (\`${country._id}\`). ${hint}`,
       });
       return;
     }
@@ -349,7 +353,7 @@ async function handleSnapshotBuildings(
     }
 
     const lines = formatBuildingSnapshotLines(snaps, regionNames);
-    const header = `**Border buildings snapshot** — **${country.name}** (\`${country._id}\`)\n_Last stored poll (in-memory)._`;
+    const header = `**Neighbor-region buildings snapshot** — **${country.name}** (\`${country._id}\`)\n_Foreign regions adjacent to this country; last stored poll (in-memory)._`;
     const chunks = chunkLines([header, '', ...lines]);
 
     await interaction.editReply({ content: chunks[0] });

@@ -10,7 +10,8 @@ import { DiscordService } from '../../services/discord/DiscordService';
 export const bountyBattlesCommand: Command = {
   data: createCommandBuilder(
     'bountybattles',
-    'Manage bounty battles notification settings for this server'
+    'Manage bounty battles notification settings for this server',
+    { requireAdmin: false }
   )
     .addSubcommandGroup(group =>
       group
@@ -43,7 +44,7 @@ export const bountyBattlesCommand: Command = {
             .addNumberOption(option =>
               option
                 .setName('min')
-                .setDescription('Min bounty to send a message at all; below this no message is sent (empty=keep, 0=send all)')
+                .setDescription('Min bounty to send any message; below this no message sent (empty=keep, 0=all)')
                 .setRequired(false)
                 .setMinValue(0)
             )

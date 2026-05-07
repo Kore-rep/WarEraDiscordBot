@@ -4,8 +4,9 @@ import { BotConfig } from '../config/config';
 import { ApiService } from '../services/api/ApiService';
 import { DiscordService } from '../services/discord/DiscordService';
 import { PollingService } from '../services/polling/PollingService';
-import { MessageTracker } from '../services/discord/MessageTracker';
+import { LegacyMessageTracker } from '../services/discord/LegacyMessageTracker';
 import { BattleService } from '../services/battle/BattleService';
+import { MercenaryContractService } from '../services/mercenary/MercenaryContractService';
 import { UserTrackingService } from '../services/userTracking';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
@@ -19,6 +20,7 @@ export class Bot {
   private apiService: ApiService;
   private discordService: DiscordService;
   private battleService: BattleService;
+  private mercenaryContractService: MercenaryContractService;
   private spectreService: SpectreService;
   private pollingService: PollingService;
   private userTrackingService: UserTrackingService;
@@ -37,13 +39,14 @@ export class Bot {
       ],
     });
 
-    // Initialize services
-    const messageTracker = new MessageTracker();
+    // Initialize services  
+    const messageTracker = new LegacyMessageTracker();
     this.apiService = new ApiService(config);
     this.discordService = new DiscordService(this.client, messageTracker);
     this.battleService = new BattleService(this.discordService, this.apiService);
+    this.mercenaryContractService = new MercenaryContractService(this.discordService, this.apiService);
     this.spectreService = new SpectreService(this.apiService, this.discordService);
-    this.pollingService = new PollingService(config, this.battleService, this.spectreService);
+    this.pollingService = new PollingService(config, this.battleService, this.mercenaryContractService, this.spectreService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 

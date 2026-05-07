@@ -1,5 +1,5 @@
 import { DiscordService } from '../../../src/services/discord/DiscordService';
-import { MessageTracker } from '../../../src/services/discord/MessageTracker';
+import { LegacyMessageTracker as MessageTracker } from '../../../src/services/discord/LegacyMessageTracker';
 import { Client, TextChannel, Message } from 'discord.js';
 
 // Mock dependencies

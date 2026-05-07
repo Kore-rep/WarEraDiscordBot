@@ -1,5 +1,5 @@
 import {
-  findBorderRegionIds,
+  findForeignRegionsNeighboringCountry,
   diffAllRegions,
   chunkLines,
   upgradeDtoToSnapshot,
@@ -13,7 +13,7 @@ import type { BunkerUpgradeDTO } from 'warera-sdk';
 function r(partial: {
   country: string;
   neighbors: string[];
-}): Parameters<typeof findBorderRegionIds>[0] extends Map<infer _K, infer V> ? V : never {
+}): Parameters<typeof findForeignRegionsNeighboringCountry>[0] extends Map<infer _K, infer V> ? V : never {
   return partial as never;
 }
 
@@ -39,16 +39,16 @@ function makeDto(over: Partial<BunkerUpgradeDTO>): BunkerUpgradeDTO {
 }
 
 describe('spectreBuildingLogic', () => {
-  describe('findBorderRegionIds', () => {
-    it('includes only regions in C that neighbor foreign regions', () => {
+  describe('findForeignRegionsNeighboringCountry', () => {
+    it('includes only foreign regions that neighbor monitored country territory', () => {
       const map = new Map([
         ['a', r({ country: 'C', neighbors: ['b'] })],
         ['b', r({ country: 'D', neighbors: ['a'] })],
         ['c', r({ country: 'C', neighbors: ['d'] })],
         ['d', r({ country: 'C', neighbors: ['c'] })],
       ]);
-      const border = findBorderRegionIds(map, 'C');
-      expect(border.sort()).toEqual(['a'].sort());
+      const border = findForeignRegionsNeighboringCountry(map, 'C');
+      expect(border.sort()).toEqual(['b'].sort());
     });
 
     it('returns empty when no foreign neighbor', () => {
@@ -56,7 +56,16 @@ describe('spectreBuildingLogic', () => {
         ['x', r({ country: 'C', neighbors: ['y'] })],
         ['y', r({ country: 'C', neighbors: ['x'] })],
       ]);
-      expect(findBorderRegionIds(map, 'C')).toEqual([]);
+      expect(findForeignRegionsNeighboringCountry(map, 'C')).toEqual([]);
+    });
+
+    it('dedupes when multiple monitored regions touch the same foreign region', () => {
+      const map = new Map([
+        ['a1', r({ country: 'C', neighbors: ['z'] })],
+        ['a2', r({ country: 'C', neighbors: ['z'] })],
+        ['z', r({ country: 'D', neighbors: ['a1', 'a2'] })],
+      ]);
+      expect(findForeignRegionsNeighboringCountry(map, 'C').sort()).toEqual(['z']);
     });
   });
 
@@ -74,14 +83,12 @@ describe('spectreBuildingLogic', () => {
     it('detects bunker level change from API snapshots', () => {
       const prev: Record<string, RegionBuildingSnapshot> = {
         r1: {
-          baseDevelopment: 1,
           bunker: { level: 1, status: 'a', investedMoney: 0, lastUpgradeAt: '1', willBeActiveAt: '1', statusChangedAt: '1' },
           base: null,
         },
       };
       const next: Record<string, RegionBuildingSnapshot> = {
         r1: {
-          baseDevelopment: 1,
           bunker: { level: 2, status: 'a', investedMoney: 0, lastUpgradeAt: '1', willBeActiveAt: '1', statusChangedAt: '1' },
           base: null,
         },
@@ -91,36 +98,29 @@ describe('spectreBuildingLogic', () => {
       expect(lines.some(l => l.includes('**bunker** level: 1 → 2'))).toBe(true);
     });
 
-    it('reports region no longer on border', () => {
+    it('reports region no longer neighboring monitored country', () => {
       const prev: Record<string, RegionBuildingSnapshot> = {
-        gone: { baseDevelopment: 0, bunker: null, base: null },
+        gone: { bunker: null, base: null },
       };
       const next: Record<string, RegionBuildingSnapshot> = {};
       const lines = diffAllRegions(prev, next, new Map([['gone', 'Gone']]));
-      expect(lines.some(l => l.includes('no longer on border'))).toBe(true);
+      expect(lines.some(l => l.includes('no longer neighbors monitored country'))).toBe(true);
     });
   });
 
   describe('buildRegionBuildingSnapshot', () => {
     it('maps bunker and base DTOs', () => {
-      const region = {
-        baseDevelopment: 2,
-        country: 'C',
-        _id: 'r1',
-      } as Parameters<typeof buildRegionBuildingSnapshot>[0];
       const bunker = makeDto({ upgradeType: 'bunker', level: 2 });
       const base = makeDto({ upgradeType: 'base', level: 1 });
-      const snap = buildRegionBuildingSnapshot(region, bunker, base);
-      expect(snap.baseDevelopment).toBe(2);
+      const snap = buildRegionBuildingSnapshot(bunker, base);
       expect(snap.bunker?.level).toBe(2);
       expect(snap.base?.level).toBe(1);
     });
   });
 
   describe('formatBuildingSnapshotLines', () => {
-    it('formats bunker/base and base development', () => {
+    it('formats bunker and base slots only', () => {
       const snap: RegionBuildingSnapshot = {
-        baseDevelopment: 3,
         bunker: {
           level: 2,
           status: 'active',
@@ -132,9 +132,9 @@ describe('spectreBuildingLogic', () => {
         base: null,
       };
       const lines = formatBuildingSnapshotLines({ z1: snap }, new Map([['z1', 'Zed']]));
-      expect(lines.some(l => l.includes('base development **3**'))).toBe(true);
       expect(lines.some(l => l.includes('**bunker:** level 2'))).toBe(true);
       expect(lines.some(l => l.includes('**base:** none'))).toBe(true);
+      expect(lines.length).toBe(2);
     });
   });
 

@@ -1,4 +1,4 @@
-import { BattleFormatter } from '../../../src/services/battle/BattleFormatter';
+import { LegacyBattleFormatter as BattleFormatter } from '../../../src/services/battle/LegacyBattleFormatter';
 
 describe('BattleFormatter', () => {
   let formatter: BattleFormatter;

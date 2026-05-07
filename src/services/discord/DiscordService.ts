@@ -1,8 +1,9 @@
 import { Client, TextChannel, User } from 'discord.js';
 import { logger } from '../../utils/logger';
-import { MessageTracker } from './MessageTracker';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
-import { BattleMessageTracker } from '../../utils/battleMessageTracker';
+// Legacy imports for rollback compatibility (deprecated)
+import { LegacyMessageTracker } from './LegacyMessageTracker';
+import { LegacyBattleMessageTracker } from '../../utils/LegacyBattleMessageTracker';
 
 /**
  * Service for handling Discord-related operations
@@ -10,9 +11,9 @@ import { BattleMessageTracker } from '../../utils/battleMessageTracker';
 export class DiscordService {
   private client: Client;
   private channels: Map<string, TextChannel> = new Map(); // serverId -> channel
-  private messageTracker: MessageTracker;
+  private messageTracker: LegacyMessageTracker; // Deprecated, kept for rollback capability
 
-  constructor(client: Client, messageTracker: MessageTracker) {
+  constructor(client: Client, messageTracker: LegacyMessageTracker) {
     this.client = client;
     this.messageTracker = messageTracker;
   }
@@ -28,7 +29,7 @@ export class DiscordService {
       const serverConfigs = Array.from(servers.entries());
       
       if (serverConfigs.length === 0) {
-        logger.warn('No servers configured. Bot will start but will not send notifications until servers are configured via /bountybattles config set');
+        logger.warn('No servers configured. Bot will start but will not send notifications until servers are configured via /bountybattles or /contracts config set');
         return; // Exit early, no channels to initialize
       }
 
@@ -39,10 +40,15 @@ export class DiscordService {
         if (serverConfig.bountyBattles?.channelId) {
           await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
         }
+        
+        // Initialize channel for mercenary contracts if configured
+        if (serverConfig.mercenaryContracts?.channelId) {
+          await this.initializeServerChannel(serverId, serverConfig.mercenaryContracts.channelId);
+        }
       }
 
       if (this.channels.size === 0) {
-        logger.warn('Failed to initialize any channels. Check your serverConfig.json configuration or add servers via /bountybattles config set');
+        logger.warn('Failed to initialize any channels. Check your serverConfig.json configuration or add servers via /bountybattles or /contracts config set');
       } else {
         logger.info(`Discord service initialized. Connected to ${this.channels.size} channel(s)`);
       }
@@ -216,7 +222,7 @@ export class DiscordService {
     this.messageTracker.setMessageId(serverId, battleId, message.id);
     
     // Persist to battles.json for recovery after restart
-    BattleMessageTracker.setBattleMessage(serverId, battleId, message.id);
+    LegacyBattleMessageTracker.setBattleMessage(serverId, battleId, message.id);
 
     if (roleIds.length > 0) {
       logger.info(`Created new battle message for battle ${battleId} in server ${serverId} (channel: ${channel.name})`);
@@ -257,7 +263,7 @@ export class DiscordService {
       this.messageTracker.removeBattle(serverId, battleId);
       
       // Remove from battles.json
-      BattleMessageTracker.removeBattleMessage(serverId, battleId);
+      LegacyBattleMessageTracker.removeBattleMessage(serverId, battleId);
       logger.info(`Deleted battle message for battle ${battleId} in server ${serverId}`);
     } catch (error) {
       logger.warn(`Failed to delete message ${messageId} for battle ${battleId}`, error);
@@ -284,6 +290,92 @@ export class DiscordService {
       logger.debug(`Sent message to server ${serverId} (channel: ${channel.name})`);
     } catch (error) {
       logger.error(`Failed to send message to server ${serverId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a bounty alert message with optional role mentions (fire-and-forget, no tracking)
+   * Used by the simplified bounty system that doesn't track or update messages
+   * 
+   * @param serverId - Discord server ID
+   * @param message - Formatted bounty alert message
+   * @param roleIds - Array of role IDs to mention (if threshold is met)
+   */
+  async sendBountyAlert(serverId: string, message: string, roleIds: string[] = []): Promise<void> {
+    let channel = this.channels.get(serverId);
+    
+    // If channel not initialized, try to initialize it now
+    if (!channel) {
+      const serverConfig = ServerConfigManager.getServerConfig(serverId);
+      if (serverConfig?.bountyBattles?.channelId) {
+        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
+        channel = this.channels.get(serverId);
+      }
+    
+      if (!channel) {
+        throw new Error(`Channel not initialized for server ${serverId}. Server may not be configured or channel is invalid.`);
+      }
+    }
+
+    try {
+      // Build role mentions if provided
+      const mentions = roleIds.length > 0
+        ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+        : '';
+      
+      // Combine mentions with message
+      const finalMessage = mentions 
+        ? `${mentions}\n\n${message}`
+        : message;
+
+      // Send the alert (fire-and-forget, no tracking)
+      await channel.send(finalMessage);
+      
+      logger.info(`Sent bounty alert to server ${serverId} (channel: ${channel.name}, mentions: ${roleIds.length})`);
+    } catch (error) {
+      logger.error(`Failed to send bounty alert to server ${serverId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Send a mercenary contract alert message with optional role mentions (fire-and-forget, no tracking)
+   * Uses the mercenary contracts channel configured for the server
+   * 
+   * @param serverId - Discord server ID
+   * @param message - Formatted mercenary contract alert message
+   * @param roleIds - Array of role IDs to mention
+   */
+  async sendMercenaryContractAlert(serverId: string, message: string, roleIds: string[] = []): Promise<void> {
+    try {
+      const serverConfig = ServerConfigManager.getServerConfig(serverId);
+      if (!serverConfig?.mercenaryContracts?.channelId) {
+        throw new Error(`Mercenary contracts channel not configured for server ${serverId}`);
+      }
+
+      // Fetch the mercenary contracts channel dynamically
+      const channel = await this.client.channels.fetch(serverConfig.mercenaryContracts.channelId);
+      if (!channel || !channel.isTextBased()) {
+        throw new Error(`Mercenary contracts channel ${serverConfig.mercenaryContracts.channelId} is not a valid text channel for server ${serverId}`);
+      }
+
+      // Build role mentions if provided
+      const mentions = roleIds.length > 0
+        ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
+        : '';
+      
+      // Combine mentions with message
+      const finalMessage = mentions 
+        ? `${mentions}\n\n${message}`
+        : message;
+
+      // Send the alert (fire-and-forget, no tracking)
+      await (channel as TextChannel).send(finalMessage);
+      
+      logger.info(`Sent mercenary contract alert to server ${serverId} (channel: ${(channel as TextChannel).name}, mentions: ${roleIds.length})`);
+    } catch (error) {
+      logger.error(`Failed to send mercenary contract alert to server ${serverId}`, error);
       throw error;
     }
   }
@@ -349,7 +441,7 @@ export class DiscordService {
     this.messageTracker.clearServer(serverId);
     
     // Also clear from battles.json
-    BattleMessageTracker.clearServer(serverId);
+    LegacyBattleMessageTracker.clearServer(serverId);
     
     logger.info(`Cleared message tracking for server ${serverId}`);
   }
@@ -367,7 +459,7 @@ export class DiscordService {
    * Updates battles.json and the in-memory message map; does not delete Discord messages.
    */
   pruneInactiveBattleTracking(activeBattleIds: ReadonlySet<string>): void {
-    const removed = BattleMessageTracker.pruneInactiveBattles(activeBattleIds);
+    const removed = LegacyBattleMessageTracker.pruneInactiveBattles(activeBattleIds);
     for (const { serverId, battleId } of removed) {
       this.messageTracker.removeBattle(serverId, battleId);
     }
@@ -410,7 +502,7 @@ export class DiscordService {
    */
   private async loadPersistedBattlesInternal(): Promise<void> {
     try {
-      const battles = BattleMessageTracker.loadBattles();
+      const battles = LegacyBattleMessageTracker.loadBattles();
       logger.info(`Loading ${battles.size} persisted battle message(s) from battles.json`);
 
       let restoredCount = 0;
@@ -422,7 +514,7 @@ export class DiscordService {
           const serverConfig = ServerConfigManager.getServerConfig(entry.serverId);
           if (!serverConfig) {
             logger.warn(`Server ${entry.serverId} not configured, removing battle ${entry.battleId}`);
-            BattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
+            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
             deletedCount++;
             continue;
           }
@@ -436,7 +528,7 @@ export class DiscordService {
 
           if (!channel) {
             logger.warn(`Could not initialize channel for server ${entry.serverId}, removing battle ${entry.battleId}`);
-            BattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
+            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
             deletedCount++;
             continue;
           }
@@ -452,7 +544,7 @@ export class DiscordService {
           } catch (fetchError) {
             // Message no longer exists (deleted), remove from tracking
             logger.info(`Message ${entry.messageId} for battle ${entry.battleId} no longer exists, removing from tracking`);
-            BattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
+            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
             deletedCount++;
           }
         } catch (error) {

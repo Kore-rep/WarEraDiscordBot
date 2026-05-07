@@ -58,6 +58,16 @@ export class ServerConfigManager {
           }
         }
 
+        // Validate mercenaryContracts config if present
+        if (serverConfig.mercenaryContracts) {
+          if (!serverConfig.mercenaryContracts.channelId) {
+            throw new Error(`Server ${serverId} mercenaryContracts is missing channelId`);
+          }
+          if (!Array.isArray(serverConfig.mercenaryContracts.roleIds)) {
+            throw new Error(`Server ${serverId} mercenaryContracts roleIds must be an array`);
+          }
+        }
+
         const validateSpectreMonitors = (arr: SpectreCountryMonitorEntry[] | undefined, label: string) => {
           if (!arr) {
             return;
@@ -81,6 +91,13 @@ export class ServerConfigManager {
             enabled: serverConfig.bountyBattles.enabled,
             bountyThreshold: serverConfig.bountyBattles.bountyThreshold,
             minBountyToSend: serverConfig.bountyBattles.minBountyToSend,
+          } : undefined,
+          mercenaryContracts: serverConfig.mercenaryContracts ? {
+            channelId: serverConfig.mercenaryContracts.channelId,
+            roleIds: serverConfig.mercenaryContracts.roleIds.filter(id => id && id.trim().length > 0),
+            enabled: serverConfig.mercenaryContracts.enabled,
+            contractThreshold: serverConfig.mercenaryContracts.contractThreshold,
+            minContractToSend: serverConfig.mercenaryContracts.minContractToSend,
           } : undefined,
           reports: serverConfig.reports,
           userTracking: serverConfig.userTracking ? {
@@ -107,7 +124,7 @@ export class ServerConfigManager {
 
       // Allow empty server configuration for initial setup
       if (serversMap.size === 0) {
-        logger.warn('No servers configured in serverConfig.json. Use /bountybattles config set to configure servers.');
+        logger.warn('No servers configured in serverConfig.json. Use /bountybattles config set or /contracts config set to configure servers.');
       }
 
       this.configCache = serversMap;
@@ -182,6 +199,52 @@ export class ServerConfigManager {
   }
 
   /**
+   * Update mercenary contract configuration for a server
+   * @param serverId Discord server ID
+   * @param config Partial mercenary contract configuration to update
+   */
+  static updateMercenaryContractsConfig(serverId: string, config: Partial<import('../config/config').MercenaryContractsConfig>): void {
+    try {
+      // Ensure cache is loaded
+      if (this.configCache === null) {
+        this.loadConfigs();
+      }
+      
+      // Get existing config or create new one
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingMercenaryConfig = existingServerConfig.mercenaryContracts || {
+        channelId: '',
+        roleIds: [],
+        enabled: true,
+        contractThreshold: 0,
+      };
+
+      // Merge with new config
+      const updatedMercenaryConfig: import('../config/config').MercenaryContractsConfig = {
+        channelId: config.channelId !== undefined ? config.channelId : existingMercenaryConfig.channelId,
+        roleIds: config.roleIds !== undefined ? config.roleIds : existingMercenaryConfig.roleIds,
+        enabled: config.enabled !== undefined ? config.enabled : existingMercenaryConfig.enabled,
+        contractThreshold: config.contractThreshold !== undefined ? config.contractThreshold : existingMercenaryConfig.contractThreshold,
+        minContractToSend: config.minContractToSend !== undefined ? config.minContractToSend : existingMercenaryConfig.minContractToSend,
+      };
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        mercenaryContracts: updatedMercenaryConfig,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Updated mercenary contracts config for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update mercenary contracts config', error);
+      throw error;
+    }
+  }
+
+  /**
    * Legacy method for backward compatibility
    * @deprecated Use updateBountyBattlesConfig instead
    */
@@ -232,6 +295,10 @@ export class ServerConfigManager {
       bountyBattles: config.bountyBattles ? {
         ...config.bountyBattles,
         roleIds: [...config.bountyBattles.roleIds],
+      } : undefined,
+      mercenaryContracts: config.mercenaryContracts ? {
+        ...config.mercenaryContracts,
+        roleIds: [...config.mercenaryContracts.roleIds],
       } : undefined,
       reports: config.reports ? { ...config.reports } : undefined,
       userTracking: config.userTracking ? {

@@ -18,45 +18,39 @@ export function upgradeDtoToSnapshot(dto: BunkerUpgradeDTO): MilitaryUpgradeSnap
 }
 
 /**
- * Build per-region snapshot from region metadata + typed upgrade API results.
+ * Build per-region snapshot from bunker + base upgrade API results (not region `baseDevelopment`).
  */
 export function buildRegionBuildingSnapshot(
-  region: RegionDTO,
   bunker: BunkerUpgradeDTO | null,
   base: BunkerUpgradeDTO | null
 ): RegionBuildingSnapshot {
   return {
-    baseDevelopment: region.baseDevelopment,
     bunker: bunker ? upgradeDtoToSnapshot(bunker) : null,
     base: base ? upgradeDtoToSnapshot(base) : null,
   };
 }
 
 /**
- * Region IDs in `countryId` that border a region owned by another country.
+ * Region IDs **not** in `countryId` that share a map edge with at least one region owned by `countryId`
+ * (foreign regions adjacent to the monitored country's territory).
  */
-export function findBorderRegionIds(
+export function findForeignRegionsNeighboringCountry(
   regions: Map<string, RegionDTO>,
   countryId: string
 ): string[] {
-  const border: string[] = [];
-  for (const [rid, region] of regions) {
+  const foreign = new Set<string>();
+  for (const [, region] of regions) {
     if (region.country !== countryId) {
       continue;
     }
-    let touchesForeign = false;
     for (const nid of region.neighbors || []) {
       const neighbor = regions.get(nid);
       if (neighbor && neighbor.country !== countryId) {
-        touchesForeign = true;
-        break;
+        foreign.add(nid);
       }
     }
-    if (touchesForeign) {
-      border.push(rid);
-    }
   }
-  return border;
+  return [...foreign];
 }
 
 function diffMilitarySlot(
@@ -121,12 +115,8 @@ export function diffRegionSnapshots(
   const header = `**${regionDisplayName}** (\`${regionId}\`)`;
 
   if (!prev) {
-    lines.push(`${header} — now tracked on border (bunker/base upgrade API).`);
+    lines.push(`${header} — now tracked (neighbors monitored country; bunker/base upgrade API).`);
     return lines;
-  }
-
-  if (prev.baseDevelopment !== next.baseDevelopment) {
-    lines.push(`${header} — base development: ${prev.baseDevelopment} → ${next.baseDevelopment}`);
   }
 
   lines.push(...diffMilitarySlot(prev.bunker, next.bunker, 'bunker', header));
@@ -149,7 +139,7 @@ export function diffAllRegions(
     const name = regionNames.get(rid) || rid;
     if (!next) {
       lines.push(
-        `**${name}** (\`${rid}\`) — no longer on border (neighbor/ownership changed).`
+        `**${name}** (\`${rid}\`) — no longer neighbors monitored country (neighbor/ownership changed).`
       );
       continue;
     }
@@ -173,7 +163,7 @@ function formatMilitarySlotSummary(
 }
 
 /**
- * Human-readable lines for `/spectre snapshot buildings` (latest stored poll per border region).
+ * Human-readable lines for `/spectre snapshot buildings` (latest stored poll per foreign neighbor region).
  */
 export function formatBuildingSnapshotLines(
   snapshots: Record<string, RegionBuildingSnapshot>,
@@ -184,7 +174,6 @@ export function formatBuildingSnapshotLines(
     const snap = snapshots[rid];
     const name = regionNames.get(rid) || rid;
     const header = `**${name}** (\`${rid}\`)`;
-    lines.push(`${header} — base development **${snap.baseDevelopment}**`);
     lines.push(formatMilitarySlotSummary(snap.bunker, 'bunker', header));
     lines.push(formatMilitarySlotSummary(snap.base, 'base', header));
   }

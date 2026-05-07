@@ -16,6 +16,17 @@ export interface BountyBattlesConfig {
 }
 
 /**
+ * Configuration for mercenary contract auctions feature per server
+ */
+export interface MercenaryContractsConfig {
+  channelId: string;
+  roleIds: string[];
+  enabled?: boolean; // Whether mercenary contract notifications are enabled (default: true)
+  contractThreshold?: number; // Minimum gold per 1k damage to trigger role mentions (default: 0)
+  minContractToSend?: number; // Minimum gold per 1k damage to send a message at all; below this no message is sent (default: none)
+}
+
+/**
  * Configuration for reports feature per server
  */
 export interface ReportsConfig {
@@ -90,6 +101,7 @@ export interface SpectreConfig {
  */
 export interface ServerConfig {
   bountyBattles?: BountyBattlesConfig;
+  mercenaryContracts?: MercenaryContractsConfig;
   reports?: ReportsConfig;
   userTracking?: UserTrackingConfig;
   countryGroups?: CountryGroup[];

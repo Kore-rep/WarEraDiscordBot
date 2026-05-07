@@ -1,4 +1,4 @@
-import { BattleTracker } from '../../../src/services/battle/BattleTracker';
+import { LegacyBattleTracker as BattleTracker } from '../../../src/services/battle/LegacyBattleTracker';
 
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({

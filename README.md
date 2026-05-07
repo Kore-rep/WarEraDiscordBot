@@ -50,7 +50,7 @@ Edit `.env` and fill in your configuration:
 
 ```env
 DISCORD_TOKEN=your_discord_bot_token_here
-POLLING_INTERVAL_MINUTES=5
+POLLING_INTERVAL_MINUTES=1
 API_BASE_URL=https://api.example.com
 ```
 

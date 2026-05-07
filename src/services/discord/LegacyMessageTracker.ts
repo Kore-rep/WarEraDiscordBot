@@ -1,10 +1,22 @@
+/**
+ * @deprecated This file is part of the legacy message tracking system that has been removed.
+ * 
+ * The new SimpleBountyTracker system uses a fire-and-forget approach for bounty alerts
+ * and does not track or update Discord messages after sending them.
+ * 
+ * This file is preserved for potential rollback purposes only.
+ * DO NOT USE unless reverting to the legacy message tracking system.
+ */
+
 import { logger } from '../../utils/logger';
 
 /**
- * Tracks Discord message IDs for each battle per server
+ * @deprecated Legacy tracker for Discord message IDs for each battle per server
  * Maps: serverId -> battleId -> messageId
+ * 
+ * Not used in the new SimpleBountyTracker system.
  */
-export class MessageTracker {
+export class LegacyMessageTracker {
   private messages: Map<string, Map<string, string>> = new Map(); // serverId -> (battleId -> messageId)
 
   /**
@@ -48,4 +60,3 @@ export class MessageTracker {
     logger.debug(`Cleared all tracking for server ${serverId}`);
   }
 }
-

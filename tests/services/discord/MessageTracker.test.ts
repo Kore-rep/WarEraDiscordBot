@@ -1,4 +1,4 @@
-import { MessageTracker } from '../../../src/services/discord/MessageTracker';
+import { LegacyMessageTracker as MessageTracker } from '../../../src/services/discord/LegacyMessageTracker';
 
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({

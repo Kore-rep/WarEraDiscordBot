@@ -18,7 +18,7 @@ import {
   buildRegionBuildingSnapshot,
   chunkLines,
   diffAllRegions,
-  findBorderRegionIds,
+  findForeignRegionsNeighboringCountry,
 } from './spectreBuildingLogic';
 import {
   buildCountryResistanceSnapshots,
@@ -175,7 +175,7 @@ export class SpectreService {
   }
 
   /**
-   * Border regions use `upgrade.getUpgradeByTypeAndEntity("bunker"|"base", regionId)` (batched).
+   * Foreign regions adjacent to the monitored country use `upgrade.getUpgradeByTypeAndEntity("bunker"|"base", regionId)` (batched).
    * @returns Lines to report (empty if baseline or no changes).
    */
   private async processBuildingMonitor(
@@ -185,19 +185,19 @@ export class SpectreService {
     countryId: string,
     countryName: string
   ): Promise<string[]> {
-    const borderIds = findBorderRegionIds(regions, countryId);
-    const upgradeByRegion = await this.fetchBunkerBaseUpgradesForRegions(borderIds);
+    const foreignNeighborIds = findForeignRegionsNeighboringCountry(regions, countryId);
+    const upgradeByRegion = await this.fetchBunkerBaseUpgradesForRegions(foreignNeighborIds);
 
     const nextByRegion: Record<string, RegionBuildingSnapshot> = {};
     const regionNames = new Map<string, string>();
 
-    for (const rid of borderIds) {
+    for (const rid of foreignNeighborIds) {
       const region = regions.get(rid);
       if (!region) {
         continue;
       }
       const pair = upgradeByRegion.get(rid) ?? { bunker: null, base: null };
-      nextByRegion[rid] = buildRegionBuildingSnapshot(region, pair.bunker, pair.base);
+      nextByRegion[rid] = buildRegionBuildingSnapshot(pair.bunker, pair.base);
       regionNames.set(rid, region.name || rid);
     }
 
@@ -207,7 +207,7 @@ export class SpectreService {
     if (isBaseline) {
       setCountrySnapshots(state, serverId, countryId, nextByRegion);
       logger.info(
-        `Spectre: buildings baseline for **${countryName}** (${countryId}): ${borderIds.length} border region(s)`
+        `Spectre: buildings baseline for **${countryName}** (${countryId}): ${foreignNeighborIds.length} foreign neighbor region(s)`
       );
       return [];
     }

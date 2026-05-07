@@ -19,6 +19,9 @@ type GetRegionsObjectResponse = Awaited<
 >;
 type RegionDTO = GetRegionsObjectResponse["result"]["data"][string];
 
+/** Page size for `battle.getBattles` cursor pagination (matches typical API max page size). */
+const BATTLES_PAGE_SIZE = 100;
+
 /**
  * Service for handling API requests using the WarEra SDK
  * Handles battles.getBattles endpoint calls and response processing
@@ -212,9 +215,13 @@ export class ApiService {
   }
 
   /**
-   * Fetch battles data from the API using the battles.getBattles endpoint
+   * Fetch battles with bounty rewards from the API (for bounty tracking).
+   * Follows `nextCursor` until all pages are loaded.
    * Filters results client-side where moneyPer1kDamages > 0 and moneyPool > 0
    * Also fetches country and region information for all countries/regions in the battles
+   * 
+   * Note: For mercenary contracts that should check ALL battles regardless of bounties,
+   * use fetchAllBattles() instead.
    *
    * @returns Promise with filtered battles array, country map, and regions map
    */
@@ -240,18 +247,45 @@ export class ApiService {
       const pollingIntervalMs = this.config.polling.intervalMinutes * 60 * 1000;
       const battlesCacheTtl = Math.max(30000, pollingIntervalMs - 30000); // Minimum 30 seconds (30000ms)
 
-      // Batch independent requests: getBattles() and getRegionsObject() can be batched together
-      // since they don't depend on each other (saves 1 request toward rate limit)
-      // Use singleton batch client to ensure cache and rate limits are tracked correctly
-      const battlesPromise = this.batchClient.battle.getBattles(
-        { isActive: true },
-        { cache: { ttl: battlesCacheTtl } }
-      );
-      // SDK expects TTL in milliseconds
-      const regionsPromise = this.batchClient.region.getRegionsObject({ cache: { ttl: 86400 * 1000 } }); // 24 hours in milliseconds
-      
-      // Execute batch (both requests count as 1 request toward rate limit)
-      await this.batchClient.runBatch();
+      const allBattles: BattleDTO[] = [];
+      let nextCursor: string | undefined;
+      let regionsResponse: GetRegionsObjectResponse | undefined;
+      let pageCount = 0;
+
+      do {
+        const params: { isActive: true; limit: number; cursor?: string } = {
+          isActive: true,
+          limit: BATTLES_PAGE_SIZE,
+        };
+        if (nextCursor) {
+          params.cursor = nextCursor;
+        }
+
+        const battlesPromise = this.batchClient.battle.getBattles(params, {
+          cache: { ttl: battlesCacheTtl },
+        });
+
+        if (!nextCursor) {
+          // First page only: batch getBattles with getRegionsObject (one rate-limit unit)
+          const regionsPromise = this.batchClient.region.getRegionsObject({
+            cache: { ttl: 86400 * 1000 },
+          }); // 24 hours in milliseconds
+          await this.batchClient.runBatch();
+          const [battlesRes, regionsRes] = (await Promise.all([
+            battlesPromise,
+            regionsPromise,
+          ])) as [GetBattlesResponse, GetRegionsObjectResponse];
+          regionsResponse = regionsRes;
+          allBattles.push(...battlesRes.result.data.items);
+          nextCursor = battlesRes.result.data.nextCursor;
+        } else {
+          await this.batchClient.runBatch();
+          const battlesRes = (await battlesPromise) as GetBattlesResponse;
+          allBattles.push(...battlesRes.result.data.items);
+          nextCursor = battlesRes.result.data.nextCursor;
+        }
+        pageCount++;
+      } while (nextCursor);
 
       // Log rate limit status after making requests
       const rateLimitStatusAfter = this.batchClient.getRateLimitStatus();
@@ -260,16 +294,10 @@ export class ApiService {
           `Rate limit status (after): ${rateLimitStatusAfter.requestCount}/${rateLimitStatusAfter.maxRequests} requests (${rateLimitStatusAfter.usagePercent}% usage), at limit: ${rateLimitStatusAfter.isAtLimit}, backoff: ${rateLimitStatusAfter.currentBackoffMs}ms`
         );
       }
-      
-      // Get results
-      const [battlesResponse, regionsResponse] = await Promise.all([
-        battlesPromise,
-        regionsPromise
-      ]);
 
-      const response = battlesResponse as GetBattlesResponse;
-      const allBattles = response.result.data.items;
-      logger.debug(`Fetched ${allBattles.length} active battle(s) from API`);
+      logger.debug(
+        `Fetched ${allBattles.length} active battle(s) from API across ${pageCount} page(s)`
+      );
 
       // Filter battles where moneyPer1kDamages > 0 and moneyPool > 0
       // Check both attacker and defender sides
@@ -303,8 +331,8 @@ export class ApiService {
       // Fetch country information using batch requests
       const countries = await this.fetchCountries(Array.from(countryIds));
 
-      // Process regions response
-      const regionsData = (regionsResponse as GetRegionsObjectResponse).result.data;
+      // Process regions response (fetched with first battles page only)
+      const regionsData = regionsResponse!.result.data;
       const regions = new Map<string, RegionDTO>();
       for (const [regionId, region] of Object.entries(regionsData)) {
         regions.set(regionId, region);
@@ -379,6 +407,7 @@ export class ApiService {
     return this.client;
   }
 
+
   /**
    * Get the batch-enabled API client for battle polling operations
    * This client has its own isolated queue to prevent conflicts with commands
@@ -407,6 +436,110 @@ export class ApiService {
       rateLimiter: this.sharedRateLimiter, // Shared rate limiter (shared tracking across all clients)
       cache: this.cacheProvider, // Shared cache (shared data across all clients)
     });
+  }
+
+  /**
+   * Fetch ALL active battles without any filtering (for mercenary contracts)
+   * Unlike fetchBattles(), this method doesn't filter by bounty rewards
+   * @returns Promise resolving to all active battles and country data
+   */
+  async fetchAllBattles(): Promise<{
+    battles: BattleDTO[];
+    countries: Map<string, CountryDTO>;
+    regions: Map<string, RegionDTO>;
+  }> {
+    try {
+      logger.debug("Fetching ALL active battles from API (unfiltered)...");
+
+      // Log rate limit status before making requests
+      const rateLimitStatusBefore = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatusBefore) {
+        logger.debug(
+          `Rate limit status (before): ${rateLimitStatusBefore.requestCount}/${rateLimitStatusBefore.maxRequests} requests (${rateLimitStatusBefore.usagePercent}% usage), at limit: ${rateLimitStatusBefore.isAtLimit}, backoff: ${rateLimitStatusBefore.currentBackoffMs}ms`
+        );
+      }
+
+      // Calculate cache TTL for battles
+      const pollingIntervalMs = this.config.polling.intervalMinutes * 60 * 1000;
+      const battlesCacheTtl = Math.max(30000, pollingIntervalMs - 30000); // Minimum 30 seconds
+
+      const allBattles: BattleDTO[] = [];
+      let nextCursor: string | undefined;
+      let regionsResponse: GetRegionsObjectResponse | undefined;
+      let pageCount = 0;
+
+      do {
+        const params: { isActive: true; limit: number; cursor?: string } = {
+          isActive: true,
+          limit: BATTLES_PAGE_SIZE,
+        };
+        if (nextCursor) {
+          params.cursor = nextCursor;
+        }
+
+        const battlesPromise = this.batchClient.battle.getBattles(params, {
+          cache: { ttl: battlesCacheTtl },
+        });
+
+        if (!nextCursor) {
+          // First page only: batch getBattles with getRegionsObject
+          const regionsPromise = this.batchClient.region.getRegionsObject({
+            cache: { ttl: 86400 * 1000 },
+          }); // 24 hours in milliseconds
+          await this.batchClient.runBatch();
+          const [battlesRes, regionsRes] = (await Promise.all([
+            battlesPromise,
+            regionsPromise,
+          ])) as [GetBattlesResponse, GetRegionsObjectResponse];
+          regionsResponse = regionsRes;
+          allBattles.push(...battlesRes.result.data.items);
+          nextCursor = battlesRes.result.data.nextCursor;
+        } else {
+          await this.batchClient.runBatch();
+          const battlesRes = (await battlesPromise) as GetBattlesResponse;
+          allBattles.push(...battlesRes.result.data.items);
+          nextCursor = battlesRes.result.data.nextCursor;
+        }
+        pageCount++;
+      } while (nextCursor);
+
+      logger.debug(
+        `Fetched ${allBattles.length} active battle(s) from API across ${pageCount} page(s) (unfiltered)`
+      );
+
+      // Extract unique country IDs from ALL battles (no filtering)
+      const countryIds = new Set<string>();
+      for (const battle of allBattles) {
+        if (battle.attacker.country) {
+          countryIds.add(battle.attacker.country);
+        }
+        if (battle.defender.country) {
+          countryIds.add(battle.defender.country);
+        }
+      }
+
+      // Fetch country information using batch requests
+      const countryMap = await this.fetchCountries(Array.from(countryIds));
+
+      // Process regions data
+      const regionsMap = new Map<string, RegionDTO>();
+      if (regionsResponse?.result?.data) {
+        for (const [regionId, regionData] of Object.entries(regionsResponse.result.data)) {
+          regionsMap.set(regionId, regionData);
+        }
+      }
+
+      logger.info(`Returning ${allBattles.length} unfiltered battle(s) and ${countryMap.size} country/countries`);
+
+      return {
+        battles: allBattles,
+        countries: countryMap,
+        regions: regionsMap,
+      };
+    } catch (error) {
+      logger.error("Failed to fetch all battles", error);
+      throw error;
+    }
   }
 
   /**
