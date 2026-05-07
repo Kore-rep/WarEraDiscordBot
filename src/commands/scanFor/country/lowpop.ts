@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetAllCountriesResponse } from 'warera-sdk';
+import { GetAllCountriesResponse } from '../../../services/api/WarEraApiClient';
 import { ApiService } from '../../../services/api/ApiService';
 import { ServerConfigManager } from '../../../utils/serverConfigManager';
 

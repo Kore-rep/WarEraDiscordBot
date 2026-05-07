@@ -1,4 +1,4 @@
-import { APIClient } from 'warera-sdk';
+import { APIClient } from '../api/WarEraApiClient';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { DiscordService } from '../discord/DiscordService';
 import { logger } from '../../utils/logger';

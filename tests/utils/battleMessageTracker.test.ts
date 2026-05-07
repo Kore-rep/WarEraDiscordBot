@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { LegacyBattleMessageTracker as BattleMessageTracker } from '../../src/utils/LegacyBattleMessageTracker';
 import * as fs from 'fs';
 import * as path from 'path';

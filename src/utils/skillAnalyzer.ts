@@ -1,4 +1,4 @@
-import { GetUserLiteResponse } from 'warera-sdk';
+import { GetUserLiteResponse } from '../services/api/WarEraApiClient';
 
 // Type alias for the actual user data from the API response
 type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;

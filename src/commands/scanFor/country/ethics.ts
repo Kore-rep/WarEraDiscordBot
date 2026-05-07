@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetAllCountriesResponse, GetPartyByIdResponse } from 'warera-sdk';
+import { GetAllCountriesResponse, GetPartyByIdResponse } from '../../../services/api/WarEraApiClient';
 import { ApiService } from '../../../services/api/ApiService';
 import { resolveEthicLabel } from './partyEthicsMapping';
 

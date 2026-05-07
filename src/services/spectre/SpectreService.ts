@@ -1,6 +1,6 @@
-import type { APIClient } from 'warera-sdk';
-import { ApiError } from 'warera-sdk';
-import type { BunkerUpgradeDTO, GetUpgradeByTypeAndEntityResponse } from 'warera-sdk';
+import type { APIClient } from '../api/WarEraApiClient';
+import { ApiError } from '../api/WarEraApiClient';
+import type { BunkerUpgradeDTO, GetUpgradeByTypeAndEntityResponse } from '../api/WarEraApiClient';
 import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';

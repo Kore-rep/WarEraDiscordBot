@@ -1,7 +1,7 @@
 import { NewMercenaryContract } from './MercenaryContractTracker';
 
 // Infer types from SDK method return types  
-type GetCountryByIdResponse = Awaited<ReturnType<import('warera-sdk').APIClient['country']['getCountryById']>>;
+type GetCountryByIdResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['country']['getCountryById']>>;
 type CountryDTO = GetCountryByIdResponse['result']['data'];
 
 /**

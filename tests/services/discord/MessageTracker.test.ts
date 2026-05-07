@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { LegacyMessageTracker as MessageTracker } from '../../../src/services/discord/LegacyMessageTracker';
 
 // Mock logger

@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { BattleService } from '../../src/services/battle/BattleService';
 import { DiscordService } from '../../src/services/discord/DiscordService';
 import { ApiService } from '../../src/services/api/ApiService';
@@ -21,8 +22,11 @@ describe('BattleService Integration', () => {
   let battleService: BattleService;
   let mockDiscordService: jest.Mocked<DiscordService>;
   let mockApiService: jest.Mocked<ApiService>;
+  const originalLegacyBattleSystem = process.env.USE_LEGACY_BATTLE_SYSTEM;
 
   beforeEach(() => {
+    process.env.USE_LEGACY_BATTLE_SYSTEM = 'true';
+
     mockDiscordService = new DiscordService(null as any, null as any) as jest.Mocked<DiscordService>;
     mockApiService = new ApiService(null as any) as jest.Mocked<ApiService>;
     battleService = new BattleService(mockDiscordService, mockApiService);
@@ -47,6 +51,14 @@ describe('BattleService Integration', () => {
       enabled: true,
       bountyThreshold: 0,
     });
+  });
+
+  afterAll(() => {
+    if (originalLegacyBattleSystem === undefined) {
+      delete process.env.USE_LEGACY_BATTLE_SYSTEM;
+    } else {
+      process.env.USE_LEGACY_BATTLE_SYSTEM = originalLegacyBattleSystem;
+    }
   });
 
   describe('processBattles', () => {

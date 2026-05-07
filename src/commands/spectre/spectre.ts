@@ -3,8 +3,8 @@ import { Command, createCommandBuilder } from '../types';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
 import { ApiService } from '../../services/api/ApiService';
-import type { APIClient } from 'warera-sdk';
-import { GetAllCountriesResponse } from 'warera-sdk';
+import type { APIClient } from '../../services/api/WarEraApiClient';
+import { GetAllCountriesResponse } from '../../services/api/WarEraApiClient';
 import {
   getSpectreSnapshotState,
   clearAllCountrySnapshotsForSpectre,

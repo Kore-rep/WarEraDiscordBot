@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { DiscordService } from '../../../src/services/discord/DiscordService';
 import { LegacyMessageTracker as MessageTracker } from '../../../src/services/discord/LegacyMessageTracker';
 import { Client, TextChannel, Message } from 'discord.js';

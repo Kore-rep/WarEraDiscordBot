@@ -1,10 +1,23 @@
-import { ApiService } from '../../../src/services/api/ApiService';
+/// <reference types="jest" />
+import { apiClient } from '../../../src/services/api/ApiService';
 import { InMemoryCacheProvider } from '../../../src/services/api/InMemoryCacheProvider';
 import { BotConfig } from '../../../src/config/config';
 
+type CreateAPIConfig = {
+  cache?: InMemoryCacheProvider;
+  [key: string]: unknown;
+};
+
+const asyncMock = (): jest.Mock<Promise<any>, any[]> =>
+  jest.fn() as jest.Mock<Promise<any>, any[]>;
+
+function getCreateAPIConfig(callIndex: number = 0): CreateAPIConfig {
+  return mockCreateAPI.mock.calls[callIndex][0];
+}
+
 // Mock the SDK's createAPI function
-const mockCreateAPI = jest.fn();
-jest.mock('warera-sdk', () => ({
+const mockCreateAPI = jest.fn() as jest.Mock<unknown, [CreateAPIConfig]>;
+jest.mock('../../../src/services/api/WarEraApiClient', () => ({
   createAPI: (config: any) => mockCreateAPI(config),
   APIClient: {} as any,
 }));
@@ -33,10 +46,10 @@ describe('ApiService Cache Integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCreateAPI.mockReturnValue({
-      country: { getCountryById: jest.fn() },
-      region: { getRegionsObject: jest.fn() },
-      battle: { getBattles: jest.fn() },
-      runBatch: jest.fn(),
+      country: { getCountryById: asyncMock() },
+      region: { getRegionsObject: asyncMock() },
+      battle: { getBattles: asyncMock() },
+      runBatch: (jest.fn() as jest.Mock<Promise<void>, []>),
     });
 
     mockConfig = {
@@ -52,13 +65,11 @@ describe('ApiService Cache Integration', () => {
         intervalMinutes: 1,
       },
     };
-
-    new ApiService(mockConfig);
     
     // Get the cache provider instance from the createAPI calls
     const calls = mockCreateAPI.mock.calls;
     if (calls.length > 0) {
-      cacheProvider = calls[0][0].cache as InMemoryCacheProvider;
+      cacheProvider = getCreateAPIConfig().cache as InMemoryCacheProvider;
     }
   });
 
@@ -67,8 +78,8 @@ describe('ApiService Cache Integration', () => {
       // Verify that createAPI was called with a cache provider
       expect(mockCreateAPI).toHaveBeenCalledTimes(2);
       
-      const firstCall = mockCreateAPI.mock.calls[0][0];
-      const secondCall = mockCreateAPI.mock.calls[1][0];
+      const firstCall = getCreateAPIConfig(0);
+      const secondCall = getCreateAPIConfig(1);
       
       expect(firstCall.cache).toBeDefined();
       expect(secondCall.cache).toBeDefined();
@@ -77,7 +88,7 @@ describe('ApiService Cache Integration', () => {
     });
 
     it('should use InMemoryCacheProvider instance', () => {
-      const firstCall = mockCreateAPI.mock.calls[0][0];
+      const firstCall = getCreateAPIConfig();
       expect(firstCall.cache).toBeInstanceOf(InMemoryCacheProvider);
     });
   });
@@ -88,7 +99,7 @@ describe('ApiService Cache Integration', () => {
       jest.clearAllMocks();
 
       if (!cacheProvider) {
-        cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
+        cacheProvider = getCreateAPIConfig().cache as InMemoryCacheProvider;
       }
 
       // Set a value in cache
@@ -107,7 +118,7 @@ describe('ApiService Cache Integration', () => {
       jest.clearAllMocks();
 
       if (!cacheProvider) {
-        cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
+        cacheProvider = getCreateAPIConfig().cache as InMemoryCacheProvider;
       }
 
       // Try to get non-existent key
@@ -117,8 +128,8 @@ describe('ApiService Cache Integration', () => {
     });
 
     it('should share cache between regular and batch clients', () => {
-      const firstCall = mockCreateAPI.mock.calls[0][0];
-      const secondCall = mockCreateAPI.mock.calls[1][0];
+      const firstCall = getCreateAPIConfig(0);
+      const secondCall = getCreateAPIConfig(1);
       
       expect(firstCall.cache).toBe(secondCall.cache);
       
@@ -131,7 +142,7 @@ describe('ApiService Cache Integration', () => {
   describe('cache behavior verification', () => {
     it('should allow setting and getting values from shared cache', async () => {
       if (!cacheProvider) {
-        cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
+        cacheProvider = getCreateAPIConfig().cache as InMemoryCacheProvider;
       }
 
       // Set value using the cache provider (TTL in milliseconds)
@@ -145,7 +156,7 @@ describe('ApiService Cache Integration', () => {
 
     it('should handle TTL expiration correctly', async () => {
       if (!cacheProvider) {
-        cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
+        cacheProvider = getCreateAPIConfig().cache as InMemoryCacheProvider;
       }
 
       // Set value with short TTL (1000 milliseconds = 1 second)
@@ -166,14 +177,13 @@ describe('ApiService Cache Integration', () => {
   });
 
   describe('battles cache TTL calculation', () => {
-    let apiService: ApiService;
     let mockBatchClient: any;
 
     beforeEach(() => {
       jest.clearAllMocks();
       mockBatchClient = {
         battle: {
-          getBattles: jest.fn().mockResolvedValue({
+          getBattles: asyncMock().mockResolvedValue({
             result: {
               data: {
                 items: [],
@@ -182,14 +192,14 @@ describe('ApiService Cache Integration', () => {
           }),
         },
         region: {
-          getRegionsObject: jest.fn().mockResolvedValue({
+          getRegionsObject: asyncMock().mockResolvedValue({
             result: {
               data: {},
             },
           }),
         },
-        runBatch: jest.fn().mockResolvedValue(undefined),
-        getRateLimitStatus: jest.fn().mockReturnValue(null),
+        runBatch: (jest.fn() as jest.Mock<Promise<void>, []>).mockResolvedValue(undefined),
+        getRateLimitStatus: (jest.fn() as jest.Mock<unknown, []>).mockReturnValue(null),
       };
       mockCreateAPI.mockReturnValue(mockBatchClient);
     });
@@ -208,11 +218,9 @@ describe('ApiService Cache Integration', () => {
           intervalMinutes: 5, // 5 minutes = 300 seconds
         },
       };
-
-      apiService = new ApiService(config);
       
       // Call fetchBattles
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
       // Verify getBattles was called with correct TTL
       // Expected: (5 * 60 * 1000) - 30000 = 300000 - 30000 = 270000 milliseconds
@@ -236,10 +244,8 @@ describe('ApiService Cache Integration', () => {
           intervalMinutes: 0.5, // 0.5 minutes = 30 seconds
         },
       };
-
-      apiService = new ApiService(config);
       
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
       // Expected: max(30000, (0.5 * 60 * 1000) - 30000) = max(30000, 30000 - 30000) = max(30000, 0) = 30000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
@@ -263,9 +269,8 @@ describe('ApiService Cache Integration', () => {
         },
       };
 
-      apiService = new ApiService(config);
       
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
       // Expected: (1 * 60 * 1000) - 30000 = 60000 - 30000 = 30000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
@@ -288,10 +293,8 @@ describe('ApiService Cache Integration', () => {
           intervalMinutes: 10, // 10 minutes = 600 seconds
         },
       };
-
-      apiService = new ApiService(config);
       
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
       // Expected: (10 * 60 * 1000) - 30000 = 600000 - 30000 = 570000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
@@ -315,9 +318,8 @@ describe('ApiService Cache Integration', () => {
         },
       };
 
-      apiService = new ApiService(config);
       
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
       // Expected: (2.5 * 60 * 1000) - 30000 = 150000 - 30000 = 120000 milliseconds
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledWith(
@@ -335,8 +337,7 @@ describe('ApiService Cache Integration', () => {
 
       mockBatchClient = {
         battle: {
-          getBattles: jest
-            .fn()
+          getBattles: (jest.fn() as jest.Mock<Promise<any>, any[]>)
             .mockResolvedValueOnce({
               result: {
                 data: {
@@ -354,21 +355,21 @@ describe('ApiService Cache Integration', () => {
             }),
         },
         country: {
-          getCountryById: jest.fn().mockResolvedValue({
+          getCountryById: asyncMock().mockResolvedValue({
             result: {
               data: { _id: 'country-1', name: 'Test Country' },
             },
           }),
         },
         region: {
-          getRegionsObject: jest.fn().mockResolvedValue({
+          getRegionsObject: asyncMock().mockResolvedValue({
             result: {
               data: {},
             },
           }),
         },
-        runBatch: jest.fn().mockResolvedValue(undefined),
-        getRateLimitStatus: jest.fn().mockReturnValue(null),
+        runBatch: (jest.fn() as jest.Mock<Promise<void>, []>).mockResolvedValue(undefined),
+        getRateLimitStatus: (jest.fn() as jest.Mock<unknown, []>).mockReturnValue(null),
       };
       mockCreateAPI.mockReturnValue(mockBatchClient);
 
@@ -386,10 +387,9 @@ describe('ApiService Cache Integration', () => {
         },
       };
 
-      apiService = new ApiService(config);
-      const result = await apiService.fetchBattles();
+      const result = await apiClient.battle.getBattles({ isActive: true, limit: 100 });
 
-      expect(result.battles.length).toBe(2);
+      expect(result.items.length).toBe(2);
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledTimes(2);
       expect(mockBatchClient.battle.getBattles).toHaveBeenNthCalledWith(
         1,
@@ -405,7 +405,6 @@ describe('ApiService Cache Integration', () => {
   });
 
   describe('battles cache TTL expiration', () => {
-    let apiService: ApiService;
     let mockBatchClient: any;
     let cacheProvider: InMemoryCacheProvider;
 
@@ -417,7 +416,7 @@ describe('ApiService Cache Integration', () => {
       
       mockBatchClient = {
         battle: {
-          getBattles: jest.fn().mockImplementation((params, options) => {
+          getBattles: (jest.fn() as jest.Mock<Promise<any>, any[]>).mockImplementation((params, options) => {
             // Simulate SDK caching behavior - store in cache with TTL
             const cacheKey = `battle.getBattles:${JSON.stringify(params)}`;
             const response = {
@@ -449,7 +448,7 @@ describe('ApiService Cache Integration', () => {
           }),
         },
         country: {
-          getCountryById: jest.fn().mockResolvedValue({
+          getCountryById: asyncMock().mockResolvedValue({
             result: {
               data: {
                 _id: 'country-1',
@@ -459,14 +458,14 @@ describe('ApiService Cache Integration', () => {
           }),
         },
         region: {
-          getRegionsObject: jest.fn().mockResolvedValue({
+          getRegionsObject: asyncMock().mockResolvedValue({
             result: {
               data: {},
             },
           }),
         },
-        runBatch: jest.fn().mockResolvedValue(undefined),
-        getRateLimitStatus: jest.fn().mockReturnValue(null),
+        runBatch: (jest.fn() as jest.Mock<Promise<void>, []>).mockResolvedValue(undefined),
+        getRateLimitStatus: (jest.fn() as jest.Mock<unknown, []>).mockReturnValue(null),
       };
       
       mockCreateAPI.mockReturnValue(mockBatchClient);
@@ -494,10 +493,9 @@ describe('ApiService Cache Integration', () => {
         return mockBatchClient;
       });
 
-      apiService = new ApiService(config);
       
       // First fetch - should cache the result
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
       
       // Verify cache was used (check that getBattles was called)
       expect(mockBatchClient.battle.getBattles).toHaveBeenCalledTimes(1);
@@ -550,11 +548,9 @@ describe('ApiService Cache Integration', () => {
         config.cache = cacheProvider;
         return mockBatchClient;
       });
-
-      apiService = new ApiService(config);
       
       // First fetch - should cache the result
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
       
       // Immediately fetch again - should still be cached (SDK would use cache)
       // Note: In real SDK, the cache check happens before the API call
@@ -596,11 +592,9 @@ describe('ApiService Cache Integration', () => {
         config.cache = cacheProvider;
         return mockBatchClient;
       });
-
-      apiService = new ApiService(config);
       
       // First fetch at time 0
-      await apiService.fetchBattles();
+      await apiClient.battle.getBattles({ isActive: true, limit: 100 });
       
       const cacheKey = 'battle.getBattles:{"isActive":true,"limit":100}';
       

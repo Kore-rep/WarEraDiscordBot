@@ -1,6 +1,6 @@
 import { ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetUserLiteResponse, GetUsersByCountryParams } from 'warera-sdk';
+import { GetUserLiteResponse, GetUsersByCountryParams } from '../../../services/api/WarEraApiClient';
 import { ApiService } from '../../../services/api/ApiService';
 
 // Type alias for the actual user data from the API response

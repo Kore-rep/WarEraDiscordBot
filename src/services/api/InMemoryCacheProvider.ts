@@ -1,4 +1,4 @@
-import { CacheProvider } from "warera-sdk";
+import { CacheProvider } from "./WarEraApiClient";
 import { logger } from "../../utils/logger";
 
 interface CacheEntry {

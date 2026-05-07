@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { InMemoryCacheProvider } from '../../../src/services/api/InMemoryCacheProvider';
 
 // Mock the logger

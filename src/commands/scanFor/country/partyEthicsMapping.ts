@@ -1,6 +1,6 @@
 import type { APIApplicationCommandOptionChoice } from 'discord.js';
 
-/** Ethics axes on `PartyDTO.ethics` from warera-sdk */
+/** Ethics axes on `PartyDTO.ethics` from the WarEra API package. */
 export type PartyEthicsAxis = 'industrialism' | 'imperialism' | 'militarism' | 'isolationism';
 
 export interface EthicAxisValue {

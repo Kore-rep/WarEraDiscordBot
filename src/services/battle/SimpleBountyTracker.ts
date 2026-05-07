@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 
 // Infer types from SDK method return types
-type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
+type GetBattlesResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['battle']['getBattles']>>;
 type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
 
 /**

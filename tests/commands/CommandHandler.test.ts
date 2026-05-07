@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { CommandHandler } from '../../src/commands/CommandHandler';
 import { Events } from 'discord.js';
 import { bountyBattlesCommand } from '../../src/commands/bountyBattles/bountyBattles';
@@ -60,6 +61,20 @@ jest.mock('../../src/commands/bountyBattles/bountyBattles', () => ({
       toJSON: jest.fn().mockReturnValue({
         name: 'bountybattles',
         description: 'Manage bounty battles',
+      }),
+    },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/contracts', () => ({
+  contractsCommand: {
+    data: {
+      name: 'contracts',
+      description: 'Manage mercenary contracts',
+      toJSON: jest.fn().mockReturnValue({
+        name: 'contracts',
+        description: 'Manage mercenary contracts',
       }),
     },
     execute: jest.fn(),
@@ -165,8 +180,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load bountyBattles, user tracking, scanfor, countrygroup, and spectre commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(5);
+    it('should load bountyBattles, contracts, user tracking, scanfor, countrygroup, and spectre commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(6);
     });
   });
 
@@ -237,6 +252,7 @@ describe('CommandHandler', () => {
       const mockInteraction = {
         isChatInputCommand: jest.fn().mockReturnValue(false),
         isModalSubmit: jest.fn().mockReturnValue(false),
+        isButton: jest.fn().mockReturnValue(false),
       };
 
       await interactionHandler(mockInteraction);
@@ -346,7 +362,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(5);
+      expect(commandHandler.getCommandCount()).toBe(6);
     });
   });
 });

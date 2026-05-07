@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { BattleService } from '../../../src/services/battle/BattleService';
 import { DiscordService } from '../../../src/services/discord/DiscordService';
 import { ApiService } from '../../../src/services/api/ApiService';
@@ -20,9 +21,11 @@ describe('BattleService', () => {
   let battleService: BattleService;
   let mockDiscordService: jest.Mocked<DiscordService>;
   let mockApiService: jest.Mocked<ApiService>;
+  const originalLegacyBattleSystem = process.env.USE_LEGACY_BATTLE_SYSTEM;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.USE_LEGACY_BATTLE_SYSTEM = 'true';
 
     mockDiscordService = {
       updateBattleMessage: jest.fn(),
@@ -38,6 +41,14 @@ describe('BattleService', () => {
     } as any;
 
     battleService = new BattleService(mockDiscordService, mockApiService);
+  });
+
+  afterAll(() => {
+    if (originalLegacyBattleSystem === undefined) {
+      delete process.env.USE_LEGACY_BATTLE_SYSTEM;
+    } else {
+      process.env.USE_LEGACY_BATTLE_SYSTEM = originalLegacyBattleSystem;
+    }
   });
 
   describe('processBattles with enabled/disabled check', () => {

@@ -1,4 +1,4 @@
-import { GetUserLiteResponse } from 'warera-sdk';
+import { GetUserLiteResponse } from '../services/api/WarEraApiClient';
 import { analyzePlayerBuild } from './skillAnalyzer';
 
 // Type alias for the actual user data from the API response

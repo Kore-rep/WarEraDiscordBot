@@ -1,7 +1,7 @@
 import { logger } from '../../utils/logger';
 
 // Infer types from SDK method return types
-type GetPaginatedAuctionsResponse = Awaited<ReturnType<import('warera-sdk').APIClient['mercenaryContractAuction']['getPaginatedAuctions']>>;
+type GetPaginatedAuctionsResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['mercenaryContractAuction']['getPaginatedAuctions']>>;
 type MercenaryContractAuctionDTO = GetPaginatedAuctionsResponse['result']['data']['items'][number];
 
 /**

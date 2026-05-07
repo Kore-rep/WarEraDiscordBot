@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { LegacyBattleFormatter as BattleFormatter } from '../../../src/services/battle/LegacyBattleFormatter';
 
 describe('BattleFormatter', () => {

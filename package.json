@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "typecheck:tests": "tsc -p tsconfig.test.json",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "watch": "tsc --watch",
@@ -25,9 +26,9 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@wareraprojects/api": "^0.3.0",
     "discord.js": "^14.14.1",
-    "dotenv": "^16.4.1",
-    "warera-sdk": "file:../WarEraSDK"
+    "dotenv": "^16.4.1"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",

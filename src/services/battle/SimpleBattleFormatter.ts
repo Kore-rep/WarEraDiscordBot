@@ -1,9 +1,9 @@
 import { NewBounty } from './SimpleBountyTracker';
 
 // Infer types from SDK method return types  
-type GetCountryByIdResponse = Awaited<ReturnType<import('warera-sdk').APIClient['country']['getCountryById']>>;
+type GetCountryByIdResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['country']['getCountryById']>>;
 type CountryDTO = GetCountryByIdResponse['result']['data'];
-type GetRegionsObjectResponse = Awaited<ReturnType<import('warera-sdk').APIClient['region']['getRegionsObject']>>;
+type GetRegionsObjectResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['region']['getRegionsObject']>>;
 type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
 
 /**

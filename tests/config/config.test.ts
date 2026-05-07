@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { loadConfig } from '../../src/config/config';
 import { ServerConfigManager } from '../../src/utils/serverConfigManager';
 import * as fs from 'fs';

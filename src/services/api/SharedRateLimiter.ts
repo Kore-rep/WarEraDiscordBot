@@ -1,4 +1,4 @@
-import { RateLimiterProvider, RateLimitConfig, RateLimitError } from "warera-sdk";
+import { RateLimiterProvider, RateLimitConfig, RateLimitError } from "./WarEraApiClient";
 
 // Default rate limit configuration (matching SDK defaults)
 const defaultRateLimitConfig: RateLimitConfig = {

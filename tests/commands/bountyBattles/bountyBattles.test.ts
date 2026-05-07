@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { bountyBattlesCommand } from '../../../src/commands/bountyBattles/bountyBattles';
 import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
 import { ServerConfigManager } from '../../../src/utils/serverConfigManager';

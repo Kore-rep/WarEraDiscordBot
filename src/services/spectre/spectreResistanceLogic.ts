@@ -1,4 +1,4 @@
-import type { APIClient } from 'warera-sdk';
+import type { APIClient } from '../api/WarEraApiClient';
 import type { RegionResistanceSnapshot } from '../../utils/spectreBuildingStateStore';
 
 type RegionDTO = Awaited<

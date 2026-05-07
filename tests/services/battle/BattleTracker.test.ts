@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { LegacyBattleTracker as BattleTracker } from '../../../src/services/battle/LegacyBattleTracker';
 
 // Mock logger

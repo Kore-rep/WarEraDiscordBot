@@ -16,11 +16,11 @@
 import { ChangeEntry } from './LegacyBattleTracker';
 
 // Infer types from SDK method return types
-type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
+type GetBattlesResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['battle']['getBattles']>>;
 type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
-type GetCountryByIdResponse = Awaited<ReturnType<import('warera-sdk').APIClient['country']['getCountryById']>>;
+type GetCountryByIdResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['country']['getCountryById']>>;
 type CountryDTO = GetCountryByIdResponse['result']['data'];
-type GetRegionsObjectResponse = Awaited<ReturnType<import('warera-sdk').APIClient['region']['getRegionsObject']>>;
+type GetRegionsObjectResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['region']['getRegionsObject']>>;
 type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
 type ChangeType = 'new' | 'bounty_increased' | 'bounty_decreased' | 'pool_increased' | 'pool_decreased';
 

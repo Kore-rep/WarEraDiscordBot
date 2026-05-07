@@ -1,4 +1,4 @@
-import type { BunkerUpgradeDTO } from 'warera-sdk';
+import type { BunkerUpgradeDTO } from '../services/api/WarEraApiClient';
 
 /**
  * Serializable subset of `upgrade.getUpgradeByTypeAndEntity` (`BunkerUpgradeDTO`) for bunker/base.

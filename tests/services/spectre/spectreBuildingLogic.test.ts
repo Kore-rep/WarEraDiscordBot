@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import {
   findForeignRegionsNeighboringCountry,
   diffAllRegions,
@@ -7,7 +8,7 @@ import {
   formatBuildingSnapshotLines,
 } from '../../../src/services/spectre/spectreBuildingLogic';
 import type { RegionBuildingSnapshot } from '../../../src/utils/spectreBuildingStateStore';
-import type { BunkerUpgradeDTO } from 'warera-sdk';
+import type { BunkerUpgradeDTO } from '../../../src/services/api/WarEraApiClient';
 
 /** Minimal region shape for border tests */
 function r(partial: {

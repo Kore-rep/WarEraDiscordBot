@@ -1,19 +1,17 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import type { CompanyDTO } from 'warera-sdk/dist/DTOs/company.dto';
-import { ApiService } from '../../../services/api/ApiService';
+import { apiClient } from '../../../services/api/ApiService';
 
 /**
  * Handle /scanfor company production
  * Scans all companies to count production by item type
  * Optionally filters by country
  */
-export async function handleCompanyProduction(interaction: ChatInputCommandInteraction, apiService: ApiService): Promise<void> {
+export async function handleCompanyProduction(interaction: ChatInputCommandInteraction): Promise<void> {
   // Defer reply since this will take a while
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const apiClient = apiService.getClient();
     const countryName = interaction.options.getString('country');
 
     // If country filter is provided, fetch and validate it
@@ -29,13 +27,10 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
         content: '**Company Production Analysis**\n\nFetching country and region information...',
       });
 
-      const [countriesResponse, regionsResponse] = await Promise.all([
-        apiClient.country.getAllCountries({ cache: { ttl: 60000 * 60 } }),
-        apiClient.region.getRegionsObject({ cache: { ttl: 86400 } })
+      const [allCountries, regionsData]  = await Promise.all([
+        apiClient.country.getAllCountries(),
+        apiClient.region.getRegionsObject()
       ]);
-
-      const allCountries = countriesResponse.result.data;
-      const regionsData = regionsResponse.result.data;
 
       // Find country by name (case-insensitive)
       const matchingCountry = allCountries.find(
@@ -71,7 +66,6 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
       }
     }
 
-    // Step 1: Get all company IDs using pagination
     const filterText = targetCountryName ? ` in **${targetCountryName}**` : '';
     logger.info(`Phase 1: Fetching all company IDs${filterText}...`);
     await interaction.editReply({
@@ -79,72 +73,49 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
     });
 
     const allCompanyIds: string[] = [];
-    let currentCursor: string | null = null;
     let pageCount = 0;
 
-    do {
-      // Fetch companies with pagination (100 per page - maximum allowed)
-      const params: any = { perPage: 100 };
-      if (currentCursor) {
-        params.cursor = currentCursor;
-      }
+    const companyPromises: Promise<any>[] = [];
+    
+    const itemStats = new Map<string, { companyCount: number; workerCount: number }>();
+    const itemStatsGlobal = new Map<string, { companyCount: number; workerCount: number }>(); // Track global stats when filtering
 
-      const companiesResponse = await apiClient.company.getCompanies(params);
-      const companiesData = companiesResponse.result.data;
-
-      // Extract company IDs from this page
-      if (companiesData.items && Array.isArray(companiesData.items)) {
-        for (const companyId of companiesData.items) {
-          if (companyId) {
-            allCompanyIds.push(companyId);
-          }
-        }
-      }
-
-      // Update cursor for next page
-      currentCursor = companiesData.nextCursor || null;
+    // Step 1: Get all company IDs using pagination
+    for await (const companies of apiClient.company.getCompanies({
+      perPage: 100,
+      autoPaginate: true,
+    })) {
       pageCount++;
+      
+      allCompanyIds.push(...companies.items);
 
-      // Update progress
+      // Step 2: Get company details for all companies
+      // This will trigger the promises and batch it together
+      const companyDetails = Promise.all(companies.items.map(companyId =>
+        apiClient.company.getById({ companyId })
+      ));
+
+      // Push it to the array to await later, but we don't await here to allow batching
+      companyPromises.push(companyDetails);
+      
       await interaction.editReply({
         content: 
           `**Company Production Analysis**\n\n` +
           `${targetCountryName ? `Country: **${targetCountryName}**\n` : ''}` +
-          `Phase 1: Fetching company IDs...\n` +
+          `Fetching company details...\n` +
           `Pages fetched: ${pageCount}\n` +
-          `Companies found so far: ${allCompanyIds.length}`,
+          `Companies found so far: ${allCompanyIds.length}` +
+          `\nThis may take a while...`,
       });
-
-      // Small delay between pages to respect rate limits
-      await new Promise(resolve => setTimeout(resolve, 100));
-    } while (currentCursor);
-
-    const companyCount = allCompanyIds.length;
-    logger.info(`Found ${companyCount} total companies across ${pageCount} pages`);
-
-    if (companyCount === 0) {
-      await interaction.editReply({
-        content: 'No companies found in the system.',
-      });
-      return;
     }
 
-    // Step 2: Get company details for all companies
-    logger.info('Phase 2: Fetching company details...');
-    await interaction.editReply({
-      content: 
-        `**Company Production Analysis**\n\n` +
-        `${targetCountryName ? `Country: **${targetCountryName}**\n` : ''}` +
-        `Phase 1: ✅ Found ${companyCount} companies\n` +
-        `Phase 2: Fetching company details...\n` +
-        `Progress: 0/${companyCount}\n\n` +
-        `This may take a while...`,
-    });
+    // Wait for all promises to resolve
+    await Promise.all(companyPromises);
 
+
+    // TODO: Need to replace all of this and move it into the loop above
     // Batch company detail requests in chunks to avoid 414 URI Too Long error
     const COMPANY_BATCH_SIZE = 100; // Process 10 companies at a time to keep URI length manageable
-    const itemStats = new Map<string, { companyCount: number; workerCount: number }>();
-    const itemStatsGlobal = new Map<string, { companyCount: number; workerCount: number }>(); // Track global stats when filtering
     let processedCompanies = 0;
     let lastUpdateTime = Date.now();
     const updateIntervalMs = 5000; // Update every 5 seconds
@@ -154,22 +125,18 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
       
       // Create a new batch client instance for this command to avoid conflicts
       // Each command execution gets its own isolated queue
-      const detailBatchClient = apiService.createCommandBatchClient();
 
       // Queue company detail requests for this chunk
       const detailPromises = companyIdChunk.map(companyId => 
-        detailBatchClient.company.getById({ companyId })
+        apiClient.company.getById({ companyId })
       );
-
-      // Execute batch
-      await detailBatchClient.runBatch();
 
       // Get results and count items
       const detailResults = await Promise.all(detailPromises);
 
       for (const detailResponse of detailResults) {
-        if (detailResponse?.result?.data) {
-          const company: CompanyDTO = detailResponse.result.data;
+        if (detailResponse) {
+          const company = detailResponse;
           const itemCode = company.itemCode;
           const workerCount = company.workers?.length || 0;
           
@@ -220,8 +187,8 @@ export async function handleCompanyProduction(interaction: ChatInputCommandInter
         });
         lastUpdateTime = now;
       }
-
     }
+    // TODO End
 
     // Step 5: Format and send results
     logger.info('Phase 3: Formatting results...');

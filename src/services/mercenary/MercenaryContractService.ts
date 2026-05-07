@@ -6,9 +6,9 @@ import { ApiService } from '../api/ApiService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 
 // Infer types from SDK method return types
-type GetPaginatedAuctionsResponse = Awaited<ReturnType<import('warera-sdk').APIClient['mercenaryContractAuction']['getPaginatedAuctions']>>;
+type GetPaginatedAuctionsResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['mercenaryContractAuction']['getPaginatedAuctions']>>;
 type MercenaryContractAuctionDTO = GetPaginatedAuctionsResponse['result']['data']['items'][number];
-type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
+type GetBattlesResponse = Awaited<ReturnType<import('../api/WarEraApiClient').APIClient['battle']['getBattles']>>;
 type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
 
 /**
