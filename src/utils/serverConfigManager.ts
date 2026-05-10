@@ -4,6 +4,7 @@ import {
   ServerConfig,
   BountyBattlesConfig,
   TrackedUser,
+  TrackedCountry,
   CountryGroup,
   GroupedCountry,
   SpectreCountryMonitorEntry,
@@ -103,6 +104,10 @@ export class ServerConfigManager {
           userTracking: serverConfig.userTracking ? {
             enabled: serverConfig.userTracking.enabled,
             users: serverConfig.userTracking.users || [],
+          } : undefined,
+          countryTracking: serverConfig.countryTracking ? {
+            enabled: serverConfig.countryTracking.enabled,
+            countries: serverConfig.countryTracking.countries || [],
           } : undefined,
           countryGroups: serverConfig.countryGroups || [],
           spectre: serverConfig.spectre ? {
@@ -304,6 +309,10 @@ export class ServerConfigManager {
       userTracking: config.userTracking ? {
         ...config.userTracking,
         users: config.userTracking.users.map(u => ({ ...u })),
+      } : undefined,
+      countryTracking: config.countryTracking ? {
+        ...config.countryTracking,
+        countries: config.countryTracking.countries.map(c => ({ ...c })),
       } : undefined,
       countryGroups: config.countryGroups ? config.countryGroups.map(g => ({
         ...g,
@@ -585,6 +594,134 @@ export class ServerConfigManager {
   static getTrackedUsers(serverId: string): TrackedUser[] {
     const config = this.getServerConfig(serverId);
     return config?.userTracking?.users || [];
+  }
+
+  /**
+   * Add a country to track for a specific server
+   */
+  static addTrackedCountry(serverId: string, country: TrackedCountry): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingCountryTracking = existingServerConfig.countryTracking || {
+        enabled: true,
+        countries: [],
+      };
+
+      // Check if country is already being tracked
+      const existingCountryIndex = existingCountryTracking.countries.findIndex(c => c.countryId === country.countryId);
+      
+      if (existingCountryIndex !== -1) {
+        // Update existing country
+        existingCountryTracking.countries[existingCountryIndex] = country;
+      } else {
+        // Add new country
+        existingCountryTracking.countries.push(country);
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        countryTracking: existingCountryTracking,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Added/updated tracked country ${country.countryId} for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to add tracked country', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a tracked country from a specific server
+   */
+  static removeTrackedCountry(serverId: string, countryId: string): boolean {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      
+      if (!existingServerConfig?.countryTracking) {
+        logger.warn(`No country tracking config found for server ${serverId}`);
+        return false;
+      }
+
+      const initialLength = existingServerConfig.countryTracking.countries.length;
+      existingServerConfig.countryTracking.countries = existingServerConfig.countryTracking.countries.filter(
+        c => c.countryId !== countryId
+      );
+
+      if (existingServerConfig.countryTracking.countries.length === initialLength) {
+        logger.warn(`Country ${countryId} not found in tracking for server ${serverId}`);
+        return false;
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Removed tracked country ${countryId} from server ${serverId}`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to remove tracked country', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update tracking status for a country (lastChecked, lastPopulation, warnReported)
+   */
+  static updateTrackedCountryStatus(
+    serverId: string, 
+    countryId: string, 
+    lastChecked: string, 
+    lastPopulation?: number,
+    warnReported?: boolean
+  ): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      
+      if (!existingServerConfig?.countryTracking) {
+        logger.warn(`No country tracking config found for server ${serverId}`);
+        return;
+      }
+
+      const country = existingServerConfig.countryTracking.countries.find(c => c.countryId === countryId);
+      
+      if (!country) {
+        logger.warn(`Country ${countryId} not found in tracking for server ${serverId}`);
+        return;
+      }
+
+      country.lastChecked = lastChecked;
+      if (lastPopulation !== undefined) {
+        country.lastPopulation = lastPopulation;
+      }
+      if (warnReported !== undefined) {
+        country.warnReported = warnReported;
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.debug(`Updated tracking status for country ${countryId} in server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update tracked country status', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all tracked countries for a specific server
+   */
+  static getTrackedCountries(serverId: string): TrackedCountry[] {
+    const config = this.getServerConfig(serverId);
+    return config?.countryTracking?.countries || [];
   }
 
   /**

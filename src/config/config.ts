@@ -58,6 +58,29 @@ export interface UserTrackingConfig {
 }
 
 /**
+ * A single tracked country configuration
+ */
+export interface TrackedCountry {
+  countryId: string;
+  countryName: string; // War Era country name
+  channelId: string;
+  populationWarnThreshold: number; // Population threshold for one-time warning
+  populationCriticalThreshold: number; // Population threshold for repeated alerts
+  mentionIds?: string[]; // Full Discord mention strings to include in notifications
+  warnReported?: boolean; // Whether warn threshold breach has been reported (reset when population increases)
+  lastChecked?: string; // ISO timestamp of last check
+  lastPopulation?: number; // Last known population count
+}
+
+/**
+ * Configuration for country tracking feature per server
+ */
+export interface CountryTrackingConfig {
+  enabled?: boolean;
+  countries: TrackedCountry[];
+}
+
+/**
  * A country in a country group
  */
 export interface GroupedCountry {
@@ -104,6 +127,7 @@ export interface ServerConfig {
   mercenaryContracts?: MercenaryContractsConfig;
   reports?: ReportsConfig;
   userTracking?: UserTrackingConfig;
+  countryTracking?: CountryTrackingConfig;
   countryGroups?: CountryGroup[];
   spectre?: SpectreConfig;
 }

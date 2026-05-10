@@ -8,6 +8,7 @@ import { LegacyMessageTracker } from '../services/discord/LegacyMessageTracker';
 import { BattleService } from '../services/battle/BattleService';
 import { MercenaryContractService } from '../services/mercenary/MercenaryContractService';
 import { UserTrackingService } from '../services/userTracking';
+import { CountryTrackingService } from '../services/countryTracking/CountryTrackingService';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
 
@@ -24,6 +25,7 @@ export class Bot {
   private spectreService: SpectreService;
   private pollingService: PollingService;
   private userTrackingService: UserTrackingService;
+  private countryTrackingService: CountryTrackingService;
   private commandHandler: CommandHandler;
   private isRunning = false;
 
@@ -48,6 +50,7 @@ export class Bot {
     this.spectreService = new SpectreService(this.apiService, this.discordService);
     this.pollingService = new PollingService(config, this.battleService, this.mercenaryContractService, this.spectreService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
+    this.countryTrackingService = new CountryTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 
     // Set up event handlers
@@ -79,7 +82,10 @@ export class Bot {
         // Start user tracking service
         this.userTrackingService.start();
         
-        logger.info('Bot is ready, polling and user tracking have started');
+        // Start country tracking service
+        this.countryTrackingService.start();
+        
+        logger.info('Bot is ready, polling, user tracking, and country tracking have started');
       } catch (error) {
         logger.error('Failed to initialize bot services', error);
         // Don't exit - let the bot try to recover
@@ -141,6 +147,9 @@ export class Bot {
     
     // Stop user tracking service
     this.userTrackingService.stop();
+    
+    // Stop country tracking service
+    this.countryTrackingService.stop();
 
     // Destroy Discord client
     this.client.destroy();
