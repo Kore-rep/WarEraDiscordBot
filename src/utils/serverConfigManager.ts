@@ -8,6 +8,9 @@ import {
   CountryGroup,
   GroupedCountry,
   SpectreCountryMonitorEntry,
+  ProxyUser,
+  TrackedProxyCountry,
+  LeaderboardConfig,
 } from '../config/config';
 import { logger } from './logger';
 
@@ -109,6 +112,11 @@ export class ServerConfigManager {
             enabled: serverConfig.countryTracking.enabled,
             countries: serverConfig.countryTracking.countries || [],
           } : undefined,
+          proxyTracking: serverConfig.proxyTracking ? {
+            enabled: serverConfig.proxyTracking.enabled,
+            countries: serverConfig.proxyTracking.countries || [],
+            proxies: serverConfig.proxyTracking.proxies || [],
+          } : undefined,
           countryGroups: serverConfig.countryGroups || [],
           spectre: serverConfig.spectre ? {
             buildingMonitors: (serverConfig.spectre.buildingMonitors || []).map(m => ({
@@ -123,6 +131,18 @@ export class ServerConfigManager {
               channelId: m.channelId,
               enabled: m.enabled !== false,
             })),
+          } : undefined,
+          leaderboard: serverConfig.leaderboard ? {
+            enabled: serverConfig.leaderboard.enabled,
+            channelId: serverConfig.leaderboard.channelId,
+            messageId: serverConfig.leaderboard.messageId,
+            countryIds: serverConfig.leaderboard.countryIds || [],
+            countryNames: serverConfig.leaderboard.countryNames || [],
+            militaryUnitIds: serverConfig.leaderboard.militaryUnitIds || [],
+            topCount: serverConfig.leaderboard.topCount ?? 10,
+            levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
+            lastSnapshot: serverConfig.leaderboard.lastSnapshot,
+            lastUpdated: serverConfig.leaderboard.lastUpdated,
           } : undefined,
         });
       }
@@ -314,6 +334,11 @@ export class ServerConfigManager {
         ...config.countryTracking,
         countries: config.countryTracking.countries.map(c => ({ ...c })),
       } : undefined,
+      proxyTracking: config.proxyTracking ? {
+        ...config.proxyTracking,
+        countries: config.proxyTracking.countries.map(c => ({ ...c })),
+        proxies: config.proxyTracking.proxies.map(p => ({ ...p })),
+      } : undefined,
       countryGroups: config.countryGroups ? config.countryGroups.map(g => ({
         ...g,
         countries: g.countries.map(c => ({ ...c })),
@@ -321,6 +346,24 @@ export class ServerConfigManager {
       spectre: config.spectre ? {
         buildingMonitors: (config.spectre.buildingMonitors || []).map(m => ({ ...m })),
         resistanceMonitors: (config.spectre.resistanceMonitors || []).map(m => ({ ...m })),
+      } : undefined,
+      leaderboard: config.leaderboard ? {
+        ...config.leaderboard,
+        countryIds: [...config.leaderboard.countryIds],
+        countryNames: [...config.leaderboard.countryNames],
+        militaryUnitIds: [...config.leaderboard.militaryUnitIds],
+        levelBrackets: config.leaderboard.levelBrackets.map(b => ({ ...b })),
+        lastSnapshot: config.leaderboard.lastSnapshot ? {
+          ...config.leaderboard.lastSnapshot,
+          playerTotal: config.leaderboard.lastSnapshot.playerTotal.map(e => ({ ...e })),
+          playerWeeklyByBracket: Object.fromEntries(
+            Object.entries(config.leaderboard.lastSnapshot.playerWeeklyByBracket).map(
+              ([key, entries]) => [key, entries.map(e => ({ ...e }))]
+            )
+          ),
+          muTotal: config.leaderboard.lastSnapshot.muTotal.map(e => ({ ...e })),
+          muWeekly: config.leaderboard.lastSnapshot.muWeekly.map(e => ({ ...e })),
+        } : undefined,
       } : undefined,
     };
   }
@@ -882,6 +925,290 @@ export class ServerConfigManager {
       }
     } catch (error) {
       logger.error('Failed to remove countries from group', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add a proxy country to track for a specific server
+   */
+  static addTrackedProxyCountry(serverId: string, country: TrackedProxyCountry): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingProxyTracking = existingServerConfig.proxyTracking || {
+        enabled: true,
+        countries: [],
+        proxies: [],
+      };
+
+      // Check if country is already being tracked
+      const existingCountryIndex = existingProxyTracking.countries.findIndex(c => c.countryId === country.countryId);
+      
+      if (existingCountryIndex !== -1) {
+        // Update existing country
+        existingProxyTracking.countries[existingCountryIndex] = country;
+      } else {
+        // Add new country
+        existingProxyTracking.countries.push(country);
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        proxyTracking: existingProxyTracking,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Added/updated tracked proxy country ${country.countryId} for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to add tracked proxy country', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a tracked proxy country from a specific server
+   */
+  static removeTrackedProxyCountry(serverId: string, countryId: string): boolean {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      
+      if (!existingServerConfig?.proxyTracking) {
+        logger.warn(`No proxy tracking config found for server ${serverId}`);
+        return false;
+      }
+
+      const initialLength = existingServerConfig.proxyTracking.countries.length;
+      existingServerConfig.proxyTracking.countries = existingServerConfig.proxyTracking.countries.filter(
+        c => c.countryId !== countryId
+      );
+
+      if (existingServerConfig.proxyTracking.countries.length === initialLength) {
+        logger.warn(`Proxy country ${countryId} not found in tracking for server ${serverId}`);
+        return false;
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Removed tracked proxy country ${countryId} from server ${serverId}`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to remove tracked proxy country', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update tracking status for a proxy country (lastChecked, initialUsers)
+   */
+  static updateTrackedProxyCountry(
+    serverId: string, 
+    countryId: string, 
+    lastChecked: string, 
+    initialUsers?: string[]
+  ): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      
+      if (!existingServerConfig?.proxyTracking) {
+        logger.warn(`No proxy tracking config found for server ${serverId}`);
+        return;
+      }
+
+      const country = existingServerConfig.proxyTracking.countries.find(c => c.countryId === countryId);
+      
+      if (!country) {
+        logger.warn(`Proxy country ${countryId} not found in tracking for server ${serverId}`);
+        return;
+      }
+
+      country.lastChecked = lastChecked;
+      if (initialUsers !== undefined) {
+        country.initialUsers = initialUsers;
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.debug(`Updated tracking status for proxy country ${countryId} in server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update tracked proxy country status', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add a proxy user for a specific server
+   */
+  static addProxyUser(serverId: string, proxyUser: ProxyUser): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingProxyTracking = existingServerConfig.proxyTracking || {
+        enabled: true,
+        countries: [],
+        proxies: [],
+      };
+
+      // Check if proxy user is already tracked
+      const existingProxyIndex = existingProxyTracking.proxies.findIndex(p => p.userId === proxyUser.userId);
+      
+      if (existingProxyIndex !== -1) {
+        // Update existing proxy
+        existingProxyTracking.proxies[existingProxyIndex] = proxyUser;
+      } else {
+        // Add new proxy
+        existingProxyTracking.proxies.push(proxyUser);
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        proxyTracking: existingProxyTracking,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Added/updated proxy user ${proxyUser.userId} for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to add proxy user', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a proxy user from a specific server
+   */
+  static removeProxyUser(serverId: string, userId: string): boolean {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId);
+      
+      if (!existingServerConfig?.proxyTracking) {
+        logger.warn(`No proxy tracking config found for server ${serverId}`);
+        return false;
+      }
+
+      const initialLength = existingServerConfig.proxyTracking.proxies.length;
+      existingServerConfig.proxyTracking.proxies = existingServerConfig.proxyTracking.proxies.filter(
+        p => p.userId !== userId
+      );
+
+      if (existingServerConfig.proxyTracking.proxies.length === initialLength) {
+        logger.warn(`Proxy user ${userId} not found in tracking for server ${serverId}`);
+        return false;
+      }
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, existingServerConfig);
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Removed proxy user ${userId} from server ${serverId}`);
+      return true;
+    } catch (error) {
+      logger.error('Failed to remove proxy user', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all tracked proxy countries for a specific server
+   */
+  static getTrackedProxyCountries(serverId: string): TrackedProxyCountry[] {
+    const config = this.getServerConfig(serverId);
+    return config?.proxyTracking?.countries || [];
+  }
+
+  /**
+   * Get all proxy users for a specific server
+   */
+  static getProxyUsers(serverId: string): ProxyUser[] {
+    const config = this.getServerConfig(serverId);
+    return config?.proxyTracking?.proxies || [];
+  }
+
+  /**
+   * Update proxy tracking enabled status for a server
+   */
+  static updateProxyTrackingStatus(serverId: string, enabled: boolean): void {
+    try {
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingProxyTracking = existingServerConfig.proxyTracking || {
+        enabled: true,
+        countries: [],
+        proxies: [],
+      };
+
+      existingProxyTracking.enabled = enabled;
+
+      // Update in-memory cache
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        proxyTracking: existingProxyTracking,
+      });
+
+      // Write to disk
+      this.writeConfigsToDisk();
+
+      logger.info(`Updated proxy tracking status to ${enabled} for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update proxy tracking status', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update leaderboard configuration for a server
+   */
+  static updateLeaderboardConfig(serverId: string, config: Partial<LeaderboardConfig>): void {
+    try {
+      if (this.configCache === null) {
+        this.loadConfigs();
+      }
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existingLeaderboard = existingServerConfig.leaderboard || {
+        channelId: '',
+        countryIds: [],
+        countryNames: [],
+        militaryUnitIds: [],
+        topCount: 10,
+        levelBrackets: [],
+        enabled: true,
+      };
+
+      const updatedLeaderboard: LeaderboardConfig = {
+        channelId: config.channelId !== undefined ? config.channelId : existingLeaderboard.channelId,
+        countryIds: config.countryIds !== undefined ? config.countryIds : existingLeaderboard.countryIds,
+        countryNames: config.countryNames !== undefined ? config.countryNames : existingLeaderboard.countryNames,
+        militaryUnitIds: config.militaryUnitIds !== undefined ? config.militaryUnitIds : existingLeaderboard.militaryUnitIds,
+        topCount: config.topCount !== undefined ? config.topCount : existingLeaderboard.topCount,
+        levelBrackets: config.levelBrackets !== undefined ? config.levelBrackets : existingLeaderboard.levelBrackets,
+        enabled: config.enabled !== undefined ? config.enabled : existingLeaderboard.enabled,
+        messageId: config.messageId !== undefined ? config.messageId : existingLeaderboard.messageId,
+        lastSnapshot: config.lastSnapshot !== undefined ? config.lastSnapshot : existingLeaderboard.lastSnapshot,
+        lastUpdated: config.lastUpdated !== undefined ? config.lastUpdated : existingLeaderboard.lastUpdated,
+      };
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        leaderboard: updatedLeaderboard,
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Updated leaderboard config for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update leaderboard config', error);
       throw error;
     }
   }

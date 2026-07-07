@@ -18,9 +18,23 @@ type GetRegionsObjectResponse = Awaited<
   ReturnType<APIClient["region"]["getRegionsObject"]>
 >;
 type RegionDTO = GetRegionsObjectResponse["result"]["data"][string];
+type GetPaginatedAuctionsResponse = Awaited<
+  ReturnType<APIClient["mercenaryContractAuction"]["getPaginatedAuctions"]>
+>;
+type MercenaryContractAuctionDTO =
+  GetPaginatedAuctionsResponse["result"]["data"]["items"][number];
 
 /** Page size for `battle.getBattles` cursor pagination (matches typical API max page size). */
 const BATTLES_PAGE_SIZE = 100;
+
+/** Max mercenary contract auction requests per batch run */
+const MERCENARY_CONTRACT_BATCH_SIZE = 50;
+
+export interface BattlePollData {
+  battles: BattleDTO[];
+  countries: Map<string, CountryDTO>;
+  regions: Map<string, RegionDTO>;
+}
 
 /**
  * Service for handling API requests using the WarEra SDK
@@ -32,6 +46,8 @@ export class ApiService {
   private batchClient: APIClient; // For battle polling operations
   private cacheProvider: InMemoryCacheProvider;
   private sharedRateLimiter: SharedRateLimiter;
+  private proxyTrackingService?: any; // Will be set after initialization
+  private leaderboardService?: import('../leaderboard/LeaderboardService').LeaderboardService;
 
   constructor(config: BotConfig) {
     this.config = config;
@@ -72,6 +88,82 @@ export class ApiService {
     // multiple commands run concurrently. Use createCommandBatchClient() instead.
 
     logger.info("API Service initialized with shared rate limiter");
+  }
+
+  /**
+   * Filter battles to those with active bounty rewards on either side
+   */
+  filterBattlesWithBountyRewards(battles: BattleDTO[]): BattleDTO[] {
+    return battles.filter((battle) => {
+      const attackerHasRewards =
+        (battle.attacker.moneyPer1kDamages ?? 0) > 0 &&
+        (battle.attacker.moneyPool ?? 0) > 0;
+
+      const defenderHasRewards =
+        (battle.defender.moneyPer1kDamages ?? 0) > 0 &&
+        (battle.defender.moneyPool ?? 0) > 0;
+
+      return attackerHasRewards || defenderHasRewards;
+    });
+  }
+
+  /**
+   * Fetch mercenary contract auctions for multiple battles using the polling batch client
+   */
+  async fetchMercenaryContractsForBattles(
+    battleIds: string[]
+  ): Promise<MercenaryContractAuctionDTO[]> {
+    if (battleIds.length === 0) {
+      return [];
+    }
+
+    const allContracts: MercenaryContractAuctionDTO[] = [];
+
+    try {
+      logger.debug(
+        `Fetching mercenary contracts for ${battleIds.length} battle(s) via batch client...`
+      );
+
+      for (let i = 0; i < battleIds.length; i += MERCENARY_CONTRACT_BATCH_SIZE) {
+        const chunk = battleIds.slice(i, i + MERCENARY_CONTRACT_BATCH_SIZE);
+        const contractPromises = chunk.map((battleId) =>
+          this.batchClient.mercenaryContractAuction.getPaginatedAuctions({
+            battleId,
+            limit: 50,
+          })
+        );
+
+        await this.batchClient.runBatch();
+        const results = await Promise.all(contractPromises);
+
+        for (let j = 0; j < chunk.length; j++) {
+          const result = results[j] as GetPaginatedAuctionsResponse | undefined;
+          const items = result?.result?.data?.items;
+          if (items) {
+            allContracts.push(...items);
+            logger.debug(`Fetched ${items.length} contract(s) for battle ${chunk[j]}`);
+          } else {
+            logger.warn(`Failed to fetch mercenary contracts for battle ${chunk[j]}`);
+          }
+        }
+      }
+
+      logger.info(
+        `Fetched ${allContracts.length} mercenary contract auction(s) across ${battleIds.length} battle(s)`
+      );
+      return allContracts;
+    } catch (error) {
+      const rateLimitStatus = this.batchClient.getRateLimitStatus();
+      if (rateLimitStatus) {
+        logger.error(
+          `Failed to fetch mercenary contracts. Rate limit status: ${rateLimitStatus.requestCount}/${rateLimitStatus.maxRequests} requests (${rateLimitStatus.usagePercent}% usage), at limit: ${rateLimitStatus.isAtLimit}, backoff: ${rateLimitStatus.currentBackoffMs}ms`,
+          error
+        );
+      } else {
+        logger.error("Failed to fetch mercenary contracts", error);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -300,18 +392,7 @@ export class ApiService {
       );
 
       // Filter battles where moneyPer1kDamages > 0 and moneyPool > 0
-      // Check both attacker and defender sides
-      const filteredBattles = allBattles.filter((battle) => {
-        const attackerHasRewards =
-          (battle.attacker.moneyPer1kDamages ?? 0) > 0 &&
-          (battle.attacker.moneyPool ?? 0) > 0;
-
-        const defenderHasRewards =
-          (battle.defender.moneyPer1kDamages ?? 0) > 0 &&
-          (battle.defender.moneyPool ?? 0) > 0;
-
-        return attackerHasRewards || defenderHasRewards;
-      });
+      const filteredBattles = this.filterBattlesWithBountyRewards(allBattles);
 
       logger.info(
         `Filtered to ${filteredBattles.length} battle(s) with rewards (out of ${allBattles.length} total)`
@@ -443,11 +524,7 @@ export class ApiService {
    * Unlike fetchBattles(), this method doesn't filter by bounty rewards
    * @returns Promise resolving to all active battles and country data
    */
-  async fetchAllBattles(): Promise<{
-    battles: BattleDTO[];
-    countries: Map<string, CountryDTO>;
-    regions: Map<string, RegionDTO>;
-  }> {
+  async fetchAllBattles(): Promise<BattlePollData> {
     try {
       logger.debug("Fetching ALL active battles from API (unfiltered)...");
 
@@ -550,5 +627,33 @@ export class ApiService {
    */
   getSharedRateLimiter(): SharedRateLimiter {
     return this.sharedRateLimiter;
+  }
+
+  /**
+   * Set the ProxyTrackingService instance (called after initialization to avoid circular dependency)
+   */
+  setProxyTrackingService(service: any): void {
+    this.proxyTrackingService = service;
+  }
+
+  /**
+   * Get the ProxyTrackingService instance
+   */
+  getProxyTrackingService(): any | undefined {
+    return this.proxyTrackingService;
+  }
+
+  /**
+   * Set the LeaderboardService instance (called after initialization to avoid circular dependency)
+   */
+  setLeaderboardService(service: import('../leaderboard/LeaderboardService').LeaderboardService): void {
+    this.leaderboardService = service;
+  }
+
+  /**
+   * Get the LeaderboardService instance
+   */
+  getLeaderboardService(): import('../leaderboard/LeaderboardService').LeaderboardService | undefined {
+    return this.leaderboardService;
   }
 }

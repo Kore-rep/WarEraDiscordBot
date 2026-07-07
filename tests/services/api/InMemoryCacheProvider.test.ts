@@ -1,15 +1,5 @@
 import { InMemoryCacheProvider } from '../../../src/services/api/InMemoryCacheProvider';
 
-// Mock the logger
-jest.mock('../../../src/utils/logger', () => ({
-  logger: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  },
-}));
-
 describe('InMemoryCacheProvider', () => {
   let cache: InMemoryCacheProvider;
 
@@ -30,9 +20,6 @@ describe('InMemoryCacheProvider', () => {
     });
 
     it('should return undefined for expired entry', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
       // Set a value with very short TTL (1000 milliseconds = 1 second)
       await cache.set('expired-key', { data: 'expired' }, 1000);
       
@@ -42,71 +29,6 @@ describe('InMemoryCacheProvider', () => {
       const result = await cache.get('expired-key');
       expect(result).toBeUndefined();
       expect(cache.size()).toBe(0); // Entry should be removed
-      
-      // Verify expiration was logged
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching(/^Cache entry expired for key: expired-key \(expired \d+s ago\)$/)
-      );
-    });
-
-    it('should log cache hit when retrieving value', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.set('log-test-key', { data: 'test' });
-      await cache.get('log-test-key');
-
-      expect(logger.debug).toHaveBeenCalledWith('Cache hit for key: log-test-key (no expiration)');
-    });
-
-    it('should log cache hit with remaining TTL', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.set('ttl-test-key', { data: 'test' }, 5000); // 5 seconds
-      await cache.get('ttl-test-key');
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching(/^Cache hit for key: ttl-test-key \(expires in \d+s\)$/)
-      );
-    });
-
-    it('should log when cache entry is set with TTL', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.set('set-test-key', { data: 'test' }, 30); // 30ms
-
-      expect(logger.debug).toHaveBeenCalledWith('Cache set for key: set-test-key (TTL: 0s)');
-    });
-
-    it('should log when cache entry is set with TTL in minutes', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.set('set-test-key', { data: 'test' }, 120000); // 2 minutes
-
-      expect(logger.debug).toHaveBeenCalledWith(
-        expect.stringMatching(/^Cache set for key: set-test-key \(TTL: 2m \d+s\)$/)
-      );
-    });
-
-    it('should log when cache entry is set without TTL', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.set('no-ttl-key', { data: 'test' });
-
-      expect(logger.debug).toHaveBeenCalledWith('Cache set for key: no-ttl-key (no expiration)');
-    });
-
-    it('should not log when key does not exist', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
-      await cache.get('non-existent-key');
-
-      expect(logger.debug).not.toHaveBeenCalled();
     });
 
     it('should handle different value types', async () => {

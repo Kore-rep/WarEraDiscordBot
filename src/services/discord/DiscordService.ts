@@ -1,4 +1,4 @@
-import { Client, TextChannel, User } from 'discord.js';
+import { Client, TextChannel, User, EmbedBuilder } from 'discord.js';
 import { logger } from '../../utils/logger';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 // Legacy imports for rollback compatibility (deprecated)
@@ -393,6 +393,43 @@ export class DiscordService {
       logger.debug(`Sent message to channel ${channelId}`);
     } catch (error) {
       logger.error(`Failed to send message to channel ${channelId}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create or edit the living leaderboard message in a channel
+   */
+  async updateLeaderboardMessage(
+    channelId: string,
+    messageId: string | undefined,
+    content: string,
+    embeds: EmbedBuilder[]
+  ): Promise<string> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) {
+        throw new Error(`Channel ${channelId} is not a text channel`);
+      }
+
+      const textChannel = channel as TextChannel;
+
+      if (messageId) {
+        try {
+          const message = await textChannel.messages.fetch(messageId);
+          await message.edit({ content, embeds });
+          logger.debug(`Updated leaderboard message ${messageId} in channel ${channelId}`);
+          return messageId;
+        } catch (error) {
+          logger.warn(`Leaderboard message ${messageId} not found, creating a new one`, error);
+        }
+      }
+
+      const sent = await textChannel.send({ content, embeds });
+      logger.debug(`Created leaderboard message ${sent.id} in channel ${channelId}`);
+      return sent.id;
+    } catch (error) {
+      logger.error(`Failed to update leaderboard message in channel ${channelId}`, error);
       throw error;
     }
   }

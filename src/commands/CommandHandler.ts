@@ -8,7 +8,8 @@ import { ApiService } from '../services/api/ApiService';
 import { bountyBattlesCommand } from './bountyBattles';
 import { contractsCommand } from './contracts';
 import { userTrackingCommand } from './userTracking';
-import { countryTrackingCommand } from './countryTracking';
+import { proxyTrackingCommand } from './proxyTracking';
+import { leaderboardCommand } from './leaderboard';
 import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 import { spectreCommand } from './spectre/spectre';
@@ -39,7 +40,8 @@ export class CommandHandler {
       bountyBattlesCommand,
       contractsCommand,
       userTrackingCommand,
-      countryTrackingCommand,
+      proxyTrackingCommand,
+      leaderboardCommand,
       scanForCommand,
       countryGroupCommand,
       spectreCommand,

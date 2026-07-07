@@ -83,37 +83,24 @@ describe('ApiService Cache Integration', () => {
   });
 
   describe('cache provider direct usage', () => {
-    it('should log cache hits when values are retrieved', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
+    it('should return cached values when keys exist', async () => {
       if (!cacheProvider) {
         cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
       }
 
-      // Set a value in cache
       await cacheProvider.set('test-cache-key', { data: 'test-value' });
-      
-      // Get the value - should log cache hit
-      await cacheProvider.get('test-cache-key');
+      const result = await cacheProvider.get('test-cache-key');
 
-      expect(logger.debug).toHaveBeenCalledWith(
-        'Cache hit for key: test-cache-key (no expiration)'
-      );
+      expect(result).toEqual({ data: 'test-value' });
     });
 
-    it('should handle cache misses without logging', async () => {
-      const { logger } = require('../../../src/utils/logger');
-      jest.clearAllMocks();
-
+    it('should handle cache misses', async () => {
       if (!cacheProvider) {
         cacheProvider = mockCreateAPI.mock.calls[0][0].cache;
       }
 
-      // Try to get non-existent key
-      await cacheProvider.get('non-existent-key');
-
-      expect(logger.debug).not.toHaveBeenCalled();
+      const result = await cacheProvider.get('non-existent-key');
+      expect(result).toBeUndefined();
     });
 
     it('should share cache between regular and batch clients', () => {

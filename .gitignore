@@ -18,6 +18,9 @@ servers.json
 # Battle message tracking (generated at runtime)
 battles.json
 
+# Weekly damage snapshots (generated at runtime)
+data/weekly-damage/
+
 # Logs
 *.log
 npm-debug.log*

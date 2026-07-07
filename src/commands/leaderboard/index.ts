@@ -1,0 +1,1 @@
+export { leaderboardCommand } from './leaderboard';

@@ -22,6 +22,19 @@
           }
         ],
         "resistanceMonitors": []
+      },
+      "leaderboard": {
+        "enabled": true,
+        "channelId": "LEADERBOARD_CHANNEL_ID",
+        "countryIds": ["COUNTRY_OBJECT_ID"],
+        "countryNames": ["Country Name"],
+        "militaryUnitIds": ["MU_OBJECT_ID"],
+        "topCount": 10,
+        "levelBrackets": [
+          { "minLevel": 20, "maxLevel": 29, "label": "20-29" },
+          { "minLevel": 30, "maxLevel": 39, "label": "30-39" },
+          { "minLevel": 40, "label": "40+" }
+        ]
       }
     },
     "SERVER_ID_2": {

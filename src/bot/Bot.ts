@@ -9,6 +9,8 @@ import { BattleService } from '../services/battle/BattleService';
 import { MercenaryContractService } from '../services/mercenary/MercenaryContractService';
 import { UserTrackingService } from '../services/userTracking';
 import { CountryTrackingService } from '../services/countryTracking/CountryTrackingService';
+import { ProxyTrackingService } from '../services/proxyTracking/ProxyTrackingService';
+import { LeaderboardService } from '../services/leaderboard/LeaderboardService';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
 
@@ -26,6 +28,8 @@ export class Bot {
   private pollingService: PollingService;
   private userTrackingService: UserTrackingService;
   private countryTrackingService: CountryTrackingService;
+  private proxyTrackingService: ProxyTrackingService;
+  private leaderboardService: LeaderboardService;
   private commandHandler: CommandHandler;
   private isRunning = false;
 
@@ -48,9 +52,16 @@ export class Bot {
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.mercenaryContractService = new MercenaryContractService(this.discordService, this.apiService);
     this.spectreService = new SpectreService(this.apiService, this.discordService);
-    this.pollingService = new PollingService(config, this.battleService, this.mercenaryContractService, this.spectreService);
+    this.pollingService = new PollingService(config, this.apiService, this.battleService, this.mercenaryContractService, this.spectreService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.countryTrackingService = new CountryTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
+    this.proxyTrackingService = new ProxyTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
+    this.leaderboardService = new LeaderboardService(this.discordService, this.apiService);
+    
+    // Set services on ApiService to avoid circular dependency
+    this.apiService.setProxyTrackingService(this.proxyTrackingService);
+    this.apiService.setLeaderboardService(this.leaderboardService);
+    
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 
     // Set up event handlers
@@ -85,7 +96,13 @@ export class Bot {
         // Start country tracking service
         this.countryTrackingService.start();
         
-        logger.info('Bot is ready, polling, user tracking, and country tracking have started');
+        // Start proxy tracking service
+        this.proxyTrackingService.start();
+        
+        // Start leaderboard service
+        this.leaderboardService.start();
+        
+        logger.info('Bot is ready, polling, tracking services, and leaderboards have started');
       } catch (error) {
         logger.error('Failed to initialize bot services', error);
         // Don't exit - let the bot try to recover
@@ -150,6 +167,12 @@ export class Bot {
     
     // Stop country tracking service
     this.countryTrackingService.stop();
+    
+    // Stop proxy tracking service
+    this.proxyTrackingService.stop();
+    
+    // Stop leaderboard service
+    this.leaderboardService.stop();
 
     // Destroy Discord client
     this.client.destroy();

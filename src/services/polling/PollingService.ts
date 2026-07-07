@@ -3,6 +3,7 @@ import { BotConfig } from '../../config/config';
 import { BattleService } from '../battle/BattleService';
 import { MercenaryContractService } from '../mercenary/MercenaryContractService';
 import { SpectreService } from '../spectre/SpectreService';
+import { ApiService } from '../api/ApiService';
 
 /**
  * Service that handles periodic polling
@@ -10,6 +11,7 @@ import { SpectreService } from '../spectre/SpectreService';
  */
 export class PollingService {
   private config: BotConfig;
+  private apiService: ApiService;
   private battleService: BattleService;
   private mercenaryContractService: MercenaryContractService;
   private spectreService: SpectreService;
@@ -19,11 +21,13 @@ export class PollingService {
 
   constructor(
     config: BotConfig,
+    apiService: ApiService,
     battleService: BattleService,
     mercenaryContractService: MercenaryContractService,
     spectreService: SpectreService
   ) {
     this.config = config;
+    this.apiService = apiService;
     this.battleService = battleService;
     this.mercenaryContractService = mercenaryContractService;
     this.spectreService = spectreService;
@@ -82,21 +86,29 @@ export class PollingService {
   }
 
   /**
-   * Execute a single polling cycle: process battles, then mercenary contracts, then Spectre operations
+   * Execute a single polling cycle: fetch battles once, then process bounties and contracts
    */
   private async executePollingCycle(): Promise<void> {
     logger.debug('Starting polling cycle...');
 
-    // 1. Battle cycle - process bounties 
+    let pollData: Awaited<ReturnType<ApiService['fetchAllBattles']>> | undefined;
+
     try {
-      await this.battleService.processBattles();
+      pollData = await this.apiService.fetchAllBattles();
+    } catch (error) {
+      logger.error('Polling cycle failed to fetch battles', error);
+    }
+
+    // 1. Battle cycle - process bounties
+    try {
+      await this.battleService.processBattles(pollData);
     } catch (error) {
       logger.error('Polling cycle (battles) failed', error);
     }
 
-    // 2. Mercenary contract cycle - process contract auctions
+    // 2. Mercenary contract cycle - process contract auctions (reuses battle poll data)
     try {
-      await this.mercenaryContractService.processContracts();
+      await this.mercenaryContractService.processContracts(pollData);
     } catch (error) {
       logger.error('Polling cycle (mercenary contracts) failed', error);
     }
@@ -115,14 +127,13 @@ export class PollingService {
    * Clean up old data for battles and mercenary contracts
    */
   private async cleanupOldBattles(): Promise<void> {
-    // Run cleanup for both services in parallel
     const cleanupTasks = [
-      this.battleService.cleanupOldBattles().catch(error => 
+      this.battleService.cleanupOldBattles().catch(error =>
         logger.error('Failed to cleanup old battles', error)
       ),
-      this.mercenaryContractService.cleanup().catch(error => 
+      this.mercenaryContractService.cleanup().catch(error =>
         logger.error('Failed to cleanup mercenary contracts', error)
-      )
+      ),
     ];
 
     await Promise.allSettled(cleanupTasks);

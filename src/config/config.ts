@@ -81,6 +81,43 @@ export interface CountryTrackingConfig {
 }
 
 /**
+ * A proxy user that has moved from their original country
+ */
+export interface ProxyUser {
+  userId: string;
+  username: string; // War Era username
+  originalCountryId: string; // Country they left
+  originalCountryName: string;
+  proxyCountryId: string; // Country they moved to
+  proxyCountryName: string;
+  detectedAt: string; // ISO timestamp when movement detected
+  lastCitizenshipChangeAt: string; // From API for cooldown calculation
+  manuallyAdded?: boolean; // True if added via command, not auto-detected
+}
+
+/**
+ * A single tracked country configuration for proxy monitoring
+ */
+export interface TrackedProxyCountry {
+  countryId: string;
+  countryName: string;
+  channelId: string; // Where to report proxy movements
+  enabled: boolean;
+  initialUsers?: string[]; // User IDs present when tracking started
+  lastChecked?: string;
+  mentionIds?: string[]; // Discord mentions for notifications
+}
+
+/**
+ * Configuration for proxy tracking feature per server
+ */
+export interface ProxyTrackingConfig {
+  enabled?: boolean;
+  countries: TrackedProxyCountry[];
+  proxies: ProxyUser[]; // All detected/added proxies across countries
+}
+
+/**
  * A country in a country group
  */
 export interface GroupedCountry {
@@ -119,6 +156,59 @@ export interface SpectreConfig {
 }
 
 /**
+ * Level bracket for weekly player damage leaderboards
+ */
+export interface LevelBracket {
+  minLevel: number;
+  maxLevel?: number; // omit = no upper bound (40+)
+  label: string;
+}
+
+/**
+ * A single ranked entry in a leaderboard snapshot
+ */
+export interface LeaderboardRankEntry {
+  id: string;
+  name: string;
+  value: number;
+  countryCode?: string;
+  level?: number;
+}
+
+/**
+ * Stored leaderboard ranks from the previous refresh (for movement arrows)
+ */
+export interface LeaderboardSnapshot {
+  playerTotal: LeaderboardRankEntry[];
+  playerWeeklyByBracket: Record<string, LeaderboardRankEntry[]>;
+  muTotal: LeaderboardRankEntry[];
+  muWeekly: LeaderboardRankEntry[];
+  capturedAt: string;
+}
+
+/**
+ * Hourly leaderboard feature per server
+ */
+export interface LeaderboardConfig {
+  enabled?: boolean;
+  channelId: string;
+  messageId?: string;
+  countryIds: string[];
+  countryNames: string[];
+  militaryUnitIds: string[];
+  topCount: number;
+  levelBrackets: LevelBracket[];
+  lastSnapshot?: LeaderboardSnapshot;
+  lastUpdated?: string;
+}
+
+export const DEFAULT_LEVEL_BRACKETS: LevelBracket[] = [
+  { minLevel: 20, maxLevel: 29, label: '20-29' },
+  { minLevel: 30, maxLevel: 39, label: '30-39' },
+  { minLevel: 40, label: '40+' },
+];
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -128,8 +218,10 @@ export interface ServerConfig {
   reports?: ReportsConfig;
   userTracking?: UserTrackingConfig;
   countryTracking?: CountryTrackingConfig;
+  proxyTracking?: ProxyTrackingConfig;
   countryGroups?: CountryGroup[];
   spectre?: SpectreConfig;
+  leaderboard?: LeaderboardConfig;
 }
 
 /**

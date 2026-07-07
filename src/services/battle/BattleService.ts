@@ -6,7 +6,7 @@ import { LegacyBattleTracker, BattleChange } from './LegacyBattleTracker';
 import { LegacyBattleFormatter } from './LegacyBattleFormatter';
 // Mercenary contract service removed - now handled separately in PollingService
 import { DiscordService } from '../discord/DiscordService';
-import { ApiService } from '../api/ApiService';
+import { ApiService, BattlePollData } from '../api/ApiService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 
 /**
@@ -52,26 +52,39 @@ export class BattleService {
 
   /**
    * Process battles from API - detect changes/new bounties and handle notifications
-   * Behavior depends on useSimpleSystem flag
+   * @param pollData Optional pre-fetched battle data from the polling cycle (avoids duplicate API calls)
    */
-  async processBattles(): Promise<void> {
+  async processBattles(pollData?: BattlePollData): Promise<void> {
     if (this.useSimpleSystem) {
-      return this.processSimpleBounties();
+      return this.processSimpleBounties(pollData);
     } else {
-      return this.processLegacyBattles();
+      return this.processLegacyBattles(pollData);
     }
   }
 
   /**
    * Simple system: detect new bounties and send fire-and-forget alerts
    */
-  private async processSimpleBounties(): Promise<void> {
+  private async processSimpleBounties(pollData?: BattlePollData): Promise<void> {
     try {
       logger.debug('Processing battles for new bounties (simple system)...');
 
-      // Fetch data from API (battles, countries, and regions)  
-      const { battles: allBattles, countries, regions } = await this.apiService.fetchBattles();
-      logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
+      let allBattles: any[];
+      let countries: Map<string, unknown>;
+      let regions: Map<string, unknown>;
+
+      if (pollData) {
+        allBattles = this.apiService.filterBattlesWithBountyRewards(pollData.battles);
+        countries = pollData.countries;
+        regions = pollData.regions;
+        logger.debug(`Using ${allBattles.length} bounty battle(s) from shared poll data`);
+      } else {
+        const fetched = await this.apiService.fetchBattles();
+        allBattles = fetched.battles;
+        countries = fetched.countries;
+        regions = fetched.regions;
+        logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
+      }
 
       // Process bounties only
       await this.processBountiesOnly(allBattles, countries, regions);
@@ -107,13 +120,26 @@ export class BattleService {
   /**
    * Legacy system: detect battle changes and update tracked Discord messages
    */
-  private async processLegacyBattles(): Promise<void> {
+  private async processLegacyBattles(pollData?: BattlePollData): Promise<void> {
     try {
       logger.debug('Processing battles (legacy system)...');
 
-      // Fetch data from API (battles, countries, and regions)
-      const { battles: allBattles, countries, regions } = await this.apiService.fetchBattles();
-      logger.debug(`Fetched ${allBattles.length} battle(s) from API`);
+      let allBattles: any[];
+      let countries: Map<string, unknown>;
+      let regions: Map<string, unknown>;
+
+      if (pollData) {
+        allBattles = this.apiService.filterBattlesWithBountyRewards(pollData.battles);
+        countries = pollData.countries;
+        regions = pollData.regions;
+      } else {
+        const fetched = await this.apiService.fetchBattles();
+        allBattles = fetched.battles;
+        countries = fetched.countries;
+        regions = fetched.regions;
+      }
+
+      logger.debug(`Processing ${allBattles.length} battle(s)`);
 
       const activeIds = new Set(allBattles.map(b => b._id));
       this.discordService.pruneInactiveBattleTracking(activeIds);

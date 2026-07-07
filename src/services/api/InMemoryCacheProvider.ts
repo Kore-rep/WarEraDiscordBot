@@ -1,5 +1,4 @@
 import { CacheProvider } from "warera-sdk";
-import { logger } from "../../utils/logger";
 
 interface CacheEntry {
   value: unknown;
@@ -15,8 +14,7 @@ export class InMemoryCacheProvider implements CacheProvider {
 
   /**
    * Get a value from the cache by key
-   * Logs a message when a value is successfully retrieved from cache
-   * 
+   *
    * @param key - The cache key
    * @returns The cached value or undefined if not found or expired
    */
@@ -29,22 +27,10 @@ export class InMemoryCacheProvider implements CacheProvider {
 
     // Check if entry has expired
     if (entry.expiresAt && entry.expiresAt < Date.now()) {
-      // Entry expired, remove it
-      const expiredAge = Date.now() - entry.expiresAt;
-      logger.debug(`Cache entry expired for key: ${key} (expired ${Math.round(expiredAge / 1000)}s ago)`);
       this.cache.delete(key);
       return undefined;
     }
 
-    // Log cache hit with remaining TTL if available
-    if (entry.expiresAt) {
-      const remainingMs = entry.expiresAt - Date.now();
-      const remainingSeconds = Math.round(remainingMs / 1000);
-      logger.debug(`Cache hit for key: ${key} (expires in ${remainingSeconds}s)`);
-    } else {
-      logger.debug(`Cache hit for key: ${key} (no expiration)`);
-    }
-    
     return entry.value as T;
   }
 
@@ -63,19 +49,6 @@ export class InMemoryCacheProvider implements CacheProvider {
       value,
       expiresAt,
     });
-
-    // Log cache addition with TTL information
-    if (ttl) {
-      const ttlSeconds = Math.round(ttl / 1000);
-      const ttlMinutes = Math.round(ttlSeconds / 60);
-      if (ttlSeconds < 60) {
-        logger.debug(`Cache set for key: ${key} (TTL: ${ttlSeconds}s)`);
-      } else {
-        logger.debug(`Cache set for key: ${key} (TTL: ${ttlMinutes}m ${ttlSeconds % 60}s)`);
-      }
-    } else {
-      logger.debug(`Cache set for key: ${key} (no expiration)`);
-    }
   }
 
   /**
