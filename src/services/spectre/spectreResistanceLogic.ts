@@ -1,5 +1,5 @@
 import type { APIClient } from 'warera-sdk';
-import type { RegionResistanceSnapshot } from '../../utils/spectreBuildingStateStore';
+import type { RegionResistanceSnapshot } from './spectreBuildingStateStore';
 
 type RegionDTO = Awaited<
   ReturnType<APIClient['region']['getRegionsObject']>

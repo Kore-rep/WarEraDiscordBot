@@ -4,51 +4,26 @@ import { DiscordService } from '../discord/DiscordService';
 import { ApiService } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 import { ProxyUser, TrackedProxyCountry } from '../../config/config';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 
 /**
- * Service for tracking proxy users who move between countries and monitoring their cooldowns
+ * Tracks proxy users who move between countries and monitors their cooldowns, every 5 minutes.
  */
-export class ProxyTrackingService {
+export class ProxyTrackingService implements ScheduledTask {
+  readonly name = 'proxy-tracking';
+  readonly intervalMs = 5 * 60 * 1000; // 5 minutes
+
   private apiClient: APIClient;
   // @ts-ignore - DiscordService kept for future notification functionality
   private _discordService: DiscordService; // Prefixed with _ since notifications are disabled
-  private intervalId: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 60 * 5 * 1000; // 5 minutes (same as country tracking)
 
   constructor(apiClient: APIClient, discordService: DiscordService, _apiService: ApiService) {
     this.apiClient = apiClient;
     this._discordService = discordService;
   }
 
-  /**
-   * Start the proxy tracking service with 5-minute polling
-   */
-  start(): void {
-    if (this.intervalId) {
-      logger.warn('Proxy tracking service is already running');
-      return;
-    }
-
-    logger.info('Starting proxy tracking service (checks every 5 minutes)');
-
-    // Run immediately on start
-    this.checkAllTrackedCountries();
-
-    // Then run every 5 minutes
-    this.intervalId = setInterval(() => {
-      this.checkAllTrackedCountries();
-    }, this.CHECK_INTERVAL_MS);
-  }
-
-  /**
-   * Stop the proxy tracking service
-   */
-  stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      logger.info('Proxy tracking service stopped');
-    }
+  async runCycle(): Promise<void> {
+    await this.checkAllTrackedCountries();
   }
 
   /**

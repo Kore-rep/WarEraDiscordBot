@@ -3,7 +3,6 @@ import { DiscordService } from '../../../src/services/discord/DiscordService';
 import { ApiService } from '../../../src/services/api/ApiService';
 import { ServerConfigManager } from '../../../src/utils/serverConfigManager';
 
-// Mock dependencies
 jest.mock('../../../src/services/discord/DiscordService');
 jest.mock('../../../src/services/api/ApiService');
 jest.mock('../../../src/utils/serverConfigManager');
@@ -21,319 +20,124 @@ describe('BattleService', () => {
   let mockDiscordService: jest.Mocked<DiscordService>;
   let mockApiService: jest.Mocked<ApiService>;
 
+  // A battle carrying an attacker-side bounty that SimpleBountyTracker will detect
+  const makeBattle = (id = 'battle-1') => ({
+    _id: id,
+    attacker: {
+      country: 'country-1',
+      region: 'region-1',
+      bountyEffectiveAt: '2026-01-01T00:00:00.000Z',
+      moneyPer1kDamages: 100,
+      moneyPool: 5000,
+    },
+    defender: {
+      country: 'country-2',
+      region: 'region-2',
+      bountyEffectiveAt: null,
+      moneyPer1kDamages: 0,
+      moneyPool: 0,
+    },
+  });
+
+  const countries = new Map([['country-1', { name: 'USA' }]]);
+  const regions = new Map([['region-1', { name: 'Texas' }]]);
+
+  const configureServers = (
+    servers: Record<string, { enabled?: boolean; channelId?: string; bountyThreshold?: number; minBountyToSend?: number; roleIds?: string[] }>
+  ) => {
+    const map = new Map(
+      Object.entries(servers).map(([id, cfg]) => [id, { bountyBattles: { channelId: 'channel-1', roleIds: [], ...cfg } }])
+    );
+    (ServerConfigManager.readServerConfigs as jest.Mock).mockReturnValue(map);
+    (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation((id: string) => map.get(id) ?? null);
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
 
     mockDiscordService = {
-      updateBattleMessage: jest.fn(),
-      deleteBattleMessage: jest.fn(),
-      getServerIds: jest.fn(),
-      pruneInactiveBattleTracking: jest.fn(),
-      loadPersistedBattles: jest.fn().mockResolvedValue(undefined),
+      sendBountyAlert: jest.fn().mockResolvedValue(undefined),
     } as any;
 
     mockApiService = {
-      fetchBattles: jest.fn(),
-      extractRoleIdsByServer: jest.fn(),
+      fetchBattles: jest.fn().mockResolvedValue({ battles: [makeBattle()], countries, regions }),
+      filterBattlesWithBountyRewards: jest.fn((battles: any[]) => battles),
     } as any;
 
     battleService = new BattleService(mockDiscordService, mockApiService);
   });
 
-  describe('processBattles with enabled/disabled check', () => {
-    const mockBattle = {
-      _id: 'battle-1',
-      money: 1000,
-      pool: 5000,
-      moneyPer1kDamages: 100,
-      createdAt: new Date().toISOString(),
-      attackers: [],
-      defenders: [],
-      region: 'region-1',
-      attacker: {
-        moneyPool: 5000,
-        moneyPer1kDamages: 100,
-      },
-      defender: {
-        moneyPool: 0,
-        moneyPer1kDamages: 0,
-      },
-    };
-
-    const mockCountries = new Map([['country-1', { name: 'USA' }]]);
-    const mockRegions = new Map([['region-1', { name: 'Texas' }]]);
-
-    it('should process battles for enabled servers', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-1', ['role-1']]])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        channelId: 'channel-1',
-        roleIds: ['role-1'],
-        enabled: true,
-      });
+  describe('processBattles', () => {
+    it('sends a bounty alert to a configured, enabled server', async () => {
+      configureServers({ 'server-1': { enabled: true, roleIds: ['role-1'], bountyThreshold: 0 } });
 
       await battleService.processBattles();
 
-      expect(mockDiscordService.pruneInactiveBattleTracking).toHaveBeenCalledWith(
-        new Set(['battle-1'])
-      );
-      expect(mockDiscordService.loadPersistedBattles).toHaveBeenCalledTimes(1);
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalled();
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledTimes(1);
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledWith('server-1', expect.any(String), ['role-1']);
     });
 
-    it('should load persisted battles only once across multiple processBattles calls', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
+    it('skips servers where bounty battles are disabled', async () => {
+      configureServers({ 'server-disabled': { enabled: false } });
 
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-1', ['role-1']]])
-      );
+      await battleService.processBattles();
 
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        channelId: 'channel-1',
-        roleIds: ['role-1'],
-        enabled: true,
-      });
+      expect(mockDiscordService.sendBountyAlert).not.toHaveBeenCalled();
+    });
+
+    it('does not mention roles when the bounty is below the mention threshold', async () => {
+      configureServers({ 'server-1': { enabled: true, roleIds: ['role-1'], bountyThreshold: 1000 } });
+
+      await battleService.processBattles();
+
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledWith('server-1', expect.any(String), []);
+    });
+
+    it('skips bounties below minBountyToSend', async () => {
+      configureServers({ 'server-1': { enabled: true, minBountyToSend: 1000 } });
+
+      await battleService.processBattles();
+
+      expect(mockDiscordService.sendBountyAlert).not.toHaveBeenCalled();
+    });
+
+    it('does not alert for the same bounty twice', async () => {
+      configureServers({ 'server-1': { enabled: true } });
 
       await battleService.processBattles();
       await battleService.processBattles();
 
-      expect(mockDiscordService.loadPersistedBattles).toHaveBeenCalledTimes(1);
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledTimes(1);
     });
 
-    it('should skip battles for disabled servers', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-disabled', ['role-1']]])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        bountyBattles: {
-          channelId: 'channel-1',
-          roleIds: ['role-1'],
-          enabled: false,
-          bountyThreshold: 0,
-        },
-      });
-
-      await battleService.processBattles();
-
-      expect(mockDiscordService.updateBattleMessage).not.toHaveBeenCalled();
-    });
-
-    it('should process battles for servers with enabled:undefined (default to true)', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-2', ['role-1']]])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        bountyBattles: {
-          channelId: 'channel-1',
-          roleIds: ['role-1'],
-          // enabled is undefined - should default to true
-          bountyThreshold: 0,
-        },
-      });
-
-      await battleService.processBattles();
-
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalled();
-    });
-
-    it('should process battles for servers with no config (null)', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-3', ['role-1']]])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
-
-      await battleService.processBattles();
-
-      // Should process even if no config (for backwards compatibility)
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalled();
-    });
-
-    it('should handle mixed enabled/disabled servers', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([
-          ['server-enabled', ['role-1']],
-          ['server-disabled', ['role-2']],
-        ])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation((serverId) => {
-        if (serverId === 'server-enabled') {
-          return {
-            bountyBattles: {
-              channelId: 'channel-1',
-              roleIds: ['role-1'],
-              enabled: true,
-              bountyThreshold: 0,
-            },
-          };
-        } else if (serverId === 'server-disabled') {
-          return {
-            bountyBattles: {
-              channelId: 'channel-2',
-              roleIds: ['role-2'],
-              enabled: false,
-              bountyThreshold: 0,
-            },
-          };
-        }
-        return null;
-      });
-
-      await battleService.processBattles();
-
-      // Should be called once for enabled server only
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalledTimes(1);
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalledWith(
-        'server-enabled',
-        ['role-1'],
-        'battle-1',
-        expect.any(String),
-        100 // totalBounty
-      );
-    });
-
-    it('should not throw error if ServerConfigManager throws', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: mockCountries,
-        regions: mockRegions,
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([['server-1', ['role-1']]])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockImplementation(() => {
-        throw new Error('Config read error');
-      });
-
-      // Should not throw, but continue processing
-      await expect(battleService.processBattles()).resolves.not.toThrow();
-    });
-  });
-
-  describe('cleanupOldBattles', () => {
-    it('should call cleanup without throwing error', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [],
-        countries: new Map(),
-        regions: new Map(),
-      });
-
-      (mockDiscordService.getServerIds as jest.Mock).mockReturnValue(['server-1', 'server-2']);
-
-      // Should complete without throwing
-      await expect(battleService.cleanupOldBattles()).resolves.not.toThrow();
-
-      // Verify API was called to get current battles
-      expect(mockApiService.fetchBattles).toHaveBeenCalled();
-    });
-  });
-
-  describe('getTrackedBattleCount', () => {
-    it('should return the number of tracked battles', () => {
-      const count = battleService.getTrackedBattleCount();
-      expect(typeof count).toBe('number');
-      expect(count).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  describe('error handling', () => {
-    it('should handle API fetch errors', async () => {
-      (mockApiService.fetchBattles as jest.Mock).mockRejectedValue(
-        new Error('API Error')
-      );
+    it('throws if the API fetch fails', async () => {
+      (mockApiService.fetchBattles as jest.Mock).mockRejectedValue(new Error('API Error'));
 
       await expect(battleService.processBattles()).rejects.toThrow('API Error');
     });
 
-    it('should continue processing other servers if one fails', async () => {
-      const mockBattle = {
-        _id: 'battle-1',
-        money: 1000,
-        pool: 5000,
-        moneyPer1kDamages: 100,
-        createdAt: new Date().toISOString(),
-        attackers: [],
-        defenders: [],
-        region: 'region-1',
-        attacker: {
-          moneyPool: 5000,
-          moneyPer1kDamages: 100,
-        },
-        defender: {
-          moneyPool: 0,
-          moneyPer1kDamages: 0,
-        },
-      };
-
-      (mockApiService.fetchBattles as jest.Mock).mockResolvedValue({
-        battles: [mockBattle],
-        countries: new Map(),
-        regions: new Map(),
-      });
-
-      (mockApiService.extractRoleIdsByServer as jest.Mock).mockReturnValue(
-        new Map([
-          ['server-1', ['role-1']],
-          ['server-2', ['role-2']],
-        ])
-      );
-
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue({
-        channelId: 'channel-1',
-        roleIds: ['role-1'],
-        enabled: true,
-      });
-
-      // Make first server fail, second should still process
-      (mockDiscordService.updateBattleMessage as jest.Mock)
+    it('continues with other servers if one send fails', async () => {
+      configureServers({ 'server-1': { enabled: true }, 'server-2': { enabled: true } });
+      (mockDiscordService.sendBountyAlert as jest.Mock)
         .mockRejectedValueOnce(new Error('Discord error'))
         .mockResolvedValueOnce(undefined);
 
       await expect(battleService.processBattles()).resolves.not.toThrow();
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledTimes(2);
+    });
+  });
 
-      // Should have attempted to update for both servers
-      expect(mockDiscordService.updateBattleMessage).toHaveBeenCalledTimes(2);
+  describe('cleanupOldBattles', () => {
+    it('completes without throwing', async () => {
+      await expect(battleService.cleanupOldBattles()).resolves.not.toThrow();
+    });
+  });
+
+  describe('getTrackedBattleCount', () => {
+    it('returns a non-negative number', () => {
+      const count = battleService.getTrackedBattleCount();
+      expect(typeof count).toBe('number');
+      expect(count).toBeGreaterThanOrEqual(0);
     });
   });
 });

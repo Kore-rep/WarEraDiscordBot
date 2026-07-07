@@ -2,7 +2,6 @@ import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
 import { Command, createCommandBuilder } from '../types';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
-import { DiscordService } from '../../services/discord/DiscordService';
 
 /**
  * Command to manage bounty battles settings for the server
@@ -66,13 +65,13 @@ export const bountyBattlesCommand: Command = {
         .setDescription('Disable bounty battle notifications for this server')
     ),
 
-  async execute(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
+  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommandGroup = interaction.options.getSubcommandGroup();
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommandGroup === 'config') {
       if (subcommand === 'set') {
-        await handleConfigSet(interaction, discordService);
+        await handleConfigSet(interaction);
       } else if (subcommand === 'view') {
         await handleConfigView(interaction);
       }
@@ -87,7 +86,7 @@ export const bountyBattlesCommand: Command = {
 /**
  * Handle the config set subcommand
  */
-async function handleConfigSet(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
+async function handleConfigSet(interaction: ChatInputCommandInteraction): Promise<void> {
   try {
     // Ensure this is in a guild
     if (!interaction.guildId) {
@@ -128,9 +127,6 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
 
     // Determine new channel ID (use provided or keep existing)
     const newChannelId = channel ? channel.id : currentBountyConfig!.channelId;
-    
-    // Check if channel is changing
-    const channelChanged = currentBountyConfig && channel && currentBountyConfig.channelId !== channel.id;
 
     // Build new role IDs array
     let roleIds: string[];
@@ -161,12 +157,6 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
       bountyThreshold: bountyThreshold,
       minBountyToSend: resolvedMinBountyToSend,
     });
-
-    // If channel changed, clear message tracking for this server so it starts fresh
-    if (channelChanged && discordService) {
-      discordService.clearServerTracking(interaction.guildId);
-      logger.info(`Cleared message tracking for server ${interaction.guildId} due to channel change`);
-    }
 
     // Build confirmation message
     let confirmationMessage = `Bounty battle notifications configured!\n\n`;

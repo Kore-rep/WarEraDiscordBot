@@ -3,50 +3,25 @@ import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { DiscordService } from '../discord/DiscordService';
 import { logger } from '../../utils/logger';
 import { TrackedUser } from '../../config/config';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 
 /**
- * Service for tracking user activity and sending inactivity notifications
+ * Tracks user activity and sends inactivity notifications, once per hour.
  */
-export class UserTrackingService {
+export class UserTrackingService implements ScheduledTask {
+  readonly name = 'user-tracking';
+  readonly intervalMs = 60 * 60 * 1000; // 1 hour
+
   private apiClient: APIClient;
   private discordService: DiscordService;
-  private intervalId: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
   constructor(apiClient: APIClient, discordService: DiscordService) {
     this.apiClient = apiClient;
     this.discordService = discordService;
   }
 
-  /**
-   * Start the user tracking service with hourly polling
-   */
-  start(): void {
-    if (this.intervalId) {
-      logger.warn('User tracking service is already running');
-      return;
-    }
-
-    logger.info('Starting user tracking service (checks every hour)');
-
-    // Run immediately on start
-    this.checkAllTrackedUsers();
-
-    // Then run every hour
-    this.intervalId = setInterval(() => {
-      this.checkAllTrackedUsers();
-    }, this.CHECK_INTERVAL_MS);
-  }
-
-  /**
-   * Stop the user tracking service
-   */
-  stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      logger.info('User tracking service stopped');
-    }
+  async runCycle(): Promise<void> {
+    await this.checkAllTrackedUsers();
   }
 
   /**
@@ -196,12 +171,5 @@ export class UserTrackingService {
         error
       );
     }
-  }
-
-  /**
-   * Get service status
-   */
-  isRunning(): boolean {
-    return this.intervalId !== null;
   }
 }

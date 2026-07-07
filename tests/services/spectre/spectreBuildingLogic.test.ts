@@ -6,7 +6,7 @@ import {
   buildRegionBuildingSnapshot,
   formatBuildingSnapshotLines,
 } from '../../../src/services/spectre/spectreBuildingLogic';
-import type { RegionBuildingSnapshot } from '../../../src/utils/spectreBuildingStateStore';
+import type { RegionBuildingSnapshot } from '../../../src/services/spectre/spectreBuildingStateStore';
 import type { BunkerUpgradeDTO } from 'warera-sdk';
 
 /** Minimal region shape for border tests */

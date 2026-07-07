@@ -2,6 +2,8 @@
 
 A TypeScript Discord bot that performs periodic API requests using the WarEra SDK and mentions roles in designated Discord channels when battle changes are detected. Supports multiple Discord servers with per-server configuration.
 
+> **New to the codebase?** See [`docs/ONBOARDING.md`](docs/ONBOARDING.md) for the repo structure and how to add a command. AI assistants: see [`CLAUDE.md`](CLAUDE.md).
+
 ## Features
 
 - ✅ Persistent Discord connection
@@ -178,26 +180,25 @@ npm start
 │   │   │   └── userTracking.ts
 │   │   └── scanFor/                      # Scan commands (modular structure)
 │   │       ├── scanFor.ts                # Main command router
-│   │       ├── country/                  # Country scan subcommands
-│   │       │   └── nogovernment.ts       # Scan for countries with no/partial governments
-│   │       └── company/                  # Company scan subcommands
-│   │           └── production.ts         # Analyze company production
+│   │       └── country/                  # Country scan subcommands
+│   │           └── nogovernment.ts       # Scan for countries with no/partial governments
 │   ├── config/
 │   │   └── config.ts                     # Configuration loading and validation
 │   ├── services/
 │   │   ├── api/
 │   │   │   └── ApiService.ts             # WarEra API interactions
 │   │   ├── battle/
-│   │   │   ├── BattleService.ts          # Battle processing orchestration
-│   │   │   ├── BattleTracker.ts          # State tracking & change detection
-│   │   │   └── BattleFormatter.ts        # Message formatting
+│   │   │   ├── BattleService.ts          # Bounty battle processing
+│   │   │   ├── SimpleBountyTracker.ts     # New-bounty detection
+│   │   │   └── SimpleBattleFormatter.ts   # Bounty alert formatting
 │   │   ├── discord/
-│   │   │   ├── DiscordService.ts         # Discord API interactions
-│   │   │   └── MessageTracker.ts         # Message ID tracking
-│   │   ├── polling/
-│   │   │   └── PollingService.ts         # Periodic polling scheduler
+│   │   │   └── DiscordService.ts         # Discord API interactions
+│   │   ├── scheduler/
+│   │   │   ├── SchedulerService.ts       # Owns all periodic tasks
+│   │   │   ├── ScheduledTask.ts          # Interface periodic services implement
+│   │   │   └── tasks/                     # BountyPollTask, BountyCleanupTask
 │   │   └── userTracking/
-│   │       └── UserTrackingService.ts    # User inactivity tracking
+│   │       └── UserTrackingService.ts    # User inactivity tracking (a ScheduledTask)
 │   └── utils/
 │       ├── logger.ts                     # Winston logger configuration
 │       ├── serverConfigManager.ts        # Server configuration management
@@ -443,50 +444,6 @@ Countries With Partial Government (1-3 members):
 - ✅ Early warning system for partial government inactivity (3-day threshold)
 - ✅ Only checks activity for countries with 1-3 government members
 - ✅ Full cabinets (4+ members) are not checked for efficiency
-
-#### `/scanfor company production`
-Analyze company production across all items in the game
-
-- **Phase 1:** Fetches all company IDs using pagination (100 companies per page)
-- **Phase 2:** Gets company details to determine production items (10 companies at a time)
-- Counts how many companies produce each item type
-- Results sorted by count (highest to lowest)
-- Real-time progress updates with percentage completion
-- Uses efficient pagination to retrieve all companies directly
-
-**Example usage:**
-```
-/scanfor company production
-```
-
-**Example output:**
-```
-Company Production Analysis Complete
-
-- Total companies: 6,789
-- Item types produced: 25
-
-Companies by Item Type:
-
-Fish: 1,234
-Iron: 987
-Wheat: 856
-Oil: 654
-Steel: 543
-...
-```
-
-**Features:**
-- ✅ **Efficient pagination** - fetches 100 companies per page using nextCursor
-- ✅ **Direct company access** - no need to fetch countries or users first
-- ✅ **Large-scale scanning** - handles 5,000-10,000 companies efficiently
-- ✅ **Batch request optimization** - processes company details in batches of 10
-- ✅ **URI length management** - keeps batch sizes small to avoid 414 errors
-- ✅ **Real-time progress reporting** - shows current phase and percentage
-- ✅ **Rate limit friendly** - includes delays between requests
-- ✅ **Sorted results** - items ordered by production volume
-
-**Note:** This command is much faster than the previous approach! Typically completes in 2-5 minutes for large games.
 
 #### `/countrygroup` Commands
 Manage custom country groups for filtered scanning operations

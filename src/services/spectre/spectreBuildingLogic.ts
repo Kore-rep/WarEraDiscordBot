@@ -1,6 +1,6 @@
 import type { APIClient } from 'warera-sdk';
 import type { BunkerUpgradeDTO } from 'warera-sdk';
-import type { MilitaryUpgradeSnapshot, RegionBuildingSnapshot } from '../../utils/spectreBuildingStateStore';
+import type { MilitaryUpgradeSnapshot, RegionBuildingSnapshot } from './spectreBuildingStateStore';
 
 type RegionDTO = Awaited<
   ReturnType<APIClient['region']['getRegionsObject']>

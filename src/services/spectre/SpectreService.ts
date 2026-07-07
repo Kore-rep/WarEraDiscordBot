@@ -13,7 +13,7 @@ import {
   setResistanceCountrySnapshots,
   type RegionBuildingSnapshot,
   type SpectreStateRoot,
-} from '../../utils/spectreBuildingStateStore';
+} from './spectreBuildingStateStore';
 import {
   buildRegionBuildingSnapshot,
   chunkLines,
@@ -49,7 +49,7 @@ type MonitorTask = {
 };
 
 /**
- * Spectre military monitoring: same cadence as bounty polling (via PollingService).
+ * Spectre military monitoring: driven each cycle by the scheduler's BountyPollTask.
  * Fetches region data once per cycle; aggregates Discord output per channel.
  */
 export class SpectreService {

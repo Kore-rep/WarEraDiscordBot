@@ -5,8 +5,8 @@ import { ApiService } from '../../../services/api/ApiService';
 
 // Type alias for the actual user data from the API response
 type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
-import { groupPlayersByMode, sortUsersByLevel } from '../../../utils/skillAnalyzer';
-import { createBuildSummary } from '../../../utils/userStatusFormatter';
+import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
+import { createBuildSummary } from './userStatusFormatter';
 
 /**
  * Handle /scanfor country builds

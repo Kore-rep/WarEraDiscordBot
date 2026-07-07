@@ -11,7 +11,7 @@ import {
   clearAllCountrySnapshotsForSpectre,
   getCountrySnapshots,
   getResistanceCountrySnapshots,
-} from '../../utils/spectreBuildingStateStore';
+} from '../../services/spectre/spectreBuildingStateStore';
 import { chunkLines, formatBuildingSnapshotLines } from '../../services/spectre/spectreBuildingLogic';
 import { formatResistanceSnapshotLines } from '../../services/spectre/spectreResistanceLogic';
 

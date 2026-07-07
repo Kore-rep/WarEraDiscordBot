@@ -1,9 +1,6 @@
 import { Client, TextChannel, User, EmbedBuilder } from 'discord.js';
 import { logger } from '../../utils/logger';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
-// Legacy imports for rollback compatibility (deprecated)
-import { LegacyMessageTracker } from './LegacyMessageTracker';
-import { LegacyBattleMessageTracker } from '../../utils/LegacyBattleMessageTracker';
 
 /**
  * Service for handling Discord-related operations
@@ -11,11 +8,9 @@ import { LegacyBattleMessageTracker } from '../../utils/LegacyBattleMessageTrack
 export class DiscordService {
   private client: Client;
   private channels: Map<string, TextChannel> = new Map(); // serverId -> channel
-  private messageTracker: LegacyMessageTracker; // Deprecated, kept for rollback capability
 
-  constructor(client: Client, messageTracker: LegacyMessageTracker) {
+  constructor(client: Client) {
     this.client = client;
-    this.messageTracker = messageTracker;
   }
 
   /**
@@ -119,156 +114,6 @@ export class DiscordService {
     } catch (error) {
       logger.error(`Failed to send mention message to server ${serverId}`, error);
       throw error;
-    }
-  }
-
-  /**
-   * Update or create a battle notification message
-   * 
-   * @param serverId - Discord server ID
-   * @param roleIds - Array of role IDs to mention (only if bounty threshold is met)
-   * @param battleId - Battle ID
-   * @param battleMessage - Formatted battle message
-   * @param totalBounty - Total bounty (attacker + defender) for threshold check
-   */
-  async updateBattleMessage(
-    serverId: string,
-    roleIds: string[],
-    battleId: string,
-    battleMessage: string,
-    totalBounty: number = 0
-  ): Promise<void> {
-    let channel = this.channels.get(serverId);
-    
-    // If channel not initialized, try to initialize it now
-    if (!channel) {
-      const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (serverConfig?.bountyBattles?.channelId) {
-        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
-        channel = this.channels.get(serverId);
-      }
-    
-    if (!channel) {
-        throw new Error(`Channel not initialized for server ${serverId}. Server may not be configured or channel is invalid.`);
-      }
-    }
-
-    try {
-      const existingMessageId = this.messageTracker.getMessageId(serverId, battleId);
-
-      if (!battleMessage || battleMessage.length === 0) {
-        logger.warn(`No battle message provided for battle ${battleId}`);
-        return;
-      }
-
-      // Check bounty threshold to determine if roles should be mentioned
-      const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      const bountyThreshold = serverConfig?.bountyBattles?.bountyThreshold ?? 0;
-      const shouldMentionRoles = totalBounty >= bountyThreshold;
-      
-      // Only mention roles if threshold is met
-      const effectiveRoleIds = shouldMentionRoles ? roleIds : [];
-
-      if (existingMessageId) {
-        // Update existing message
-        try {
-          const message = await channel.messages.fetch(existingMessageId);
-          
-          // Always include role mentions to preserve Discord notifications (if threshold met)
-          const mentions = effectiveRoleIds.length > 0
-            ? effectiveRoleIds.map(roleId => `<@&${roleId}>`).join(' ')
-            : '';
-          
-          const messageContent = mentions 
-            ? `${mentions}\n\n${battleMessage}`
-            : battleMessage;
-          
-          await message.edit(messageContent);
-          logger.info(`Updated battle message for battle ${battleId} in server ${serverId}`);
-        } catch (error) {
-          // Message might have been deleted, create a new one
-          logger.warn(`Failed to update message ${existingMessageId}, creating new message`, error);
-          await this.createNewBattleMessage(channel, serverId, effectiveRoleIds, battleId, battleMessage);
-        }
-      } else {
-        // Create new message
-        await this.createNewBattleMessage(channel, serverId, effectiveRoleIds, battleId, battleMessage);
-      }
-    } catch (error) {
-      logger.error(`Failed to update battle message for server ${serverId}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Create a new battle message
-   */
-  private async createNewBattleMessage(
-    channel: TextChannel,
-    serverId: string,
-    roleIds: string[],
-    battleId: string,
-    battleMessage: string
-  ): Promise<void> {
-    const mentions = roleIds.length > 0
-      ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
-      : '';
-
-    const messageContent = mentions 
-      ? `${mentions}\n\n${battleMessage}`
-      : battleMessage;
-
-    const message = await channel.send(messageContent);
-    this.messageTracker.setMessageId(serverId, battleId, message.id);
-    
-    // Persist to battles.json for recovery after restart
-    LegacyBattleMessageTracker.setBattleMessage(serverId, battleId, message.id);
-
-    if (roleIds.length > 0) {
-      logger.info(`Created new battle message for battle ${battleId} in server ${serverId} (channel: ${channel.name})`);
-    } else {
-      logger.info(`Created new battle message (no roles mentioned) for battle ${battleId} in server ${serverId} (channel: ${channel.name})`);
-    }
-  }
-
-  /**
-   * Delete a battle message
-   */
-  async deleteBattleMessage(serverId: string, battleId: string): Promise<void> {
-    let channel = this.channels.get(serverId);
-    
-    // If channel not initialized, try to initialize it now
-    if (!channel) {
-      const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (serverConfig?.bountyBattles?.channelId) {
-        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
-        channel = this.channels.get(serverId);
-      }
-    }
-      
-    if (!channel) {
-      logger.warn(`Channel not initialized for server ${serverId}, cannot delete message`);
-      return;
-    }
-
-    const messageId = this.messageTracker.getMessageId(serverId, battleId);
-    if (!messageId) {
-      logger.debug(`No message ID found for battle ${battleId} in server ${serverId}`);
-      return;
-    }
-
-    try {
-      const message = await channel.messages.fetch(messageId);
-      await message.delete();
-      this.messageTracker.removeBattle(serverId, battleId);
-      
-      // Remove from battles.json
-      LegacyBattleMessageTracker.removeBattleMessage(serverId, battleId);
-      logger.info(`Deleted battle message for battle ${battleId} in server ${serverId}`);
-    } catch (error) {
-      logger.warn(`Failed to delete message ${messageId} for battle ${battleId}`, error);
-      // Remove from tracker even if deletion failed (message might already be deleted)
-      this.messageTracker.removeBattle(serverId, battleId);
     }
   }
 
@@ -469,46 +314,13 @@ export class DiscordService {
   }
 
   /**
-   * Clear message tracking for a server
-   * Used when server configuration changes (e.g., channel changed)
-   * 
-   * @param serverId - Discord server ID
-   */
-  clearServerTracking(serverId: string): void {
-    this.messageTracker.clearServer(serverId);
-    
-    // Also clear from battles.json
-    LegacyBattleMessageTracker.clearServer(serverId);
-    
-    logger.info(`Cleared message tracking for server ${serverId}`);
-  }
-
-  /**
-   * Send a message to a specific channel
-   * 
+   * Send a message to a specific channel by ID within a server context.
+   *
    * @param serverId - Discord server ID
    * @param channelId - Discord channel ID
    * @param content - Message content
    * @returns Message ID if successful, null otherwise
    */
-  /**
-   * Remove tracking for battles that are no longer returned by the battles API.
-   * Updates battles.json and the in-memory message map; does not delete Discord messages.
-   */
-  pruneInactiveBattleTracking(activeBattleIds: ReadonlySet<string>): void {
-    const removed = LegacyBattleMessageTracker.pruneInactiveBattles(activeBattleIds);
-    for (const { serverId, battleId } of removed) {
-      this.messageTracker.removeBattle(serverId, battleId);
-    }
-  }
-
-  /**
-   * Restore persisted battle message IDs from battles.json (call after prune on first poll — see BattleService).
-   */
-  async loadPersistedBattles(): Promise<void> {
-    await this.loadPersistedBattlesInternal();
-  }
-
   async sendMessageToChannel(serverId: string, channelId: string, content: string): Promise<string | null> {
     try {
       // Try to get channel from cache first
@@ -530,69 +342,6 @@ export class DiscordService {
     } catch (error) {
       logger.error(`Failed to send message to channel ${channelId} in server ${serverId}`, error);
       return null;
-    }
-  }
-
-  /**
-   * Load persisted battle messages from battles.json and restore in-memory tracking
-   * Also validates that messages still exist and deletes stale entries
-   */
-  private async loadPersistedBattlesInternal(): Promise<void> {
-    try {
-      const battles = LegacyBattleMessageTracker.loadBattles();
-      logger.info(`Loading ${battles.size} persisted battle message(s) from battles.json`);
-
-      let restoredCount = 0;
-      let deletedCount = 0;
-
-      for (const entry of battles.values()) {
-        try {
-          // Initialize the channel if not already done
-          const serverConfig = ServerConfigManager.getServerConfig(entry.serverId);
-          if (!serverConfig) {
-            logger.warn(`Server ${entry.serverId} not configured, removing battle ${entry.battleId}`);
-            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
-            deletedCount++;
-            continue;
-          }
-
-          // Get or initialize the channel
-          let channel = this.channels.get(entry.serverId);
-          if (!channel && serverConfig.bountyBattles?.channelId) {
-            await this.initializeServerChannel(entry.serverId, serverConfig.bountyBattles.channelId);
-            channel = this.channels.get(entry.serverId);
-          }
-
-          if (!channel) {
-            logger.warn(`Could not initialize channel for server ${entry.serverId}, removing battle ${entry.battleId}`);
-            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
-            deletedCount++;
-            continue;
-          }
-
-          // Try to fetch the message to verify it still exists
-          try {
-            await channel.messages.fetch(entry.messageId);
-            
-            // Message exists, restore to in-memory tracker
-            this.messageTracker.setMessageId(entry.serverId, entry.battleId, entry.messageId);
-            restoredCount++;
-            logger.debug(`Restored tracking for battle ${entry.battleId} in server ${entry.serverId}`);
-          } catch (fetchError) {
-            // Message no longer exists (deleted), remove from tracking
-            logger.info(`Message ${entry.messageId} for battle ${entry.battleId} no longer exists, removing from tracking`);
-            LegacyBattleMessageTracker.removeBattleMessage(entry.serverId, entry.battleId);
-            deletedCount++;
-          }
-        } catch (error) {
-          logger.error(`Error loading battle ${entry.battleId} for server ${entry.serverId}`, error);
-        }
-      }
-
-      logger.info(`Restored ${restoredCount} battle message(s), removed ${deletedCount} stale message(s)`);
-    } catch (error) {
-      logger.error('Failed to load persisted battles', error);
-      // Don't throw - bot should still start even if battles.json is missing/corrupt
     }
   }
 }
