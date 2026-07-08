@@ -24,7 +24,7 @@ A TypeScript Discord bot that performs periodic API requests using the WarEra SD
 - Node.js 18+ 
 - npm or yarn
 - Discord Bot Token (from [Discord Developer Portal](https://discord.com/developers/applications))
-- Access to the WarEra SDK (located at `../WarEraSDK`)
+- `git` on your PATH (npm needs it to fetch the WarEra SDK git dependency)
 
 ## Setup Instructions
 
@@ -37,7 +37,7 @@ npm install
 This will install:
 - `discord.js` - Discord API library
 - `dotenv` - Environment variable management
-- `warera-sdk` - Local SDK dependency
+- `warera-sdk` - WarEra SDK, fetched from GitHub (`git+https://github.com/Kore-rep/WarEraSDK.git`); its `prepare` script builds it automatically on install
 - TypeScript and development dependencies
 
 ### 2. Configure Environment Variables
@@ -544,15 +544,10 @@ this.client.commands.set(pingCommand.data.name, pingCommand);
 
 ### Option 1: Azure App Service
 
-1. Build the Docker image:
-   **Important:** Build from the parent directory (one level up from WarEraBot) to include the SDK:
+1. Build the Docker image from this repository (no parent directory or local SDK needed — `npm ci` fetches the WarEra SDK from GitHub during the build):
+
    ```bash
-   cd ..
-   docker build -f WarEraBot/Dockerfile -t warera-discord-bot .
-   ```
-   Or from the WarEraBot directory:
-   ```bash
-   docker build -f Dockerfile -t warera-discord-bot ..
+   docker build -t warera-discord-bot .
    ```
 
 2. Push to Azure Container Registry or use Azure Container Instances
@@ -566,23 +561,11 @@ this.client.commands.set(pingCommand.data.name, pingCommand);
 
 1. Build and push image to Azure Container Registry
 2. Create container instance with environment variables
-3. Ensure the SDK is available (may need to include it in the image or use a different deployment strategy)
 
 ### Important Notes for Azure Deployment
 
-- The SDK is installed as a local dependency (`file:../WarEraSDK`)
-- You may need to:
-  - Copy the SDK into the Docker image during build
-  - Or publish the SDK to a private npm registry
-  - Or include the SDK in the same repository
-
-Update the Dockerfile if needed to include the SDK:
-
-```dockerfile
-# Copy SDK if it's in a sibling directory
-COPY ../WarEraSDK ./sdk
-RUN npm install ./sdk
-```
+- The WarEra SDK is a public git dependency (`git+https://github.com/Kore-rep/WarEraSDK.git`), pinned to a commit in `package.json`. The build clones it over HTTPS — no credentials or local checkout are required.
+- The base image installs `git` so npm can fetch the dependency. If you switch to a build environment without network access to GitHub, either vendor the SDK or publish it to a registry your build can reach.
 
 ## Environment Variables
 
@@ -652,10 +635,11 @@ The bot includes error handling for:
 - Verify SDK is properly installed
 - Check network connectivity
 
-**SDK not found:**
-- Ensure WarEraSDK is at `../WarEraSDK`
+**SDK not found / fails to install:**
+
+- Ensure `git` is installed and you can reach `https://github.com/Kore-rep/WarEraSDK` (npm clones it over HTTPS)
 - Run `npm install` again
-- Check `package.json` has correct path
+- Check the `warera-sdk` git reference in `package.json` resolves
 
 ## License
 

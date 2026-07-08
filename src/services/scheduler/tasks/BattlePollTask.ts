@@ -1,5 +1,5 @@
 import { logger } from '../../../utils/logger';
-import { ApiService } from '../../api/ApiService';
+import { ApiService, BattlePollData } from '../../api/ApiService';
 import { BattleService } from '../../battle/BattleService';
 import { MercenaryContractService } from '../../mercenary/MercenaryContractService';
 import { ScheduledTask } from '../ScheduledTask';
@@ -23,7 +23,7 @@ export class BattlePollTask implements ScheduledTask {
   }
 
   async runCycle(): Promise<void> {
-    let pollData: Awaited<ReturnType<ApiService['fetchAllBattles']>> | undefined;
+    let pollData: BattlePollData | undefined;
 
     try {
       pollData = await this.apiService.fetchAllBattles();

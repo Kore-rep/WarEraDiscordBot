@@ -6,21 +6,8 @@ This directory contains scripts to build, tag, and push the WarEra Discord Bot D
 
 1. Docker installed and running
 2. Docker registry credentials configured (logged in via `docker login`)
-3. Both `WarEraBot` and `WarEraSDK` directories must be present in the parent directory
 
-## Directory Structure
-
-The scripts expect this structure:
-```
-parent-directory/
-├── WarEraBot/          # This repository
-│   ├── build-and-push.sh
-│   ├── build-and-push.ps1
-│   ├── Dockerfile
-│   └── ...
-└── WarEraSDK/          # Required dependency
-    └── ...
-```
+The WarEra SDK is a public git dependency fetched from GitHub during the build, so no local SDK checkout is required and the image builds from this repository directly.
 
 ## Usage
 
@@ -71,7 +58,7 @@ Then run it:
 ## What the Scripts Do
 
 1. **Read version** from `package.json`
-2. **Build Docker image** using `WarEraBot/Dockerfile`
+2. **Build Docker image** using this repository's `Dockerfile`
 3. **Tag image** with:
    - Version tag: `{registry}/{image-name}:{version}` (e.g., `docker.io/myuser/warera-discord-bot:1.0.0`)
    - Latest tag: `{registry}/{image-name}:latest` (optional)
@@ -153,17 +140,12 @@ docker run -d \
 
 ## Troubleshooting
 
-### Build fails with "WarEraSDK not found"
-Ensure the `WarEraSDK` directory exists in the parent directory alongside `WarEraBot`.
+### Build fails fetching `warera-sdk`
+
+The SDK is cloned from `https://github.com/Kore-rep/WarEraSDK` over HTTPS during `npm ci`. Ensure the build host has network access to GitHub and that `git` is available (the base image installs it).
 
 ### Push fails with "unauthorized"
 Run `docker login <registry>` before pushing.
-
-### "Script not found" error on Linux/Mac
-Make sure to make the script executable: `chmod +x build-and-push.sh`
-
-### Build fails with "context" error
-The script must be run from within the `WarEraBot` directory, as it changes to the parent directory for the Docker build.
 
 ## CI/CD Integration
 
@@ -175,7 +157,6 @@ You can integrate these scripts into your CI/CD pipeline:
   run: |
     echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
     ./build-and-push.sh -r ghcr.io/${{ github.repository_owner }}
-  working-directory: ./WarEraBot
 ```
 
 ### GitLab CI Example
@@ -183,6 +164,5 @@ You can integrate these scripts into your CI/CD pipeline:
 build-and-push:
   script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - cd WarEraBot
     - ./build-and-push.sh -r $CI_REGISTRY_IMAGE
 ```

@@ -32,7 +32,7 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.1",
     "prisma": "^5.22.0",
-    "warera-sdk": "file:../WarEraSDK"
+    "warera-sdk": "git+https://github.com/Kore-rep/WarEraSDK.git#3624e4a71eebdace70f5b61267bd5b6c17f338cf"
   },
   "devDependencies": {
     "@jest/globals": "^30.2.0",

@@ -1,6 +1,10 @@
-import type { APIClient } from 'warera-sdk';
 import { ApiError } from 'warera-sdk';
-import type { BunkerUpgradeDTO, GetUpgradeByTypeAndEntityResponse } from 'warera-sdk';
+import type {
+  BunkerUpgradeDTO,
+  GetUpgradeByTypeAndEntityResponse,
+  RegionDTO,
+  RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
+} from 'warera-sdk';
 import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
@@ -24,11 +28,6 @@ import {
   buildCountryResistanceSnapshots,
   diffResistanceCountry,
 } from './spectreResistanceLogic';
-
-type GetRegionsObjectResponse = Awaited<
-  ReturnType<APIClient['region']['getRegionsObject']>
->;
-type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
 
 const REPORT_TITLE = '**S.P.E.C.T.R.E reports:**';
 

@@ -1,22 +1,25 @@
 import type {
-  APIClient,
+  CountryDTO,
+  PartyDTO,
+  GovernmentDTO,
+  UserDTO,
+  RegionDTO,
   GetAllCountriesResponse,
   GetPartyByIdResponse,
   GetGovernmentByCountryIdResponse,
   GetUserLiteResponse,
   GetUsersByCountryParams,
+  RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
 } from 'warera-sdk';
 import { ApiService } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 
-type GetRegionsObjectResponse = Awaited<ReturnType<APIClient['region']['getRegionsObject']>>;
-
 // Domain types re-exported so command handlers never import the SDK directly.
-export type ScanCountry = GetAllCountriesResponse['result']['data'][number];
-export type ScanParty = GetPartyByIdResponse['result']['data'];
-export type ScanGovernment = GetGovernmentByCountryIdResponse['result']['data'];
-export type ScanUserLite = NonNullable<GetUserLiteResponse['result']['data']>;
-export type ScanRegion = GetRegionsObjectResponse['result']['data'][string];
+export type ScanCountry = CountryDTO;
+export type ScanParty = PartyDTO;
+export type ScanGovernment = GovernmentDTO;
+export type ScanUserLite = UserDTO;
+export type ScanRegion = RegionDTO;
 
 const BATCH_SIZE = 100;
 
