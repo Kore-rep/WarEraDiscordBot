@@ -1,6 +1,13 @@
 import { Client, TextChannel, User, EmbedBuilder } from 'discord.js';
 import { logger } from '../../utils/logger';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
+import { splitMessage } from './messageChunker';
+
+/** Optional extras for a channel send. */
+export interface SendOptions {
+  /** Role ids to mention; rendered as `<@&id>` on the first chunk only. */
+  roleIds?: string[];
+}
 
 /**
  * Service for handling Discord-related operations
@@ -80,166 +87,63 @@ export class DiscordService {
   }
 
   /**
-   * Send a message to a specific server's channel, mentioning specific roles
-   * 
-   * @param serverId - Discord server ID
-   * @param roleIds - Array of role IDs to mention
-   * @param message - Optional custom message (defaults to mentioning roles)
+   * Send a message to a channel by id. This is the single entry point for channel
+   * sends: it optionally mentions roles (on the first chunk only) and automatically
+   * splits content over Discord's 2000-char limit into multiple messages.
+   *
+   * @returns the id of the first message sent, or null if nothing was sent / it failed.
    */
-  async sendMentionMessage(serverId: string, roleIds: string[], message?: string): Promise<void> {
-    const channel = this.channels.get(serverId);
-    
-    if (!channel) {
-      throw new Error(`Channel not initialized for server ${serverId}. Call initialize() first.`);
-    }
-
-    if (roleIds.length === 0) {
-      logger.debug(`No roles to mention for server ${serverId}`);
-      return;
-    }
-
-    try {
-      // Build mention string for roles (format: <@&roleId>)
-      const mentions = roleIds
-        .map(roleId => `<@&${roleId}>`)
-        .join(' ');
-
-      // Default message if none provided
-      const finalMessage = message || `${mentions}`;
-
-      // Send the message
-      await channel.send(finalMessage);
-      
-      logger.info(`Sent mention message to ${roleIds.length} role(s) in server ${serverId} (channel: ${channel.name})`);
-    } catch (error) {
-      logger.error(`Failed to send mention message to server ${serverId}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send a general message to a specific server's channel (without mentions)
-   * 
-   * @param serverId - Discord server ID
-   * @param message - Message content to send
-   */
-  async sendMessage(serverId: string, message: string): Promise<void> {
-    const channel = this.channels.get(serverId);
-    
-    if (!channel) {
-      throw new Error(`Channel not initialized for server ${serverId}. Call initialize() first.`);
-    }
-
-    try {
-      await channel.send(message);
-      logger.debug(`Sent message to server ${serverId} (channel: ${channel.name})`);
-    } catch (error) {
-      logger.error(`Failed to send message to server ${serverId}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send a bounty alert message with optional role mentions (fire-and-forget, no tracking)
-   * Used by the simplified bounty system that doesn't track or update messages
-   * 
-   * @param serverId - Discord server ID
-   * @param message - Formatted bounty alert message
-   * @param roleIds - Array of role IDs to mention (if threshold is met)
-   */
-  async sendBountyAlert(serverId: string, message: string, roleIds: string[] = []): Promise<void> {
-    let channel = this.channels.get(serverId);
-    
-    // If channel not initialized, try to initialize it now
-    if (!channel) {
-      const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (serverConfig?.bountyBattles?.channelId) {
-        await this.initializeServerChannel(serverId, serverConfig.bountyBattles.channelId);
-        channel = this.channels.get(serverId);
-      }
-    
-      if (!channel) {
-        throw new Error(`Channel not initialized for server ${serverId}. Server may not be configured or channel is invalid.`);
-      }
-    }
-
-    try {
-      // Build role mentions if provided
-      const mentions = roleIds.length > 0
-        ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
-        : '';
-      
-      // Combine mentions with message
-      const finalMessage = mentions 
-        ? `${mentions}\n\n${message}`
-        : message;
-
-      // Send the alert (fire-and-forget, no tracking)
-      await channel.send(finalMessage);
-      
-      logger.info(`Sent bounty alert to server ${serverId} (channel: ${channel.name}, mentions: ${roleIds.length})`);
-    } catch (error) {
-      logger.error(`Failed to send bounty alert to server ${serverId}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send a mercenary contract alert message with optional role mentions (fire-and-forget, no tracking)
-   * Uses the mercenary contracts channel configured for the server
-   * 
-   * @param serverId - Discord server ID
-   * @param message - Formatted mercenary contract alert message
-   * @param roleIds - Array of role IDs to mention
-   */
-  async sendMercenaryContractAlert(serverId: string, message: string, roleIds: string[] = []): Promise<void> {
-    try {
-      const serverConfig = ServerConfigManager.getServerConfig(serverId);
-      if (!serverConfig?.mercenaryContracts?.channelId) {
-        throw new Error(`Mercenary contracts channel not configured for server ${serverId}`);
-      }
-
-      // Fetch the mercenary contracts channel dynamically
-      const channel = await this.client.channels.fetch(serverConfig.mercenaryContracts.channelId);
-      if (!channel || !channel.isTextBased()) {
-        throw new Error(`Mercenary contracts channel ${serverConfig.mercenaryContracts.channelId} is not a valid text channel for server ${serverId}`);
-      }
-
-      // Build role mentions if provided
-      const mentions = roleIds.length > 0
-        ? roleIds.map(roleId => `<@&${roleId}>`).join(' ')
-        : '';
-      
-      // Combine mentions with message
-      const finalMessage = mentions 
-        ? `${mentions}\n\n${message}`
-        : message;
-
-      // Send the alert (fire-and-forget, no tracking)
-      await (channel as TextChannel).send(finalMessage);
-      
-      logger.info(`Sent mercenary contract alert to server ${serverId} (channel: ${(channel as TextChannel).name}, mentions: ${roleIds.length})`);
-    } catch (error) {
-      logger.error(`Failed to send mercenary contract alert to server ${serverId}`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Send a message to a channel by ID (fetch). Used when the target is not the server's default bounty channel.
-   */
-  async sendMessageToChannelById(channelId: string, message: string): Promise<void> {
+  async sendToChannel(channelId: string, content: string, options: SendOptions = {}): Promise<string | null> {
     try {
       const channel = await this.client.channels.fetch(channelId);
       if (!channel || !channel.isTextBased()) {
-        throw new Error(`Channel ${channelId} is not a text channel`);
+        logger.error(`Channel ${channelId} is not a text channel`);
+        return null;
       }
-      await (channel as TextChannel).send(message);
-      logger.debug(`Sent message to channel ${channelId}`);
+      const textChannel = channel as TextChannel;
+
+      const mentions = (options.roleIds ?? [])
+        .map(roleId => `<@&${roleId}>`)
+        .join(' ');
+      const body = mentions ? `${mentions}\n\n${content}` : content;
+
+      const chunks = splitMessage(body);
+      let firstMessageId: string | null = null;
+      for (const chunk of chunks) {
+        const sent = await textChannel.send(chunk);
+        firstMessageId ??= sent.id;
+      }
+
+      logger.debug(`Sent ${chunks.length} message chunk(s) to channel ${channelId} (mentions: ${options.roleIds?.length ?? 0})`);
+      return firstMessageId;
     } catch (error) {
       logger.error(`Failed to send message to channel ${channelId}`, error);
-      throw error;
+      return null;
     }
+  }
+
+  /**
+   * Send a bounty alert to a server's configured bounty-battles channel.
+   */
+  async sendBountyAlert(serverId: string, message: string, roleIds: string[] = []): Promise<string | null> {
+    const channelId = ServerConfigManager.getServerConfig(serverId)?.bountyBattles?.channelId;
+    if (!channelId) {
+      logger.warn(`No bounty-battles channel configured for server ${serverId}`);
+      return null;
+    }
+    return this.sendToChannel(channelId, message, { roleIds });
+  }
+
+  /**
+   * Send a mercenary contract alert to a server's configured mercenary-contracts channel.
+   */
+  async sendMercenaryContractAlert(serverId: string, message: string, roleIds: string[] = []): Promise<string | null> {
+    const channelId = ServerConfigManager.getServerConfig(serverId)?.mercenaryContracts?.channelId;
+    if (!channelId) {
+      logger.warn(`No mercenary-contracts channel configured for server ${serverId}`);
+      return null;
+    }
+    return this.sendToChannel(channelId, message, { roleIds });
   }
 
   /**
@@ -313,36 +217,5 @@ export class DiscordService {
     }
   }
 
-  /**
-   * Send a message to a specific channel by ID within a server context.
-   *
-   * @param serverId - Discord server ID
-   * @param channelId - Discord channel ID
-   * @param content - Message content
-   * @returns Message ID if successful, null otherwise
-   */
-  async sendMessageToChannel(serverId: string, channelId: string, content: string): Promise<string | null> {
-    try {
-      // Try to get channel from cache first
-      let channel = this.channels.get(serverId);
-      
-      // If not in cache or different channel, fetch it
-      if (!channel || channel.id !== channelId) {
-        const fetchedChannel = await this.client.channels.fetch(channelId);
-        if (!fetchedChannel?.isTextBased()) {
-          logger.error(`Channel ${channelId} is not a text channel`);
-          return null;
-        }
-        channel = fetchedChannel as TextChannel;
-      }
-
-      const message = await channel.send(content);
-      logger.debug(`Sent message to channel ${channelId} in server ${serverId}`);
-      return message.id;
-    } catch (error) {
-      logger.error(`Failed to send message to channel ${channelId} in server ${serverId}`, error);
-      return null;
-    }
-  }
 }
 

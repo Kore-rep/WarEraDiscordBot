@@ -17,7 +17,6 @@ import {
 } from './spectreBuildingStateStore';
 import {
   buildRegionBuildingSnapshot,
-  chunkLines,
   diffAllRegions,
   findForeignRegionsNeighboringCountry,
 } from './spectreBuildingLogic';
@@ -156,12 +155,9 @@ export class SpectreService implements ScheduledTask {
       if (bodyLines.length === 0) {
         continue;
       }
-      const allLines = [REPORT_TITLE, '', ...bodyLines];
-      const chunks = chunkLines(allLines);
-      for (let i = 0; i < chunks.length; i++) {
-        const part = chunks.length > 1 ? `\n(${i + 1}/${chunks.length})` : '';
-        await this.discordService.sendMessageToChannelById(channelId, chunks[i] + part);
-      }
+      // DiscordService splits anything over the 2000-char limit into multiple messages.
+      const report = [REPORT_TITLE, '', ...bodyLines].join('\n');
+      await this.discordService.sendToChannel(channelId, report);
     }
   }
 

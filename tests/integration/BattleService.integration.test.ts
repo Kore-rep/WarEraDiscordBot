@@ -42,7 +42,7 @@ describe('BattleService Integration', () => {
       regions: new Map(),
     });
     mockApiService.filterBattlesWithBountyRewards = jest.fn((battles: any[]) => battles);
-    mockDiscordService.sendBountyAlert = jest.fn().mockResolvedValue(undefined);
+    mockDiscordService.sendBountyAlert = jest.fn().mockResolvedValue(null);
 
     setConfiguredServers(['server1']);
   });
@@ -90,7 +90,7 @@ describe('BattleService Integration', () => {
       });
       mockDiscordService.sendBountyAlert
         .mockRejectedValueOnce(new Error('Discord Error'))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(null);
 
       await expect(battleService.processBattles()).resolves.not.toThrow();
       expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledTimes(2);

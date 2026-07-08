@@ -52,6 +52,10 @@ Sequential/dependent requests (request 2 needs request 1's result) can't be batc
 
 `SchedulerService` (`src/services/scheduler/`) owns every recurring task. Do **not** add your own `setInterval`. Implement the `ScheduledTask` interface (`name`, `intervalMs`, optional `runOnStart`/`initialDelayMs`, `runCycle()`) and register the instance in the array passed to `SchedulerService` in `Bot.ts`. The scheduler isolates errors so one failing task can't stop the others.
 
+## Discord output
+
+All channel sends go through **`DiscordService.sendToChannel(channelId, content, { roleIds })`** — a single method that optionally mentions roles (first chunk only) and automatically splits content over Discord's 2000-char limit into multiple messages. Do **not** add separate mention/no-mention send methods, and do **not** chunk messages inside feature services — send the full content and let `DiscordService` chunk. The one chunking implementation lives in `src/services/discord/messageChunker.ts` (`splitMessage`); reuse it (e.g. for interaction replies) rather than writing another.
+
 ## Persistence
 
 Per-server config and state go through `ServerConfigManager` (`src/utils/serverConfigManager.ts`) — always pass `serverId`. Persistence is migrating from JSON files to **SQLite via Prisma** (repository classes); prefer the persistence layer over hand-rolled `fs`/JSON reads.
@@ -72,4 +76,5 @@ Requires the WarEra SDK at `../WarEraSDK`. If the build reports missing SDK expo
 - ❌ Call the SDK or `getClient()` from a command file.
 - ❌ Make independent requests sequentially instead of batching them.
 - ❌ Add ad-hoc `setInterval`s outside the scheduler.
+- ❌ Add mention/no-mention send variants, or chunk messages inside a feature service — use `DiscordService.sendToChannel` + `splitMessage`.
 - ❌ Put feature-specific code in `src/utils/`, or read/write persistence without a `serverId`.

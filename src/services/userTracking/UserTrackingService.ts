@@ -158,7 +158,7 @@ export class UserTrackingService implements ScheduledTask {
         `- Inactivity threshold: ${trackedUser.inactivityDays} day${trackedUser.inactivityDays !== 1 ? 's' : ''}\n\n` +
         `This user may need attention or follow-up.`;
 
-      await this.discordService.sendMessageToChannel(serverId, trackedUser.channelId, message);
+      await this.discordService.sendToChannel(trackedUser.channelId, message);
       
       logger.info(
         `Sent inactivity notification for user ${trackedUser.userId} (${username}) ` +

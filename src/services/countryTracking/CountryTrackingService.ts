@@ -176,7 +176,7 @@ export class CountryTrackingService implements ScheduledTask {
         }
       }
 
-      await this.discordService.sendMessageToChannel(serverId, trackedCountry.channelId, message);
+      await this.discordService.sendToChannel(trackedCountry.channelId, message);
       
       logger.info(
         `Sent ${alertType} population alert for country ${trackedCountry.countryId} (${trackedCountry.countryName}) ` +
