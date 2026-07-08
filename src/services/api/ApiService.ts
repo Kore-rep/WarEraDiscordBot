@@ -1,28 +1,19 @@
-import { createAPI, APIClient } from "warera-sdk";
-import { logger } from "../../utils/logger";
-import { BotConfig } from "../../config/config";
-import { ServerConfigManager } from "../../utils/serverConfigManager";
-import { InMemoryCacheProvider } from "./InMemoryCacheProvider";
-import { SharedRateLimiter } from "./SharedRateLimiter";
-
-// Infer types from SDK method return types
-type GetBattlesResponse = Awaited<
-  ReturnType<APIClient["battle"]["getBattles"]>
->;
-type BattleDTO = GetBattlesResponse["result"]["data"]["items"][number];
-type GetCountryByIdResponse = Awaited<
-  ReturnType<APIClient["country"]["getCountryById"]>
->;
-type CountryDTO = GetCountryByIdResponse["result"]["data"];
-type GetRegionsObjectResponse = Awaited<
-  ReturnType<APIClient["region"]["getRegionsObject"]>
->;
-type RegionDTO = GetRegionsObjectResponse["result"]["data"][string];
-type GetPaginatedAuctionsResponse = Awaited<
-  ReturnType<APIClient["mercenaryContractAuction"]["getPaginatedAuctions"]>
->;
-type MercenaryContractAuctionDTO =
-  GetPaginatedAuctionsResponse["result"]["data"]["items"][number];
+import { createAPI, APIClient } from 'warera-sdk';
+import type {
+  BattleDTO,
+  CountryDTO,
+  RegionDTO,
+  MercenaryContractAuctionDTO,
+  GetBattlesResponse,
+  GetCountryByIdResponse,
+  GetPaginatedAuctionsResponse,
+  RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
+} from 'warera-sdk';
+import { logger } from '../../utils/logger';
+import { BotConfig } from '../../config/config';
+import { ServerConfigManager } from '../../utils/serverConfigManager';
+import { InMemoryCacheProvider } from './InMemoryCacheProvider';
+import { SharedRateLimiter } from './SharedRateLimiter';
 
 /** Page size for `battle.getBattles` cursor pagination (matches typical API max page size). */
 const BATTLES_PAGE_SIZE = 100;

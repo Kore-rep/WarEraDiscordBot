@@ -6,7 +6,7 @@ New here? Read [`docs/ONBOARDING.md`](docs/ONBOARDING.md) for the structure and 
 
 ## What this is
 
-A TypeScript / discord.js v14 bot that wraps the local `warera-sdk` (`../WarEraSDK`) to serve WarEra game data. It responds to slash commands and runs background tasks on timers.
+A TypeScript / discord.js v14 bot that wraps the `warera-sdk` package to serve WarEra game data. The SDK is a public git dependency fetched from GitHub (`git+https://github.com/Kore-rep/WarEraSDK.git`, pinned to a commit in `package.json`) — no local checkout is required. It responds to slash commands and runs background tasks on timers.
 
 **The bot runs in MANY Discord servers at once.** Everything is keyed by Discord **`serverId`** (guild id). Never assume a single server: always scope reads, writes, and messages by `serverId`, and iterate all configured servers in background tasks.
 
@@ -73,7 +73,9 @@ npm test        # jest
 npm run dev     # run from source
 ```
 
-Requires the WarEra SDK at `../WarEraSDK`. If the build reports missing SDK exports, that sibling SDK is out of date — rebuild it first.
+ESLint and Prettier are wired together via `eslint-config-prettier` (Prettier owns formatting, ESLint owns correctness). Config lives in `eslint.config.js` and `.prettierrc.json`.
+
+The WarEra SDK is a git dependency (`warera-sdk` in `package.json`), fetched from GitHub and built automatically via its `prepare` script on `npm install`. If the build reports missing SDK exports, bump the pinned commit to a newer SDK revision (`npm install warera-sdk@github:Kore-rep/WarEraSDK#<ref>`), then rebuild. Working on the SDK itself? Point the dependency at a local checkout with `npm install ../WarEraSDK` temporarily, but don't commit that `file:` reference.
 
 ## Don't
 

@@ -1,36 +1,26 @@
 # Use Node.js LTS version
 FROM node:18-alpine
-RUN apk add --no-cache openssl
+# openssl: required by Prisma. git: required by npm to fetch the warera-sdk git dependency.
+RUN apk add --no-cache openssl git
 # Set working directory
 WORKDIR /app
 
-# Copy SDK into build context (needed for local dependency)
-# IMPORTANT: Build from parent directory: docker build -f WarEraBot/Dockerfile -t warera-discord-bot ..
-# This allows access to both WarEraBot and WarEraSDK directories
-COPY WarEraSDK ./sdk
+# warera-sdk is a public git dependency (see package.json), so the SDK no longer
+# needs to be copied into the build context. Build from this repository directly:
+# `docker build -t warera-discord-bot .` (the COPY paths below are relative to the repo root).
 
-# Build the SDK first (it needs to be built before it can be used)
-WORKDIR /app/sdk
-RUN npm ci && npm run build
-WORKDIR /app
+# Copy package files + Prisma schema first (schema is needed for `prisma generate`)
+COPY package*.json ./
+COPY prisma ./prisma
 
-# Copy WarEraBot package files + Prisma schema first (schema is needed for `prisma generate`)
-COPY WarEraDiscordBot/package*.json ./
-COPY WarEraDiscordBot/prisma ./prisma
-
-# Update package.json to use ./sdk instead of ../WarEraSDK
-# npm install will install it as a local package dependency into node_modules
-RUN sed -i 's|"warera-sdk": "file:../WarEraSDK"|"warera-sdk": "file:./sdk"|' package.json
-
-# Install ALL dependencies (including dev dependencies needed for build)
-# Using npm install instead of npm ci because we modified package.json
-# npm install will install the SDK from ./sdk into node_modules, treating it like a normal module
-RUN npm install
+# Install ALL dependencies (including dev deps needed for build). npm ci clones the
+# warera-sdk git dependency over HTTPS and runs its prepare script to build the SDK's dist/.
+RUN npm ci
 
 # Now copy the rest of WarEraBot files (excluding node_modules which we just installed)
 # Copy source files explicitly to avoid copying node_modules symlinks
-COPY WarEraDiscordBot/src ./src
-COPY WarEraDiscordBot/tsconfig.json ./
+COPY src ./src
+COPY tsconfig.json ./
 
 # Generate the Prisma client and build TypeScript (the build script runs `prisma generate && tsc`)
 RUN npm run build

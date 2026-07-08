@@ -4,7 +4,7 @@ A short guide to how this repo is put together and how to make common changes. W
 
 ## What the bot does
 
-It is a [discord.js](https://discord.js.org/) bot that talks to the WarEra game API (through a local SDK) and:
+It is a [discord.js](https://discord.js.org/) bot that talks to the WarEra game API (through the `warera-sdk` package) and:
 
 - responds to **slash commands** people type in Discord (e.g. `/scanfor`, `/leaderboard`), and
 - runs **background tasks** on timers (polling for bounty battles, tracking users/countries, refreshing leaderboards).
@@ -111,4 +111,4 @@ npm start        # apply migrations, then run the compiled bot
 npm test         # run the Jest test suite (uses a throwaway SQLite db per worker)
 ```
 
-The bot depends on the WarEra SDK living next to this repo at `../WarEraSDK`. If the build complains about missing SDK exports, that sibling SDK is probably out of date — rebuild it first.
+The bot depends on the WarEra SDK, a public git dependency fetched from GitHub (`git+https://github.com/Kore-rep/WarEraSDK.git`, pinned to a commit in `package.json`) — `npm install` clones and builds it automatically, so no local checkout is needed (you do need `git` and network access to GitHub). If the build complains about missing SDK exports, the pinned commit predates them: bump it with `npm install warera-sdk@github:Kore-rep/WarEraSDK#<ref>`.
