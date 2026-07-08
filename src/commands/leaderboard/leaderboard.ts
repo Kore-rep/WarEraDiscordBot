@@ -367,10 +367,10 @@ async function handleWeeklyGet(interaction: ChatInputCommandInteraction): Promis
     return;
   }
 
-  const userCsv = readWeeklySnapshot(serverId, 'users', weekInput);
-  const muCsv = readWeeklySnapshot(serverId, 'mu', weekInput);
+  const userCsv = await readWeeklySnapshot(serverId, 'users', weekInput);
+  const muCsv = await readWeeklySnapshot(serverId, 'mu', weekInput);
   if (!userCsv && !muCsv) {
-    const available = listAvailableWeeks(serverId);
+    const available = await listAvailableWeeks(serverId);
     let message = `No weekly damage snapshot found for week ending **${weekInput}**.`;
     if (available.length > 0) {
       message += `\n\nAvailable weeks:\n${available.map(week => `• ${week}`).join('\n')}`;
@@ -420,7 +420,7 @@ async function handleWeeklyList(interaction: ChatInputCommandInteraction): Promi
     return;
   }
 
-  const available = listAvailableWeeks(serverId);
+  const available = await listAvailableWeeks(serverId);
   if (available.length === 0) {
     await interaction.reply({
       content: 'No weekly damage snapshots are available yet. Snapshots are updated hourly with the leaderboard.',

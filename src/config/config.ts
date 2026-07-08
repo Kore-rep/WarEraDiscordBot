@@ -243,20 +243,10 @@ export interface BotConfig {
 }
 
 /**
- * Loads server configurations from ServerConfigManager
- * ServerConfigManager must be initialized first via loadConfigs()
+ * Validates and loads configuration from environment variables and the database.
+ * Throws an error if required variables are missing.
  */
-function loadServerConfigs(): Map<string, ServerConfig> {
-  // ServerConfigManager has already been initialized with loadConfigs() at this point
-  // Just retrieve the configs from memory
-  return ServerConfigManager.readServerConfigs();
-}
-
-/**
- * Validates and loads configuration from environment variables and serverConfig.json
- * Throws an error if required variables are missing
- */
-export function loadConfig(): BotConfig {
+export async function loadConfig(): Promise<BotConfig> {
   const discordToken = process.env.DISCORD_TOKEN;
   const intervalMinutes = process.env.POLLING_INTERVAL_MINUTES;
 
@@ -273,11 +263,11 @@ export function loadConfig(): BotConfig {
     throw new Error('POLLING_INTERVAL_MINUTES must be a positive number');
   }
 
-  // Initialize ServerConfigManager cache - this is the single source of truth for server configs
-  ServerConfigManager.loadConfigs();
+  // Initialize ServerConfigManager cache from the database - the single source of truth
+  await ServerConfigManager.loadConfigs();
 
-  // Load server configurations from ServerConfigManager
-  const servers = loadServerConfigs();
+  // Load server configurations from the now-initialized cache
+  const servers = ServerConfigManager.readServerConfigs();
 
   return {
     discord: {

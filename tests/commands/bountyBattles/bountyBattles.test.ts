@@ -1,11 +1,9 @@
 import { bountyBattlesCommand } from '../../../src/commands/bountyBattles/bountyBattles';
 import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
 import { ServerConfigManager } from '../../../src/utils/serverConfigManager';
-import { DiscordService } from '../../../src/services/discord/DiscordService';
 
 // Mock dependencies
 jest.mock('../../../src/utils/serverConfigManager');
-jest.mock('../../../src/services/discord/DiscordService');
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
     info: jest.fn(),
@@ -18,7 +16,6 @@ jest.mock('../../../src/utils/logger', () => ({
 describe('bountyBattlesCommand', () => {
   let mockInteraction: any;
   let mockReply: jest.Mock;
-  let mockDiscordService: jest.Mocked<DiscordService>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -35,10 +32,6 @@ describe('bountyBattlesCommand', () => {
         getNumber: jest.fn(),
       },
     };
-
-    mockDiscordService = {
-      clearServerTracking: jest.fn(),
-    } as any;
   });
 
   describe('command structure', () => {
@@ -72,7 +65,7 @@ describe('bountyBattlesCommand', () => {
       (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-123',
@@ -97,7 +90,7 @@ describe('bountyBattlesCommand', () => {
       (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-789',
@@ -126,7 +119,7 @@ describe('bountyBattlesCommand', () => {
       (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-new',
@@ -159,7 +152,7 @@ describe('bountyBattlesCommand', () => {
       (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalledWith('test-guild-id', {
         channelId: 'channel-123',
@@ -209,60 +202,12 @@ describe('bountyBattlesCommand', () => {
       (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
       (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(null);
 
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
+      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction);
 
       // Should update ServerConfigManager (which updates in-memory cache)
       expect(ServerConfigManager.updateBountyBattlesConfig).toHaveBeenCalled();
     });
 
-    it('should clear message tracking when channel changes', async () => {
-      const mockChannel = {
-        id: 'new-channel-456',
-        type: ChannelType.GuildText,
-      };
-      const existingConfig = {
-        bountyBattles: {
-          channelId: 'old-channel-123',
-          roleIds: ['role-1'],
-          enabled: true,
-          bountyThreshold: 0,
-        },
-      };
-
-      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
-      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
-      (mockInteraction.options!.getNumber as jest.Mock).mockReturnValue(null);
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
-
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
-
-      // Should clear message tracking when channel changes
-      expect(mockDiscordService.clearServerTracking).toHaveBeenCalledWith('test-guild-id');
-    });
-
-    it('should not clear message tracking when channel stays the same', async () => {
-      const mockChannel = {
-        id: 'same-channel-123',
-        type: ChannelType.GuildText,
-      };
-      const existingConfig = {
-        bountyBattles: {
-          channelId: 'same-channel-123',
-          roleIds: ['role-1'],
-          enabled: true,
-          bountyThreshold: 0,
-        },
-      };
-
-      (mockInteraction.options!.getChannel as jest.Mock).mockReturnValue(mockChannel);
-      (mockInteraction.options!.getRole as jest.Mock).mockReturnValue(null);
-      (ServerConfigManager.getServerConfig as jest.Mock).mockReturnValue(existingConfig);
-
-      await bountyBattlesCommand.execute(mockInteraction as ChatInputCommandInteraction, mockDiscordService);
-
-      // Should NOT clear message tracking when channel stays the same
-      expect(mockDiscordService.clearServerTracking).not.toHaveBeenCalled();
-    });
   });
 
   describe('/bountybattles config view', () => {

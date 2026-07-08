@@ -1,12 +1,11 @@
 import { ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetUserLiteResponse, GetUsersByCountryParams } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 
-// Type alias for the actual user data from the API response
-type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
-import { groupPlayersByMode, sortUsersByLevel } from '../../../utils/skillAnalyzer';
-import { createBuildSummary } from '../../../utils/userStatusFormatter';
+type UserDTO = ScanUserLite;
+import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
+import { createBuildSummary } from './userStatusFormatter';
 
 /**
  * Handle /scanfor country builds
@@ -17,7 +16,7 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
     const countryParam = interaction.options.getString('country', true);
     const minLevel = interaction.options.getInteger('min_level', true);
 
@@ -30,22 +29,20 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
     
     // First try as direct ID
     if (countryParam.match(/^[0-9a-fA-F]{24}$/)) {
-      try {
-        const countryResponse = await apiClient.country.getCountryById(countryParam);
-        countryId = countryParam;
-        countryName = countryResponse.result.data.name;
-      } catch {
+      const country = await scan.getCountryById(countryParam);
+      if (!country) {
         await interaction.editReply({
           content: `❌ Country with ID "${countryParam}" not found.`,
         });
         return;
       }
+      countryId = countryParam;
+      countryName = country.name;
     } else {
       // Search by name
       try {
-        const allCountriesResponse = await apiClient.country.getAllCountries();
-        const countries = allCountriesResponse.result.data;
-        
+        const countries = await scan.getAllCountries();
+
         const foundCountry = countries.find(c => 
           c.name.toLowerCase() === countryParam.toLowerCase()
         );
@@ -94,54 +91,38 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
         `⏳ Fetching user list...`,
     });
 
-    let allUserIds: string[] = [];
-    let cursor: string | null = null;
-    let totalCitizens = 0;
-
-    // Handle pagination for large countries
-    let pageCount = 0;
     const MAX_PAGES = 1000; // Safety limit to prevent infinite loops
-    do {
-      try {
-        // Use updated SDK method with pagination parameters
-        const params: GetUsersByCountryParams = { countryId, limit: 100 };
-        if (cursor) {
-          params.cursor = cursor;
-        }
-        const usersResponse = await apiClient.user.getUsersByCountry(params);
-        const usersData = usersResponse.result.data;
-        
-        allUserIds.push(...usersData.items.map((item: any) => item._id));
-        totalCitizens += usersData.items.length;
-        cursor = usersData.nextCursor;
-        pageCount++;
-        
-        logger.info(`Fetched ${usersData.items.length} user IDs (page ${pageCount}), total so far: ${totalCitizens}`);
-        
-        // Update progress periodically
-        if (pageCount % 5 === 0) {
-          await interaction.editReply({
-            content: `**Country Build Analysis**\n\n` +
-              `🔍 **Country:** ${countryName}\n` +
-              `📊 **Minimum Level:** ${minLevel}\n\n` +
-              `⏳ Fetching user list... (Page ${pageCount})\n` +
-              `👥 **Users found:** ${totalCitizens.toLocaleString()}`,
-          });
-        }
-        
-        // Small delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-      } catch (error) {
-        logger.error('Error fetching users by country:', error);
-        await interaction.editReply({
-          content: '❌ Error fetching user list. The country may not exist or the API may be unavailable.',
-        });
-        return;
-      }
-    } while (cursor && pageCount < MAX_PAGES);
+    let allUserIds: string[];
+    let totalCitizens: number;
+    let hitPageLimit: boolean;
+    try {
+      const result = await scan.getUserIdsByCountry(
+        countryId,
+        (total, pages) => {
+          if (pages % 5 === 0) {
+            void interaction.editReply({
+              content: `**Country Build Analysis**\n\n` +
+                `🔍 **Country:** ${countryName}\n` +
+                `📊 **Minimum Level:** ${minLevel}\n\n` +
+                `⏳ Fetching user list... (Page ${pages})\n` +
+                `👥 **Users found:** ${total.toLocaleString()}`,
+            });
+          }
+        },
+        MAX_PAGES
+      );
+      allUserIds = result.userIds;
+      totalCitizens = result.total;
+      hitPageLimit = result.hitPageLimit;
+    } catch (error) {
+      logger.error('Error fetching users by country:', error);
+      await interaction.editReply({
+        content: '❌ Error fetching user list. The country may not exist or the API may be unavailable.',
+      });
+      return;
+    }
 
-    if (pageCount >= MAX_PAGES) {
+    if (hitPageLimit) {
       logger.warn(`Hit maximum page limit (${MAX_PAGES}) for country ${countryId}`);
       await interaction.editReply({
         content: `⚠️ Large country detected - processed ${MAX_PAGES} pages (${totalCitizens.toLocaleString()} users). Analysis may be incomplete.`,
@@ -168,58 +149,20 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
         `📡 Fetching user details (${userBatches} batch${userBatches !== 1 ? 'es' : ''})...`,
     });
 
-    // Step 4: Batch fetch user details in chunks of 100
-    const USER_BATCH_SIZE = 100;
-    const users: UserDTO[] = [];
-    let processedBatches = 0;
-    
-    for (let i = 0; i < allUserIds.length; i += USER_BATCH_SIZE) {
-      const userIdChunk = allUserIds.slice(i, i + USER_BATCH_SIZE);
-      
-      // Create a new batch client instance for this chunk
-      const batchClient = apiService.createCommandBatchClient();
-      
-      // Queue all user requests for this chunk
-      const userPromises = userIdChunk.map(userId => 
-        batchClient.user.getUserLite(userId)
-      );
-      
-      try {
-        // Execute batch
-        await batchClient.runBatch();
-        
-        // Get all results
-        const userResults = await Promise.all(userPromises);
-        
-        // Process results and add valid users
-        for (const result of userResults) {
-          if (result?.result?.data) {
-            users.push(result.result.data);
-          }
-        }
-        
-        processedBatches++;
-        
-        // Update progress every few batches
-        if (processedBatches % 3 === 0 || processedBatches === userBatches) {
-          await interaction.editReply({
-            content: `**Country Build Analysis**\n\n` +
-              `🔍 **Country:** ${countryName}\n` +
-              `📊 **Minimum Level:** ${minLevel}\n` +
-              `👥 **Total Citizens:** ${totalCitizens.toLocaleString()}\n\n` +
-              `📡 Processing... (${processedBatches}/${userBatches} batches complete)\n` +
-              `✅ **Users Loaded:** ${users.length.toLocaleString()}`,
-          });
-        }
-        
-        // Small delay to be respectful to API
-        await new Promise(resolve => setTimeout(resolve, 200));
-        
-      } catch (error) {
-        logger.error(`Error processing user batch ${processedBatches + 1}:`, error);
-        // Continue with next batch rather than failing completely
+    // Step 4: Batch fetch user details (batched inside ScanService)
+    const usersById = await scan.getUsersLiteByIds(allUserIds, (loaded, batchesDone) => {
+      if (batchesDone % 3 === 0 || batchesDone === userBatches) {
+        void interaction.editReply({
+          content: `**Country Build Analysis**\n\n` +
+            `🔍 **Country:** ${countryName}\n` +
+            `📊 **Minimum Level:** ${minLevel}\n` +
+            `👥 **Total Citizens:** ${totalCitizens.toLocaleString()}\n\n` +
+            `📡 Processing... (${batchesDone}/${userBatches} batches complete)\n` +
+            `✅ **Users Loaded:** ${loaded.toLocaleString()}`,
+        });
       }
-    }
+    });
+    const users: UserDTO[] = Array.from(usersById.values());
 
     if (users.length === 0) {
       await interaction.editReply({

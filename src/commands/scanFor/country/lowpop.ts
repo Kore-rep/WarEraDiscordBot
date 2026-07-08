@@ -1,10 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetAllCountriesResponse } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ScanService, ScanCountry } from '../../../services/scan/ScanService';
 import { ServerConfigManager } from '../../../utils/serverConfigManager';
 
-type CountryRow = GetAllCountriesResponse['result']['data'][number];
+type CountryRow = ScanCountry;
 
 function getActivePopulation(country: CountryRow): number {
   return country.rankings?.countryActivePopulation?.value ?? 0;
@@ -21,7 +21,7 @@ export async function handleCountryLowPop(
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
     const maxCitizens = interaction.options.getInteger('max_citizens', true);
     const groupName = interaction.options.getString('group');
     const serverId = interaction.guildId!;
@@ -55,22 +55,12 @@ export async function handleCountryLowPop(
 
       logger.info(`Lowpop: fetching ${group.countries.length} countries from group "${groupName}"...`);
       const countryIds = group.countries.map(c => c.countryId);
-      const batchClient = apiService.createCommandBatchClient();
-      const countryPromises = countryIds.map(id =>
-        batchClient.country.getCountryById(id, { cache: { ttl: 10 } })
-      );
-      await batchClient.runBatch();
-      const countryResponses = await Promise.all(countryPromises);
-
-      countries = countryResponses
-        .map(response => response?.result?.data)
-        .filter((c): c is CountryRow => c != null);
+      countries = await scan.getCountriesByIds(countryIds, 10);
 
       scanScope = `group "${groupName}" (${countries.length} countries)`;
     } else {
       logger.info('Lowpop: fetching all countries...');
-      const countriesResponse = (await apiClient.country.getAllCountries()) as GetAllCountriesResponse;
-      countries = countriesResponse.result.data;
+      countries = await scan.getAllCountries();
     }
 
     const below = countries

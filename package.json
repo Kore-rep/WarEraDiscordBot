@@ -4,14 +4,17 @@
   "description": "Discord bot for WarEra game that performs periodic API requests and mentions users",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "prisma generate && tsc",
+    "start": "prisma migrate deploy && node dist/index.js",
     "dev": "ts-node src/index.ts",
     "watch": "tsc --watch",
     "clean": "rimraf dist",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "prisma:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:import": "ts-node src/scripts/importJsonToSqlite.ts"
   },
   "keywords": [
     "discord",
@@ -25,8 +28,10 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.1",
+    "prisma": "^5.22.0",
     "warera-sdk": "file:../WarEraSDK"
   },
   "devDependencies": {

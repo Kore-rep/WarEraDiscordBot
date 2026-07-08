@@ -15,10 +15,14 @@ config/serverConfig.json
 # Legacy server configuration (for backwards compatibility)
 servers.json
 
-# Battle message tracking (generated at runtime)
-battles.json
+# SQLite database (generated at runtime; schema lives in prisma/migrations, which IS tracked)
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
 
-# Weekly damage snapshots (generated at runtime)
+# Legacy JSON/CSV persistence (migrated into SQLite; kept out of git)
+battles.json
 data/weekly-damage/
 
 # Logs

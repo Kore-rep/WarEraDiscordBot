@@ -4,6 +4,7 @@ import { TrackedProxyCountry, ProxyUser } from '../../config/config';
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
+import { ScanService } from '../../services/scan/ScanService';
 
 /**
  * Command builder for /proxy tracking
@@ -160,9 +161,11 @@ async function handleTrackingToggle(interaction: ChatInputCommandInteraction, ap
 
   try {
     // Fetch country data from API to get country name
-    const apiClient = apiService.getClient();
-    const apiResponse = await apiClient.country.getCountryById(countryId);
-    const countryData = apiResponse.result.data;
+    const countryData = await new ScanService(apiService).getCountryById(countryId);
+    if (!countryData) {
+      await interaction.editReply({ content: `Could not fetch data for country \`${countryId}\`.` });
+      return;
+    }
     const countryName = countryData.name;
 
     // Parse mentions
@@ -242,34 +245,10 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction, apiS
       return;
     }
 
-    // Get batch API client for efficient country data fetching
-    const batchClient = apiService.createCommandBatchClient();
-    
-    // Get unique proxy country IDs for population data
+    // Fetch population data for the unique proxy countries (batched inside ScanService)
     const proxyCountryIds = [...new Set(proxies.map(p => p.proxyCountryId))];
-    
-    // Create batch requests for country data
-    const countryPromises = proxyCountryIds.map(countryId => 
-      batchClient.country.getCountryById(countryId)
-    );
-
-    // Execute batch request
-    await batchClient.runBatch();
-    
-    // Get all country data
-    const countryResponses = await Promise.all(countryPromises);
-    const countryData = new Map<string, any>();
-    
-    for (let i = 0; i < proxyCountryIds.length; i++) {
-      try {
-        const response = countryResponses[i];
-        if (response && response.result?.data) {
-          countryData.set(proxyCountryIds[i], response.result.data);
-        }
-      } catch (error) {
-        logger.warn(`Failed to fetch data for country ${proxyCountryIds[i]}:`, error);
-      }
-    }
+    const countries = await new ScanService(apiService).getCountriesByIds(proxyCountryIds);
+    const countryData = new Map(countries.map(c => [c._id, c]));
 
     // Calculate cooldowns and group by proxy country
     const now = new Date();
@@ -375,23 +354,28 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
   await interaction.deferReply();
 
   try {
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
 
     // Fetch user data to get their current country
-    const userResponse = await apiClient.user.getUserLite(userId);
-    const userData = userResponse.result.data;
-    
+    const userData = await scan.getUserLite(userId);
+    if (!userData) {
+      await interaction.editReply({ content: `Could not fetch data for user \`${userId}\`.` });
+      return;
+    }
+
     // User's current country is the proxy country
     const proxyCountryId = userData.country;
 
     // Fetch country data for both countries
-    const [originalCountryResponse, proxyCountryResponse] = await Promise.all([
-      apiClient.country.getCountryById(originalCountryId),
-      apiClient.country.getCountryById(proxyCountryId)
+    const [originalCountryData, proxyCountryData] = await Promise.all([
+      scan.getCountryById(originalCountryId),
+      scan.getCountryById(proxyCountryId),
     ]);
 
-    const originalCountryData = originalCountryResponse.result.data;
-    const proxyCountryData = proxyCountryResponse.result.data;
+    if (!originalCountryData || !proxyCountryData) {
+      await interaction.editReply({ content: 'Could not fetch country data. Check the country IDs and try again.' });
+      return;
+    }
 
     // Check if user is already tracked
     const existingProxies = ServerConfigManager.getProxyUsers(serverId);

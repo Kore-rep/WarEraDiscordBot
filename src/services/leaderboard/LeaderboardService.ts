@@ -18,6 +18,7 @@ import {
   getCurrentWeekEndingDate,
   writeWeeklySnapshot,
 } from './weeklyDamageSnapshotStore';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 
 const USER_BATCH_SIZE = 100;
 
@@ -70,52 +71,28 @@ function topEntries<T>(
 }
 
 /**
- * Service for hourly leaderboard refresh and living Discord message updates
+ * Hourly leaderboard refresh (aligned to :01 past each hour) with living Discord
+ * message updates and weekly damage CSV snapshots.
  */
-export class LeaderboardService {
+export class LeaderboardService implements ScheduledTask {
+  readonly name = 'leaderboard';
+  readonly intervalMs = 60 * 60 * 1000; // 1 hour
+
   private discordService: DiscordService;
   private apiService: ApiService;
-  private timeoutId: NodeJS.Timeout | null = null;
-  private intervalId: NodeJS.Timeout | null = null;
 
   constructor(discordService: DiscordService, apiService: ApiService) {
     this.discordService = discordService;
     this.apiService = apiService;
   }
 
-  start(): void {
-    if (this.timeoutId || this.intervalId) {
-      logger.warn('Leaderboard service is already running');
-      return;
-    }
-
-    logger.info(
-      'Starting leaderboard service (hourly refresh at :01 past each hour, including weekly damage CSV)'
-    );
-
-    const now = new Date();
-    const nextRun = getNextHourlyRefresh(now);
-    const msUntilNext = nextRun.getTime() - now.getTime();
-
-    this.timeoutId = setTimeout(() => {
-      this.timeoutId = null;
-      void this.refreshAllEnabled();
-      this.intervalId = setInterval(() => {
-        void this.refreshAllEnabled();
-      }, 60 * 60 * 1000);
-    }, msUntilNext);
+  /** Align the first refresh to the next :01 past the hour. */
+  initialDelayMs(now: Date): number {
+    return getNextHourlyRefresh(now).getTime() - now.getTime();
   }
 
-  stop(): void {
-    if (this.timeoutId) {
-      clearTimeout(this.timeoutId);
-      this.timeoutId = null;
-    }
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-    logger.info('Leaderboard service stopped');
+  async runCycle(): Promise<void> {
+    await this.refreshAllEnabled();
   }
 
   async refreshServer(serverId: string): Promise<void> {
@@ -247,13 +224,13 @@ export class LeaderboardService {
         mu => mu.name
       );
       const weekEnding = getCurrentWeekEndingDate(now);
-      writeWeeklySnapshot(
+      await writeWeeklySnapshot(
         serverId,
         'users',
         weekEnding,
         buildUserWeeklyDamageCsv(weeklyUserEntries)
       );
-      writeWeeklySnapshot(
+      await writeWeeklySnapshot(
         serverId,
         'mu',
         weekEnding,

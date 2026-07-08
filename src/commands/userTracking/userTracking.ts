@@ -4,6 +4,7 @@ import { TrackedUser } from '../../config/config';
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
+import { ScanService } from '../../services/scan/ScanService';
 
 /**
  * Command builder for /user tracking
@@ -136,9 +137,11 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
 
   try {
     // Fetch user data from API to get username and current status
-    const apiClient = apiService.getClient();
-    const apiResponse = await apiClient.user.getUserLite(userId);
-    const userData = apiResponse.result.data;
+    const userData = await new ScanService(apiService).getUserLite(userId);
+    if (!userData) {
+      await interaction.editReply({ content: `Could not fetch data for user \`${userId}\`.` });
+      return;
+    }
     const username = userData.username;
     const lastConnectionAt = userData.dates.lastConnectionAt;
 

@@ -7,7 +7,6 @@ import { handleCountryLowPop } from './country/lowpop';
 import { handleCountryEthicsScan } from './country/ethics';
 import { ETHIC_SLASH_CHOICES } from './country/partyEthicsMapping';
 import { handleCountryBuilds } from './country/builds';
-import { handleCompanyProduction } from './company/production';
 
 /**
  * Command builder for /scanfor
@@ -80,22 +79,6 @@ export const scanForCommand = {
                 .setMinValue(1)
             )
         )
-    )
-    .addSubcommandGroup(group =>
-      group
-        .setName('company')
-        .setDescription('Scan companies')
-        .addSubcommand(subcommand =>
-          subcommand
-            .setName('production')
-            .setDescription('Count how many companies produce each item')
-            .addStringOption(option =>
-              option
-                .setName('country')
-                .setDescription('Filter to companies in a specific country (optional)')
-                .setRequired(false)
-            )
-        )
     ),
 
   async execute(interaction: ChatInputCommandInteraction, _discordService?: DiscordService, apiService?: ApiService): Promise<void> {
@@ -130,10 +113,6 @@ export const scanForCommand = {
           await handleCountryEthicsScan(interaction, apiService);
         } else if (subcommand === 'builds') {
           await handleCountryBuilds(interaction, apiService);
-        }
-      } else if (subcommandGroup === 'company') {
-        if (subcommand === 'production') {
-          await handleCompanyProduction(interaction, apiService);
         }
       }
     } catch (error) {

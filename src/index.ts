@@ -10,7 +10,7 @@ async function main(): Promise<void> {
     // Load configuration from environment variables
     logger.info('Loading configuration...');
     logger.info(`Log level: ${logger.getMinLevel()}`);
-    const config = loadConfig();
+    const config = await loadConfig();
 
     // Create and start the bot
     logger.info('Initializing bot...');

@@ -5,6 +5,7 @@ import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 import {
   getSpectreSnapshotState,
   getCountrySnapshots,
@@ -13,10 +14,9 @@ import {
   setResistanceCountrySnapshots,
   type RegionBuildingSnapshot,
   type SpectreStateRoot,
-} from '../../utils/spectreBuildingStateStore';
+} from './spectreBuildingStateStore';
 import {
   buildRegionBuildingSnapshot,
-  chunkLines,
   diffAllRegions,
   findForeignRegionsNeighboringCountry,
 } from './spectreBuildingLogic';
@@ -49,16 +49,22 @@ type MonitorTask = {
 };
 
 /**
- * Spectre military monitoring: same cadence as bounty polling (via PollingService).
+ * Spectre military monitoring, run as its own scheduled task on the poll interval.
  * Fetches region data once per cycle; aggregates Discord output per channel.
  */
-export class SpectreService {
+export class SpectreService implements ScheduledTask {
+  readonly name = 'spectre';
+  readonly intervalMs: number;
+
   constructor(
+    intervalMinutes: number,
     private readonly apiService: ApiService,
     private readonly discordService: DiscordService
-  ) {}
+  ) {
+    this.intervalMs = intervalMinutes * 60 * 1000;
+  }
 
-  async runSpectreCycle(): Promise<void> {
+  async runCycle(): Promise<void> {
     const servers = ServerConfigManager.readServerConfigs();
     const tasks: MonitorTask[] = [];
 
@@ -149,12 +155,9 @@ export class SpectreService {
       if (bodyLines.length === 0) {
         continue;
       }
-      const allLines = [REPORT_TITLE, '', ...bodyLines];
-      const chunks = chunkLines(allLines);
-      for (let i = 0; i < chunks.length; i++) {
-        const part = chunks.length > 1 ? `\n(${i + 1}/${chunks.length})` : '';
-        await this.discordService.sendMessageToChannelById(channelId, chunks[i] + part);
-      }
+      // DiscordService splits anything over the 2000-char limit into multiple messages.
+      const report = [REPORT_TITLE, '', ...bodyLines].join('\n');
+      await this.discordService.sendToChannel(channelId, report);
     }
   }
 

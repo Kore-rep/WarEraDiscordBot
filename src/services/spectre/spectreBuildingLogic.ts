@@ -1,6 +1,7 @@
 import type { APIClient } from 'warera-sdk';
 import type { BunkerUpgradeDTO } from 'warera-sdk';
-import type { MilitaryUpgradeSnapshot, RegionBuildingSnapshot } from '../../utils/spectreBuildingStateStore';
+import type { MilitaryUpgradeSnapshot, RegionBuildingSnapshot } from './spectreBuildingStateStore';
+import { splitMessage } from '../discord/messageChunker';
 
 type RegionDTO = Awaited<
   ReturnType<APIClient['region']['getRegionsObject']>
@@ -180,24 +181,10 @@ export function formatBuildingSnapshotLines(
   return lines;
 }
 
+/**
+ * Chunk an array of lines for an interaction reply. Delegates to the shared
+ * {@link splitMessage} so there is a single chunking implementation across the bot.
+ */
 export function chunkLines(lines: string[], maxLen: number = DEFAULT_CHUNK): string[] {
-  if (lines.length === 0) {
-    return [];
-  }
-  const chunks: string[] = [];
-  let current = '';
-
-  for (const line of lines) {
-    const piece = (current ? '\n' : '') + line;
-    if (current.length + piece.length > maxLen && current.length > 0) {
-      chunks.push(current);
-      current = line;
-    } else {
-      current += piece;
-    }
-  }
-  if (current.length > 0) {
-    chunks.push(current);
-  }
-  return chunks;
+  return splitMessage(lines.join('\n'), maxLen);
 }

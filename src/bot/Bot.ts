@@ -3,8 +3,9 @@ import { logger } from '../utils/logger';
 import { BotConfig } from '../config/config';
 import { ApiService } from '../services/api/ApiService';
 import { DiscordService } from '../services/discord/DiscordService';
-import { PollingService } from '../services/polling/PollingService';
-import { LegacyMessageTracker } from '../services/discord/LegacyMessageTracker';
+import { SchedulerService } from '../services/scheduler/SchedulerService';
+import { BattlePollTask } from '../services/scheduler/tasks/BattlePollTask';
+import { BattleCleanupTask } from '../services/scheduler/tasks/BattleCleanupTask';
 import { BattleService } from '../services/battle/BattleService';
 import { MercenaryContractService } from '../services/mercenary/MercenaryContractService';
 import { UserTrackingService } from '../services/userTracking';
@@ -13,6 +14,8 @@ import { ProxyTrackingService } from '../services/proxyTracking/ProxyTrackingSer
 import { LeaderboardService } from '../services/leaderboard/LeaderboardService';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
+import { ServerConfigManager } from '../utils/serverConfigManager';
+import { prisma } from '../persistence/prisma';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -25,11 +28,11 @@ export class Bot {
   private battleService: BattleService;
   private mercenaryContractService: MercenaryContractService;
   private spectreService: SpectreService;
-  private pollingService: PollingService;
   private userTrackingService: UserTrackingService;
   private countryTrackingService: CountryTrackingService;
   private proxyTrackingService: ProxyTrackingService;
   private leaderboardService: LeaderboardService;
+  private scheduler: SchedulerService;
   private commandHandler: CommandHandler;
   private isRunning = false;
 
@@ -45,23 +48,39 @@ export class Bot {
       ],
     });
 
-    // Initialize services  
-    const messageTracker = new LegacyMessageTracker();
+    // Initialize services
     this.apiService = new ApiService(config);
-    this.discordService = new DiscordService(this.client, messageTracker);
+    this.discordService = new DiscordService(this.client);
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.mercenaryContractService = new MercenaryContractService(this.discordService, this.apiService);
-    this.spectreService = new SpectreService(this.apiService, this.discordService);
-    this.pollingService = new PollingService(config, this.apiService, this.battleService, this.mercenaryContractService, this.spectreService);
+    this.spectreService = new SpectreService(config.polling.intervalMinutes, this.apiService, this.discordService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.countryTrackingService = new CountryTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
     this.proxyTrackingService = new ProxyTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
     this.leaderboardService = new LeaderboardService(this.discordService, this.apiService);
-    
+
     // Set services on ApiService to avoid circular dependency
     this.apiService.setProxyTrackingService(this.proxyTrackingService);
     this.apiService.setLeaderboardService(this.leaderboardService);
-    
+
+    // The scheduler owns every periodic task; each runs on its own interval.
+    this.scheduler = new SchedulerService([
+      // Battle bounties + mercenary contracts share one battle fetch per cycle.
+      new BattlePollTask(
+        config.polling.intervalMinutes,
+        this.apiService,
+        this.battleService,
+        this.mercenaryContractService
+      ),
+      new BattleCleanupTask(this.battleService, this.mercenaryContractService),
+      this.spectreService,
+      this.userTrackingService,
+      this.countryTrackingService,
+      this.proxyTrackingService,
+      this.leaderboardService,
+    ]);
+
+
     this.commandHandler = new CommandHandler(this.client, config.discord.token, this.discordService, this.apiService);
 
     // Set up event handlers
@@ -86,23 +105,11 @@ export class Bot {
         
         // Set up interaction handler for slash commands
         this.commandHandler.setupInteractionHandler();
-        
-        // Start periodic polling via polling service
-        this.pollingService.start();
-        
-        // Start user tracking service
-        this.userTrackingService.start();
-        
-        // Start country tracking service
-        this.countryTrackingService.start();
-        
-        // Start proxy tracking service
-        this.proxyTrackingService.start();
-        
-        // Start leaderboard service
-        this.leaderboardService.start();
-        
-        logger.info('Bot is ready, polling, tracking services, and leaderboards have started');
+
+        // Start all periodic tasks (polling, tracking, leaderboards)
+        this.scheduler.start();
+
+        logger.info('Bot is ready; all scheduled tasks have started');
       } catch (error) {
         logger.error('Failed to initialize bot services', error);
         // Don't exit - let the bot try to recover
@@ -159,20 +166,12 @@ export class Bot {
 
     logger.info('Stopping bot...');
 
-    // Stop polling service
-    this.pollingService.stop();
-    
-    // Stop user tracking service
-    this.userTrackingService.stop();
-    
-    // Stop country tracking service
-    this.countryTrackingService.stop();
-    
-    // Stop proxy tracking service
-    this.proxyTrackingService.stop();
-    
-    // Stop leaderboard service
-    this.leaderboardService.stop();
+    // Stop all periodic tasks
+    this.scheduler.stop();
+
+    // Flush any pending config writes and close the database connection
+    await ServerConfigManager.flush();
+    await prisma.$disconnect();
 
     // Destroy Discord client
     this.client.destroy();

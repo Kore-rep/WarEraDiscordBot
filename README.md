@@ -2,6 +2,8 @@
 
 A TypeScript Discord bot that performs periodic API requests using the WarEra SDK and mentions roles in designated Discord channels when battle changes are detected. Supports multiple Discord servers with per-server configuration.
 
+> **New to the codebase?** See [`docs/ONBOARDING.md`](docs/ONBOARDING.md) for the repo structure and how to add a command. AI assistants: see [`CLAUDE.md`](CLAUDE.md).
+
 ## Features
 
 - ✅ Persistent Discord connection
@@ -52,6 +54,21 @@ Edit `.env` and fill in your configuration:
 DISCORD_TOKEN=your_discord_bot_token_here
 POLLING_INTERVAL_MINUTES=1
 API_BASE_URL=https://api.example.com
+DATABASE_URL="file:../data/bot.db"
+```
+
+### 3. Set up the database
+
+Per-server config and state are stored in **SQLite via Prisma**. Create/upgrade the database:
+
+```bash
+npx prisma migrate deploy
+```
+
+If you're upgrading from the old JSON/CSV storage, import your existing data once:
+
+```bash
+npm run db:import   # reads config/serverConfig.json and data/weekly-damage/**
 ```
 
 **Getting Discord Credentials:**
@@ -84,9 +101,9 @@ API_BASE_URL=https://api.example.com
    - Select "Copy ID"
    - Or go to Server Settings → Roles → right-click on a role → Copy ID
 
-### 3. Configure Server Settings
+### 4. Configure Server Settings
 
-**Note:** Server configuration is now managed via Discord slash commands (`/bountybattles config set`) for a better user experience. However, you can still manually configure the `config/serverConfig.json` file if needed.
+**Note:** Server configuration is managed via Discord slash commands (`/bountybattles config set`), stored in SQLite. You can also seed configuration by writing `config/serverConfig.json` and running `npm run db:import` (it imports the file into the database); editing that file alone no longer affects a running bot.
 
 **Option A: Using Slash Commands (Recommended)**
 
@@ -144,13 +161,13 @@ Edit `config/serverConfig.json`:
     - `channelId` - Channel for inactivity notifications
     - `inactivityDays` - Days of inactivity before notification (default: 2)
 
-### 4. Build the Project
+### 5. Build the Project
 
 ```bash
 npm run build
 ```
 
-### 5. Run the Bot
+### 6. Run the Bot
 
 **Development mode (with auto-reload):**
 ```bash
@@ -178,26 +195,25 @@ npm start
 │   │   │   └── userTracking.ts
 │   │   └── scanFor/                      # Scan commands (modular structure)
 │   │       ├── scanFor.ts                # Main command router
-│   │       ├── country/                  # Country scan subcommands
-│   │       │   └── nogovernment.ts       # Scan for countries with no/partial governments
-│   │       └── company/                  # Company scan subcommands
-│   │           └── production.ts         # Analyze company production
+│   │       └── country/                  # Country scan subcommands
+│   │           └── nogovernment.ts       # Scan for countries with no/partial governments
 │   ├── config/
 │   │   └── config.ts                     # Configuration loading and validation
 │   ├── services/
 │   │   ├── api/
 │   │   │   └── ApiService.ts             # WarEra API interactions
 │   │   ├── battle/
-│   │   │   ├── BattleService.ts          # Battle processing orchestration
-│   │   │   ├── BattleTracker.ts          # State tracking & change detection
-│   │   │   └── BattleFormatter.ts        # Message formatting
+│   │   │   ├── BattleService.ts          # Bounty battle processing
+│   │   │   ├── SimpleBountyTracker.ts     # New-bounty detection
+│   │   │   └── SimpleBattleFormatter.ts   # Bounty alert formatting
 │   │   ├── discord/
-│   │   │   ├── DiscordService.ts         # Discord API interactions
-│   │   │   └── MessageTracker.ts         # Message ID tracking
-│   │   ├── polling/
-│   │   │   └── PollingService.ts         # Periodic polling scheduler
+│   │   │   └── DiscordService.ts         # Discord API interactions
+│   │   ├── scheduler/
+│   │   │   ├── SchedulerService.ts       # Owns all periodic tasks
+│   │   │   ├── ScheduledTask.ts          # Interface periodic services implement
+│   │   │   └── tasks/                     # BattlePollTask, BattleCleanupTask
 │   │   └── userTracking/
-│   │       └── UserTrackingService.ts    # User inactivity tracking
+│   │       └── UserTrackingService.ts    # User inactivity tracking (a ScheduledTask)
 │   └── utils/
 │       ├── logger.ts                     # Winston logger configuration
 │       ├── serverConfigManager.ts        # Server configuration management
@@ -443,50 +459,6 @@ Countries With Partial Government (1-3 members):
 - ✅ Early warning system for partial government inactivity (3-day threshold)
 - ✅ Only checks activity for countries with 1-3 government members
 - ✅ Full cabinets (4+ members) are not checked for efficiency
-
-#### `/scanfor company production`
-Analyze company production across all items in the game
-
-- **Phase 1:** Fetches all company IDs using pagination (100 companies per page)
-- **Phase 2:** Gets company details to determine production items (10 companies at a time)
-- Counts how many companies produce each item type
-- Results sorted by count (highest to lowest)
-- Real-time progress updates with percentage completion
-- Uses efficient pagination to retrieve all companies directly
-
-**Example usage:**
-```
-/scanfor company production
-```
-
-**Example output:**
-```
-Company Production Analysis Complete
-
-- Total companies: 6,789
-- Item types produced: 25
-
-Companies by Item Type:
-
-Fish: 1,234
-Iron: 987
-Wheat: 856
-Oil: 654
-Steel: 543
-...
-```
-
-**Features:**
-- ✅ **Efficient pagination** - fetches 100 companies per page using nextCursor
-- ✅ **Direct company access** - no need to fetch countries or users first
-- ✅ **Large-scale scanning** - handles 5,000-10,000 companies efficiently
-- ✅ **Batch request optimization** - processes company details in batches of 10
-- ✅ **URI length management** - keeps batch sizes small to avoid 414 errors
-- ✅ **Real-time progress reporting** - shows current phase and percentage
-- ✅ **Rate limit friendly** - includes delays between requests
-- ✅ **Sorted results** - items ordered by production volume
-
-**Note:** This command is much faster than the previous approach! Typically completes in 2-5 minutes for large games.
 
 #### `/countrygroup` Commands
 Manage custom country groups for filtered scanning operations

@@ -1,12 +1,11 @@
 import { ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetUserLiteResponse, GetUsersByCountryParams } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 
-// Type alias for the actual user data from the API response
-type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
-import { groupPlayersByMode, sortUsersByLevel } from '../../../utils/skillAnalyzer';
-import { formatUserList, createBuildSummary } from '../../../utils/userStatusFormatter';
+type UserDTO = ScanUserLite;
+import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
+import { formatUserList, createBuildSummary } from './userStatusFormatter';
 
 /**
  * Handle button interactions for the builds command
@@ -44,64 +43,33 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
 
     logger.info(`Handling builds button: country=${countryId}, mode=${mode}, page=${pageNumber}`);
 
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
 
     // Get country name
-    let countryName: string;
-    try {
-      const countryResponse = await apiClient.country.getCountryById(countryId);
-      countryName = countryResponse.result.data.name;
-    } catch {
+    const country = await scan.getCountryById(countryId);
+    if (!country) {
       await interaction.editReply({
         content: '❌ Could not find the specified country. It may have been deleted.',
       });
       return;
     }
+    const countryName = country.name;
 
     // Show initial loading message
     await interaction.editReply({
       content: `🔄 Loading ${mode} mode players for **${countryName}**...`,
     });
 
-    // Re-fetch user data (we need to do this since we don't have persistent storage)
-    // In a production app, you might want to cache this data temporarily
-    let allUserIds: string[] = [];
-    let cursor: string | null = null;
-
-    // Get all user IDs for the country with pagination
-    let pageCount = 0;
-    const MAX_PAGES = 1000; // Safety limit to prevent infinite loops
-    do {
-      try {
-        // Use updated SDK method with pagination parameters
-        const params: GetUsersByCountryParams = { countryId, limit: 100 };
-        if (cursor) {
-          params.cursor = cursor;
-        }
-        const usersResponse = await apiClient.user.getUsersByCountry(params);
-        const usersData = usersResponse.result.data;
-        
-        allUserIds.push(...usersData.items.map((item: any) => item._id));
-        cursor = usersData.nextCursor;
-        pageCount++;
-        
-        logger.info(`Button handler: Fetched ${usersData.items.length} user IDs (page ${pageCount}), total so far: ${allUserIds.length}`);
-        
-        // Small delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-      } catch (error) {
-        logger.error('Error fetching users by country in button handler:', error);
-        await interaction.editReply({
-          content: '❌ Error fetching user list. Please try again.',
-        });
-        return;
-      }
-    } while (cursor && pageCount < MAX_PAGES);
-
-    if (pageCount >= MAX_PAGES) {
-      logger.warn(`Hit maximum page limit (${MAX_PAGES}) for country ${countryId} in button handler`);
-      // Continue processing with the users we have
+    // Re-fetch user data (no persistent storage, so we rebuild it each time)
+    let allUserIds: string[];
+    try {
+      allUserIds = (await scan.getUserIdsByCountry(countryId)).userIds;
+    } catch (error) {
+      logger.error('Error fetching users by country in button handler:', error);
+      await interaction.editReply({
+        content: '❌ Error fetching user list. Please try again.',
+      });
+      return;
     }
 
     if (allUserIds.length === 0) {
@@ -111,36 +79,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
       return;
     }
 
-    // Batch fetch user details
-    const USER_BATCH_SIZE = 100;
-    const users: UserDTO[] = [];
-    
-    for (let i = 0; i < allUserIds.length; i += USER_BATCH_SIZE) {
-      const userIdChunk = allUserIds.slice(i, i + USER_BATCH_SIZE);
-      
-      const batchClient = apiService.createCommandBatchClient();
-      const userPromises = userIdChunk.map(userId => 
-        batchClient.user.getUserLite(userId)
-      );
-      
-      try {
-        await batchClient.runBatch();
-        const userResults = await Promise.all(userPromises);
-        
-        for (const result of userResults) {
-          if (result?.result?.data) {
-            users.push(result.result.data);
-          }
-        }
-        
-        // Small delay to be respectful to API
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-      } catch (error) {
-        logger.error(`Error processing user batch in button handler:`, error);
-        // Continue with next batch
-      }
-    }
+    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds)).values());
 
     if (users.length === 0) {
       await interaction.editReply({
@@ -266,90 +205,35 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
  */
 async function handleSummaryRequest(interaction: ButtonInteraction, apiService: ApiService, countryId: string, minLevel: number): Promise<void> {
   try {
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
 
     // Get country name
-    let countryName: string;
-    try {
-      const countryResponse = await apiClient.country.getCountryById(countryId);
-      countryName = countryResponse.result.data.name;
-    } catch {
+    const country = await scan.getCountryById(countryId);
+    if (!country) {
       await interaction.editReply({
         content: '❌ Could not find the specified country.',
       });
       return;
     }
+    const countryName = country.name;
 
     await interaction.editReply({
       content: `🔄 Regenerating summary for **${countryName}**...`,
     });
 
     // Re-fetch and analyze users (same logic as in main handler)
-    let allUserIds: string[] = [];
-    let cursor: string | null = null;
-    let pageCount = 0;
-    const MAX_PAGES = 1000; // Safety limit to prevent infinite loops
-    do {
-      try {
-        // Use updated SDK method with pagination parameters
-        const params: GetUsersByCountryParams = { countryId, limit: 100 };
-        if (cursor) {
-          params.cursor = cursor;
-        }
-        const usersResponse = await apiClient.user.getUsersByCountry(params);
-        const usersData = usersResponse.result.data;
-        
-        allUserIds.push(...usersData.items.map((item: any) => item._id));
-        cursor = usersData.nextCursor;
-        pageCount++;
-        
-        logger.info(`Summary: Fetched ${usersData.items.length} user IDs (page ${pageCount}), total so far: ${allUserIds.length}`);
-        
-        // Small delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-      } catch (error) {
-        logger.error('Error fetching users for summary:', error);
-        await interaction.editReply({
-          content: '❌ Error fetching user data. Please try again.',
-        });
-        return;
-      }
-    } while (cursor && pageCount < MAX_PAGES);
-
-    if (pageCount >= MAX_PAGES) {
-      logger.warn(`Hit maximum page limit (${MAX_PAGES}) for country ${countryId} in summary`);
-      // Continue processing with the users we have
+    let allUserIds: string[];
+    try {
+      allUserIds = (await scan.getUserIdsByCountry(countryId)).userIds;
+    } catch (error) {
+      logger.error('Error fetching users for summary:', error);
+      await interaction.editReply({
+        content: '❌ Error fetching user data. Please try again.',
+      });
+      return;
     }
 
-    // Batch fetch user details
-    const USER_BATCH_SIZE = 100;
-    const users: UserDTO[] = [];
-    
-    for (let i = 0; i < allUserIds.length; i += USER_BATCH_SIZE) {
-      const userIdChunk = allUserIds.slice(i, i + USER_BATCH_SIZE);
-      
-      const batchClient = apiService.createCommandBatchClient();
-      const userPromises = userIdChunk.map(userId => 
-        batchClient.user.getUserLite(userId)
-      );
-      
-      try {
-        await batchClient.runBatch();
-        const userResults = await Promise.all(userPromises);
-        
-        for (const result of userResults) {
-          if (result?.result?.data) {
-            users.push(result.result.data);
-          }
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-      } catch (error) {
-        logger.error(`Error processing user batch for summary:`, error);
-      }
-    }
+    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds)).values());
 
     // Use minimum level from the original command
     const filteredUsers = users.filter(user => 

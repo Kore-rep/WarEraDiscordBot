@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import {
   ServerConfig,
   BountyBattlesConfig,
@@ -13,154 +11,157 @@ import {
   LeaderboardConfig,
 } from '../config/config';
 import { logger } from './logger';
+import { prisma } from '../persistence/prisma';
 
-/**
- * Structure of the serverConfig.json file
- */
-interface ServerConfigJsonStructure {
-  servers: Record<string, ServerConfig>;
+function encode(value: unknown): string | null {
+  return value === undefined || value === null ? null : JSON.stringify(value);
+}
+
+function decode<T>(value: string | null): T | undefined {
+  return value == null ? undefined : (JSON.parse(value) as T);
 }
 
 /**
- * Manager for reading and writing server configurations to serverConfig.json
- * Uses an in-memory cache for efficiency
+ * Manager for per-server configuration. An in-memory cache is the runtime source
+ * of truth; changes are mirrored to SQLite (via Prisma) for durability. Reads are
+ * synchronous (from cache); writes update the cache and schedule an async persist.
  */
 export class ServerConfigManager {
-  private static readonly CONFIG_FILE_PATH = path.join(process.cwd(), '/config/serverConfig.json');
   private static configCache: Map<string, ServerConfig> | null = null;
+  private static persistChain: Promise<void> = Promise.resolve();
 
   /**
-   * Load server configurations from disk into memory cache
-   * Should be called once at bot startup
+   * Load all server configurations from the database into the in-memory cache.
+   * Must be awaited once at startup before any reads.
    */
-  static loadConfigs(): void {
-    if (!fs.existsSync(this.CONFIG_FILE_PATH)) {
-      throw new Error(
-        `serverConfig.json file not found at ${this.CONFIG_FILE_PATH}. ` +
-        `Please create it based on serverConfig.json.example`
-      );
-    }
-
+  static async loadConfigs(): Promise<void> {
     try {
-      const fileContent = fs.readFileSync(this.CONFIG_FILE_PATH, 'utf-8');
-      const config = JSON.parse(fileContent) as ServerConfigJsonStructure;
-
-      if (!config.servers || typeof config.servers !== 'object') {
-        throw new Error('serverConfig.json must contain a "servers" object');
-      }
-
+      const rows = await prisma.server.findMany();
       const serversMap = new Map<string, ServerConfig>();
 
-      for (const [serverId, serverConfig] of Object.entries(config.servers || {})) {
-        // Validate bountyBattles config if present
-        if (serverConfig.bountyBattles) {
-          if (!serverConfig.bountyBattles.channelId) {
-            throw new Error(`Server ${serverId} bountyBattles is missing channelId`);
-          }
-          if (!Array.isArray(serverConfig.bountyBattles.roleIds)) {
-            throw new Error(`Server ${serverId} bountyBattles roleIds must be an array`);
-          }
-        }
-
-        // Validate mercenaryContracts config if present
-        if (serverConfig.mercenaryContracts) {
-          if (!serverConfig.mercenaryContracts.channelId) {
-            throw new Error(`Server ${serverId} mercenaryContracts is missing channelId`);
-          }
-          if (!Array.isArray(serverConfig.mercenaryContracts.roleIds)) {
-            throw new Error(`Server ${serverId} mercenaryContracts roleIds must be an array`);
-          }
-        }
-
-        const validateSpectreMonitors = (arr: SpectreCountryMonitorEntry[] | undefined, label: string) => {
-          if (!arr) {
-            return;
-          }
-          if (!Array.isArray(arr)) {
-            throw new Error(`Server ${serverId} spectre.${label} must be an array`);
-          }
-          for (const m of arr) {
-            if (!m.countryId?.trim() || !m.countryName?.trim() || !m.channelId?.trim()) {
-              throw new Error(`Server ${serverId} spectre ${label} entry is missing countryId, countryName, or channelId`);
-            }
-          }
+      for (const row of rows) {
+        const raw: ServerConfig = {
+          bountyBattles: decode(row.bountyBattles),
+          mercenaryContracts: decode(row.mercenaryContracts),
+          reports: decode(row.reports),
+          userTracking: decode(row.userTracking),
+          countryTracking: decode(row.countryTracking),
+          proxyTracking: decode(row.proxyTracking),
+          countryGroups: decode(row.countryGroups),
+          spectre: decode(row.spectre),
+          leaderboard: decode(row.leaderboard),
         };
-        validateSpectreMonitors(serverConfig.spectre?.buildingMonitors, 'buildingMonitors');
-        validateSpectreMonitors(serverConfig.spectre?.resistanceMonitors, 'resistanceMonitors');
-
-        serversMap.set(serverId, {
-          bountyBattles: serverConfig.bountyBattles ? {
-            channelId: serverConfig.bountyBattles.channelId,
-            roleIds: serverConfig.bountyBattles.roleIds.filter(id => id && id.trim().length > 0),
-            enabled: serverConfig.bountyBattles.enabled,
-            bountyThreshold: serverConfig.bountyBattles.bountyThreshold,
-            minBountyToSend: serverConfig.bountyBattles.minBountyToSend,
-          } : undefined,
-          mercenaryContracts: serverConfig.mercenaryContracts ? {
-            channelId: serverConfig.mercenaryContracts.channelId,
-            roleIds: serverConfig.mercenaryContracts.roleIds.filter(id => id && id.trim().length > 0),
-            enabled: serverConfig.mercenaryContracts.enabled,
-            contractThreshold: serverConfig.mercenaryContracts.contractThreshold,
-            minContractToSend: serverConfig.mercenaryContracts.minContractToSend,
-          } : undefined,
-          reports: serverConfig.reports,
-          userTracking: serverConfig.userTracking ? {
-            enabled: serverConfig.userTracking.enabled,
-            users: serverConfig.userTracking.users || [],
-          } : undefined,
-          countryTracking: serverConfig.countryTracking ? {
-            enabled: serverConfig.countryTracking.enabled,
-            countries: serverConfig.countryTracking.countries || [],
-          } : undefined,
-          proxyTracking: serverConfig.proxyTracking ? {
-            enabled: serverConfig.proxyTracking.enabled,
-            countries: serverConfig.proxyTracking.countries || [],
-            proxies: serverConfig.proxyTracking.proxies || [],
-          } : undefined,
-          countryGroups: serverConfig.countryGroups || [],
-          spectre: serverConfig.spectre ? {
-            buildingMonitors: (serverConfig.spectre.buildingMonitors || []).map(m => ({
-              countryId: m.countryId,
-              countryName: m.countryName,
-              channelId: m.channelId,
-              enabled: m.enabled !== false,
-            })),
-            resistanceMonitors: (serverConfig.spectre.resistanceMonitors || []).map(m => ({
-              countryId: m.countryId,
-              countryName: m.countryName,
-              channelId: m.channelId,
-              enabled: m.enabled !== false,
-            })),
-          } : undefined,
-          leaderboard: serverConfig.leaderboard ? {
-            enabled: serverConfig.leaderboard.enabled,
-            channelId: serverConfig.leaderboard.channelId,
-            messageId: serverConfig.leaderboard.messageId,
-            countryIds: serverConfig.leaderboard.countryIds || [],
-            countryNames: serverConfig.leaderboard.countryNames || [],
-            militaryUnitIds: serverConfig.leaderboard.militaryUnitIds || [],
-            topCount: serverConfig.leaderboard.topCount ?? 10,
-            levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
-            lastSnapshot: serverConfig.leaderboard.lastSnapshot,
-            lastUpdated: serverConfig.leaderboard.lastUpdated,
-          } : undefined,
-        });
+        serversMap.set(row.id, this.normalizeServerConfig(row.id, raw));
       }
 
-      // Allow empty server configuration for initial setup
       if (serversMap.size === 0) {
-        logger.warn('No servers configured in serverConfig.json. Use /bountybattles config set or /contracts config set to configure servers.');
+        logger.warn('No servers configured in the database. Use /bountybattles config set or /contracts config set to configure servers.');
       }
 
       this.configCache = serversMap;
       logger.info(`Loaded ${serversMap.size} server configuration(s) into memory`);
     } catch (error) {
-      if (error instanceof SyntaxError) {
-        throw new Error(`Invalid JSON in serverConfig.json: ${error.message}`);
-      }
-      logger.error('Failed to load server configs from disk', error);
+      logger.error('Failed to load server configs from database', error);
       throw error;
     }
+  }
+
+  /**
+   * Validate and normalize a raw server config (defaults, trimming), producing the
+   * shape the rest of the app expects. Throws on invalid required fields.
+   */
+  private static normalizeServerConfig(serverId: string, serverConfig: ServerConfig): ServerConfig {
+    if (serverConfig.bountyBattles) {
+      if (!serverConfig.bountyBattles.channelId) {
+        throw new Error(`Server ${serverId} bountyBattles is missing channelId`);
+      }
+      if (!Array.isArray(serverConfig.bountyBattles.roleIds)) {
+        throw new Error(`Server ${serverId} bountyBattles roleIds must be an array`);
+      }
+    }
+
+    if (serverConfig.mercenaryContracts) {
+      if (!serverConfig.mercenaryContracts.channelId) {
+        throw new Error(`Server ${serverId} mercenaryContracts is missing channelId`);
+      }
+      if (!Array.isArray(serverConfig.mercenaryContracts.roleIds)) {
+        throw new Error(`Server ${serverId} mercenaryContracts roleIds must be an array`);
+      }
+    }
+
+    const validateSpectreMonitors = (arr: SpectreCountryMonitorEntry[] | undefined, label: string) => {
+      if (!arr) {
+        return;
+      }
+      if (!Array.isArray(arr)) {
+        throw new Error(`Server ${serverId} spectre.${label} must be an array`);
+      }
+      for (const m of arr) {
+        if (!m.countryId?.trim() || !m.countryName?.trim() || !m.channelId?.trim()) {
+          throw new Error(`Server ${serverId} spectre ${label} entry is missing countryId, countryName, or channelId`);
+        }
+      }
+    };
+    validateSpectreMonitors(serverConfig.spectre?.buildingMonitors, 'buildingMonitors');
+    validateSpectreMonitors(serverConfig.spectre?.resistanceMonitors, 'resistanceMonitors');
+
+    return {
+      bountyBattles: serverConfig.bountyBattles ? {
+        channelId: serverConfig.bountyBattles.channelId,
+        roleIds: serverConfig.bountyBattles.roleIds.filter(id => id && id.trim().length > 0),
+        enabled: serverConfig.bountyBattles.enabled,
+        bountyThreshold: serverConfig.bountyBattles.bountyThreshold,
+        minBountyToSend: serverConfig.bountyBattles.minBountyToSend,
+      } : undefined,
+      mercenaryContracts: serverConfig.mercenaryContracts ? {
+        channelId: serverConfig.mercenaryContracts.channelId,
+        roleIds: serverConfig.mercenaryContracts.roleIds.filter(id => id && id.trim().length > 0),
+        enabled: serverConfig.mercenaryContracts.enabled,
+        contractThreshold: serverConfig.mercenaryContracts.contractThreshold,
+        minContractToSend: serverConfig.mercenaryContracts.minContractToSend,
+      } : undefined,
+      reports: serverConfig.reports,
+      userTracking: serverConfig.userTracking ? {
+        enabled: serverConfig.userTracking.enabled,
+        users: serverConfig.userTracking.users || [],
+      } : undefined,
+      countryTracking: serverConfig.countryTracking ? {
+        enabled: serverConfig.countryTracking.enabled,
+        countries: serverConfig.countryTracking.countries || [],
+      } : undefined,
+      proxyTracking: serverConfig.proxyTracking ? {
+        enabled: serverConfig.proxyTracking.enabled,
+        countries: serverConfig.proxyTracking.countries || [],
+        proxies: serverConfig.proxyTracking.proxies || [],
+      } : undefined,
+      countryGroups: serverConfig.countryGroups || [],
+      spectre: serverConfig.spectre ? {
+        buildingMonitors: (serverConfig.spectre.buildingMonitors || []).map(m => ({
+          countryId: m.countryId,
+          countryName: m.countryName,
+          channelId: m.channelId,
+          enabled: m.enabled !== false,
+        })),
+        resistanceMonitors: (serverConfig.spectre.resistanceMonitors || []).map(m => ({
+          countryId: m.countryId,
+          countryName: m.countryName,
+          channelId: m.channelId,
+          enabled: m.enabled !== false,
+        })),
+      } : undefined,
+      leaderboard: serverConfig.leaderboard ? {
+        enabled: serverConfig.leaderboard.enabled,
+        channelId: serverConfig.leaderboard.channelId,
+        messageId: serverConfig.leaderboard.messageId,
+        countryIds: serverConfig.leaderboard.countryIds || [],
+        countryNames: serverConfig.leaderboard.countryNames || [],
+        militaryUnitIds: serverConfig.leaderboard.militaryUnitIds || [],
+        topCount: serverConfig.leaderboard.topCount ?? 10,
+        levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
+        lastSnapshot: serverConfig.leaderboard.lastSnapshot,
+        lastUpdated: serverConfig.leaderboard.lastUpdated,
+      } : undefined,
+    };
   }
 
   /**
@@ -168,10 +169,7 @@ export class ServerConfigManager {
    * If cache is not initialized, loads it first
    */
   static readServerConfigs(): Map<string, ServerConfig> {
-    if (this.configCache === null) {
-      logger.warn('Config cache not initialized, loading from disk');
-      this.loadConfigs();
-    }
+    this.ensureCacheInitialized();
     
     // Return a copy to prevent external modifications
     return new Map(this.configCache);
@@ -185,9 +183,7 @@ export class ServerConfigManager {
   static updateBountyBattlesConfig(serverId: string, config: Partial<BountyBattlesConfig>): void {
     try {
       // Ensure cache is loaded
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
       
       // Get existing config or create new one
       const existingServerConfig = this.configCache!.get(serverId) || {};
@@ -231,9 +227,7 @@ export class ServerConfigManager {
   static updateMercenaryContractsConfig(serverId: string, config: Partial<import('../config/config').MercenaryContractsConfig>): void {
     try {
       // Ensure cache is loaded
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
       
       // Get existing config or create new one
       const existingServerConfig = this.configCache!.get(serverId) || {};
@@ -278,39 +272,66 @@ export class ServerConfigManager {
   }
 
   /**
-   * Write the current in-memory cache to disk
-   * @private
+   * Ensure the in-memory cache exists. `loadConfigs()` should be awaited at startup;
+   * this is a safety net for any read/write that races ahead of it.
+   */
+  private static ensureCacheInitialized(): void {
+    if (this.configCache === null) {
+      logger.warn('Config cache not initialized; using an empty cache. Ensure loadConfigs() is awaited at startup.');
+      this.configCache = new Map();
+    }
+  }
+
+  /**
+   * Schedule an asynchronous persist of the in-memory cache to the database. Kept
+   * synchronous (fire-and-forget) so the many mutator callers stay unchanged; writes
+   * are serialized and errors logged. Call flush() to await pending writes.
    */
   private static writeConfigsToDisk(): void {
     if (this.configCache === null) {
-      throw new Error('Cannot write configs to disk: cache not initialized');
+      return;
     }
+    this.persistChain = this.persistChain
+      .then(() => this.persistAll())
+      .catch(error => logger.error('Failed to persist server configs to database', error));
+  }
 
-    // Convert map to object
-    const serversObject: Record<string, ServerConfig> = {};
-    for (const [id, cfg] of this.configCache.entries()) {
-      serversObject[id] = cfg;
+  /** Await any pending database writes (call on shutdown to avoid losing the last write). */
+  static async flush(): Promise<void> {
+    await this.persistChain;
+  }
+
+  /** Sync the entire Server table to the current in-memory cache in one transaction. */
+  private static async persistAll(): Promise<void> {
+    if (this.configCache === null) {
+      return;
     }
-
-    const fileContent: ServerConfigJsonStructure = {
-      servers: serversObject,
-    };
-
-    fs.writeFileSync(
-      this.CONFIG_FILE_PATH,
-      JSON.stringify(fileContent, null, 2),
-      'utf-8'
-    );
+    const entries = Array.from(this.configCache.entries());
+    const ids = entries.map(([id]) => id);
+    await prisma.$transaction([
+      prisma.server.deleteMany({ where: ids.length > 0 ? { id: { notIn: ids } } : {} }),
+      ...entries.map(([id, cfg]) => {
+        const data = {
+          bountyBattles: encode(cfg.bountyBattles),
+          mercenaryContracts: encode(cfg.mercenaryContracts),
+          reports: encode(cfg.reports),
+          userTracking: encode(cfg.userTracking),
+          countryTracking: encode(cfg.countryTracking),
+          proxyTracking: encode(cfg.proxyTracking),
+          countryGroups: encode(cfg.countryGroups),
+          spectre: encode(cfg.spectre),
+          leaderboard: encode(cfg.leaderboard),
+        };
+        return prisma.server.upsert({ where: { id }, create: { id, ...data }, update: data });
+      }),
+    ]);
   }
 
   /**
    * Get configuration for a specific server from memory cache
    */
   static getServerConfig(serverId: string): ServerConfig | undefined {
-    if (this.configCache === null) {
-      logger.warn('Config cache not initialized, loading from disk');
-      this.loadConfigs();
-    }
+    this.ensureCacheInitialized();
     
     const config = this.configCache!.get(serverId);
     // Return a copy to prevent external modifications
@@ -373,9 +394,7 @@ export class ServerConfigManager {
    */
   static upsertSpectreBuildingMonitor(serverId: string, entry: SpectreCountryMonitorEntry): void {
     try {
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
 
       const existingServerConfig = this.configCache!.get(serverId) || {};
       const spectre = existingServerConfig.spectre || {
@@ -411,9 +430,7 @@ export class ServerConfigManager {
    */
   static upsertSpectreResistanceMonitor(serverId: string, entry: SpectreCountryMonitorEntry): void {
     try {
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
 
       const existingServerConfig = this.configCache!.get(serverId) || {};
       const spectre = existingServerConfig.spectre || {
@@ -450,9 +467,7 @@ export class ServerConfigManager {
    */
   static removeSpectreMonitorByCountry(serverId: string, countryIdOrName: string): string | null {
     try {
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
 
       const existingServerConfig = this.configCache!.get(serverId);
       const spectre = existingServerConfig?.spectre;
@@ -494,12 +509,12 @@ export class ServerConfigManager {
   }
 
   /**
-   * Reload configurations from disk into memory cache
-   * Useful for external file changes or testing
+   * Reload configurations from the database into memory cache.
+   * Useful for external changes or testing.
    */
-  static reloadConfigs(): void {
-    logger.info('Reloading server configurations from disk');
-    this.loadConfigs();
+  static async reloadConfigs(): Promise<void> {
+    logger.info('Reloading server configurations from database');
+    await this.loadConfigs();
   }
 
   /**
@@ -1172,9 +1187,7 @@ export class ServerConfigManager {
    */
   static updateLeaderboardConfig(serverId: string, config: Partial<LeaderboardConfig>): void {
     try {
-      if (this.configCache === null) {
-        this.loadConfigs();
-      }
+      this.ensureCacheInitialized();
 
       const existingServerConfig = this.configCache!.get(serverId) || {};
       const existingLeaderboard = existingServerConfig.leaderboard || {

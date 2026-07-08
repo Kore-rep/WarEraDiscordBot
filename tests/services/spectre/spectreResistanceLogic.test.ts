@@ -5,7 +5,7 @@ import {
   RESISTANCE_ALERT_RATIO,
   RESISTANCE_LARGE_CHANGE_DELTA,
 } from '../../../src/services/spectre/spectreResistanceLogic';
-import type { RegionResistanceSnapshot } from '../../../src/utils/spectreBuildingStateStore';
+import type { RegionResistanceSnapshot } from '../../../src/services/spectre/spectreBuildingStateStore';
 
 describe('spectreResistanceLogic', () => {
   it('formatResistanceSnapshotLines lists ratio and values', () => {

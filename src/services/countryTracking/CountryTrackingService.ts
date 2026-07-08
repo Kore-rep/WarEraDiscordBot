@@ -4,16 +4,18 @@ import { DiscordService } from '../discord/DiscordService';
 import { ApiService } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 import { TrackedCountry } from '../../config/config';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 
 /**
- * Service for tracking country activity and sending population/government notifications
+ * Tracks country activity and sends population/government notifications, every 5 minutes.
  */
-export class CountryTrackingService {
+export class CountryTrackingService implements ScheduledTask {
+  readonly name = 'country-tracking';
+  readonly intervalMs = 5 * 60 * 1000; // 5 minutes
+
   private apiClient: APIClient;
   private discordService: DiscordService;
   private apiService: ApiService;
-  private intervalId: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 60 * 5 * 1000; // 5 minutes
 
   constructor(apiClient: APIClient, discordService: DiscordService, apiService: ApiService) {
     this.apiClient = apiClient;
@@ -21,35 +23,8 @@ export class CountryTrackingService {
     this.apiService = apiService;
   }
 
-  /**
-   * Start the country tracking service with hourly polling
-   */
-  start(): void {
-    if (this.intervalId) {
-      logger.warn('Country tracking service is already running');
-      return;
-    }
-
-    logger.info('Starting country tracking service (checks every hour)');
-
-    // Run immediately on start
-    this.checkAllTrackedCountries();
-
-    // Then run every hour
-    this.intervalId = setInterval(() => {
-      this.checkAllTrackedCountries();
-    }, this.CHECK_INTERVAL_MS);
-  }
-
-  /**
-   * Stop the country tracking service
-   */
-  stop(): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-      logger.info('Country tracking service stopped');
-    }
+  async runCycle(): Promise<void> {
+    await this.checkAllTrackedCountries();
   }
 
   /**
@@ -201,7 +176,7 @@ export class CountryTrackingService {
         }
       }
 
-      await this.discordService.sendMessageToChannel(serverId, trackedCountry.channelId, message);
+      await this.discordService.sendToChannel(trackedCountry.channelId, message);
       
       logger.info(
         `Sent ${alertType} population alert for country ${trackedCountry.countryId} (${trackedCountry.countryName}) ` +
@@ -281,12 +256,5 @@ export class CountryTrackingService {
       logger.error(`Failed to get country players activity for ${countryId}`, error);
       return [];
     }
-  }
-
-  /**
-   * Get service status
-   */
-  isRunning(): boolean {
-    return this.intervalId !== null;
   }
 }
