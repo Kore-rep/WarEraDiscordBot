@@ -196,7 +196,7 @@ npm start
 │   │   ├── scheduler/
 │   │   │   ├── SchedulerService.ts       # Owns all periodic tasks
 │   │   │   ├── ScheduledTask.ts          # Interface periodic services implement
-│   │   │   └── tasks/                     # BountyPollTask, BountyCleanupTask
+│   │   │   └── tasks/                     # BattlePollTask, BattleCleanupTask
 │   │   └── userTracking/
 │   │       └── UserTrackingService.ts    # User inactivity tracking (a ScheduledTask)
 │   └── utils/

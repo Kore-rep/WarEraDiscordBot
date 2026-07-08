@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetAllCountriesResponse, GetGovernmentByCountryIdResponse, GetUserLiteResponse } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ScanService, ScanCountry } from '../../../services/scan/ScanService';
 import { ServerConfigManager } from '../../../utils/serverConfigManager';
 
 /**
@@ -13,12 +13,12 @@ export async function handleCountryNoGovernment(interaction: ChatInputCommandInt
   await interaction.deferReply({ ephemeral: false });
 
   try {
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
     const groupName = interaction.options.getString('group');
     const serverId = interaction.guildId!;
 
     // Step 1: Get countries (either all or from a group)
-    let countries: any[];
+    let countries: ScanCountry[];
     let scanScope = 'all countries';
 
     if (groupName) {
@@ -42,28 +42,14 @@ export async function handleCountryNoGovernment(interaction: ChatInputCommandInt
       // Fetch full country data for countries in the group
       logger.info(`Fetching ${group.countries.length} countries from group "${groupName}"...`);
       const countryIds = group.countries.map(c => c.countryId);
-      
-      // Batch country requests for better rate limit efficiency
-      // Create a new batch client instance for this command to avoid conflicts
-      // Each command execution gets its own isolated queue
-      const batchClient = apiService.createCommandBatchClient();
-      const countryPromises = countryIds.map(id => 
-        batchClient.country.getCountryById(id, { cache: { ttl: 86400 } })
-      );
-      await batchClient.runBatch();
-      const countryResponses = await Promise.all(countryPromises);
-      
-      countries = countryResponses
-        .map(response => response?.result?.data)
-        .filter(country => country !== null && country !== undefined);
-      
+      countries = await scan.getCountriesByIds(countryIds, 86400);
+
       scanScope = `group "${groupName}" (${countries.length} countries)`;
       logger.info(`Scanning ${countries.length} countries from group "${groupName}"`);
     } else {
       // Get all countries
       logger.info('Fetching all countries...');
-      const countriesResponse = await apiClient.country.getAllCountries() as GetAllCountriesResponse;
-      countries = countriesResponse.result.data;
+      countries = await scan.getAllCountries();
       logger.info(`Found ${countries.length} total countries to scan`);
     }
 
@@ -119,95 +105,48 @@ export async function handleCountryNoGovernment(interaction: ChatInputCommandInt
     }
 
     const countryGovernmentMap: CountryGovernmentData[] = [];
-    let processedCount = 0;
     let lastUpdateTime = Date.now();
     const updateIntervalMs = 5000; // Update every 5 seconds
 
-    // Batch government requests in chunks of up to 100 for better rate limit efficiency
-    const GOVERNMENT_BATCH_SIZE = 100;
-    
-    for (let i = 0; i < countries.length; i += GOVERNMENT_BATCH_SIZE) {
-      const countryChunk = countries.slice(i, i + GOVERNMENT_BATCH_SIZE);
-      
-      // Create a new batch client instance for this command to avoid conflicts
-      // Each command execution gets its own isolated queue
-      const govBatchClient = apiService.createCommandBatchClient();
-      
-      // Queue all government requests for this chunk
-      const govPromises = countryChunk.map(country => 
-        govBatchClient.government.getByCountryId(country._id)
-      );
-      
-      // Execute batch (all requests in chunk count as 1 request toward rate limit)
-      await govBatchClient.runBatch();
-      
-      // Get all results
-      const govResults = await Promise.all(govPromises);
-      
-      // Process results
-      for (let j = 0; j < countryChunk.length; j++) {
-        const country = countryChunk[j];
-        const govResponse = govResults[j] as GetGovernmentByCountryIdResponse | undefined;
-        
-        try {
-          if (!govResponse?.result?.data) {
-            throw new Error('Invalid response');
-          }
-          
-          const government = govResponse.result.data;
-
-          // Collect all government member IDs
-          const governmentMemberIds: string[] = [];
-          
-          if (government.president) {
-            governmentMemberIds.push(government.president);
-          }
-          
-          if (government.congressMembers && Array.isArray(government.congressMembers)) {
-            governmentMemberIds.push(...government.congressMembers);
-          }
-
-          // Note: If there are vicePresident or ministers fields in the future, add them here
-          if (government.vicePresident) governmentMemberIds.push(government.vicePresident);
-          if (government.minOfDefense) governmentMemberIds.push(government.minOfDefense);
-          if (government.minOfForeignAffairs) governmentMemberIds.push(government.minOfForeignAffairs);
-          if (government.minOfEconomy) governmentMemberIds.push(government.minOfEconomy);
-          
-          countryGovernmentMap.push({
-            countryId: country._id,
-            countryName: country.name,
-            governmentMemberIds,
-            governmentCount: governmentMemberIds.length,
-          });
-        } catch (error) {
-          logger.error(`Failed to fetch government data for country ${country._id} (${country.name})`, error);
-          countryGovernmentMap.push({
-            countryId: country._id,
-            countryName: country.name,
-            governmentMemberIds: [],
-            governmentCount: 0,
-          });
-        }
-        
-        processedCount++;
-
-        // Send progress update every 5 seconds
+    // Fetch each country's government (batched inside ScanService), reporting progress.
+    const governmentsByCountry = await scan.getGovernmentsByCountryIds(
+      countries.map(c => c._id),
+      (processed) => {
         const now = Date.now();
         if (now - lastUpdateTime >= updateIntervalMs) {
-          const progress = Math.floor((processedCount / countryCount) * 100);
-          const withGovernment = countryGovernmentMap.filter(c => c.governmentCount > 0).length;
-          await interaction.editReply({
+          const progress = Math.floor((processed / countryCount) * 100);
+          void interaction.editReply({
             content:
               `**Country Government Scan In Progress**\n\n` +
               `- Phase 1: Scanning governments\n` +
-              `- Processed: ${processedCount}/${countryCount} (${progress}%)\n` +
-              `- Countries with government: ${withGovernment}\n` +
+              `- Processed: ${processed}/${countryCount} (${progress}%)\n` +
               `- Status: Scanning...\n\n` +
               `Please wait...`,
           });
           lastUpdateTime = now;
         }
       }
+    );
+
+    for (const country of countries) {
+      const government = governmentsByCountry.get(country._id);
+      const governmentMemberIds: string[] = [];
+
+      if (government) {
+        if (government.president) governmentMemberIds.push(government.president);
+        if (Array.isArray(government.congressMembers)) governmentMemberIds.push(...government.congressMembers);
+        if (government.vicePresident) governmentMemberIds.push(government.vicePresident);
+        if (government.minOfDefense) governmentMemberIds.push(government.minOfDefense);
+        if (government.minOfForeignAffairs) governmentMemberIds.push(government.minOfForeignAffairs);
+        if (government.minOfEconomy) governmentMemberIds.push(government.minOfEconomy);
+      }
+
+      countryGovernmentMap.push({
+        countryId: country._id,
+        countryName: country.name,
+        governmentMemberIds,
+        governmentCount: governmentMemberIds.length,
+      });
     }
 
     // Step 4: Categorize countries - only care about 0 or 1 member governments
@@ -250,30 +189,7 @@ export async function handleCountryNoGovernment(interaction: ChatInputCommandInt
 
       logger.info(`Fetching activity data for ${allMemberIds.size} government members...`);
 
-      // Create a new batch client instance for this command to avoid conflicts
-      // Each command execution gets its own isolated queue
-      const batchClient = apiService.createCommandBatchClient();
-
-      // Queue all user requests
-      const memberIdArray = Array.from(allMemberIds);
-      const userPromises = memberIdArray.map(memberId => 
-        batchClient.user.getUserLite(memberId)
-      );
-
-      // Execute batch
-      await batchClient.runBatch();
-
-      // Get all results
-      const userResults = await Promise.all(userPromises);
-
-      // Create a map of userId -> user data
-      const userDataMap = new Map<string, any>();
-      for (let i = 0; i < memberIdArray.length; i++) {
-        const userResponse = userResults[i] as GetUserLiteResponse;
-        if (userResponse?.result?.data) {
-          userDataMap.set(memberIdArray[i], userResponse.result.data);
-        }
-      }
+      const userDataMap = await scan.getUsersLiteByIds(Array.from(allMemberIds));
 
       // Check each country with 1 member
       const now = new Date();

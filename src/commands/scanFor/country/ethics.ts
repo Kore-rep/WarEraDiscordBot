@@ -1,12 +1,11 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
-import { GetAllCountriesResponse, GetPartyByIdResponse } from 'warera-sdk';
 import { ApiService } from '../../../services/api/ApiService';
+import { ScanService, ScanCountry } from '../../../services/scan/ScanService';
 import { resolveEthicLabel } from './partyEthicsMapping';
 
-type CountryRow = GetAllCountriesResponse['result']['data'][number];
+type CountryRow = ScanCountry;
 
-const PARTY_BATCH_SIZE = 100;
 const MAX_MESSAGE_LENGTH = 1950;
 
 /**
@@ -30,11 +29,10 @@ export async function handleCountryEthicsScan(
       return;
     }
 
-    const apiClient = apiService.getClient();
+    const scan = new ScanService(apiService);
     logger.info(`Ethics scan: ethic="${ethicLabel}" (${target.axis}=${target.value})`);
 
-    const countriesResponse = (await apiClient.country.getAllCountries()) as GetAllCountriesResponse;
-    const countries = countriesResponse.result.data;
+    const countries = await scan.getAllCountries();
 
     if (countries.length === 0) {
       await interaction.editReply({ content: 'No countries found in the system.' });
@@ -48,28 +46,7 @@ export async function handleCountryEthicsScan(
           .filter((id): id is string => Boolean(id))
       ),
     ];
-    const partyById = new Map<string, GetPartyByIdResponse['result']['data']>();
-
-    for (let i = 0; i < uniquePartyIds.length; i += PARTY_BATCH_SIZE) {
-      const chunk = uniquePartyIds.slice(i, i + PARTY_BATCH_SIZE);
-      const batchClient = apiService.createCommandBatchClient();
-      const partyPromises = chunk.map(id =>
-        batchClient.party.getPartyById(id, { cache: { ttl: 86400 } })
-      );
-      await batchClient.runBatch();
-      const partyResults = await Promise.all(partyPromises);
-
-      for (let j = 0; j < chunk.length; j++) {
-        const partyId = chunk[j];
-        const res = partyResults[j] as GetPartyByIdResponse | undefined;
-        const party = res?.result?.data;
-        if (party) {
-          partyById.set(partyId, party);
-        } else {
-          logger.warn(`Ethics scan: failed to load party ${partyId}`);
-        }
-      }
-    }
+    const partyById = await scan.getPartiesByIds(uniquePartyIds);
 
     const matches: { country: CountryRow; partyName: string }[] = [];
 

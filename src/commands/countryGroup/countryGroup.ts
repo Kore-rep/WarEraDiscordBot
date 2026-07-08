@@ -10,6 +10,7 @@ import {
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
+import { ScanService } from '../../services/scan/ScanService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { CountryGroup, GroupedCountry } from '../../config/config';
 
@@ -373,9 +374,7 @@ export async function handleCountryGroupModal(interaction: any, apiService: ApiS
 
   try {
     // Fetch all countries from API
-    const apiClient = apiService.getClient();
-    const countriesResponse = await apiClient.country.getAllCountries({cache: {ttl: 60000 * 60 }});
-    const allCountries = countriesResponse.result.data;
+    const allCountries = await new ScanService(apiService).getAllCountries(60000 * 60);
 
     // Match country names (case-insensitive)
     const matchedCountries: GroupedCountry[] = [];

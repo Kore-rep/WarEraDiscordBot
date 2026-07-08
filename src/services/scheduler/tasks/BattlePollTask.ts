@@ -2,23 +2,22 @@ import { logger } from '../../../utils/logger';
 import { ApiService } from '../../api/ApiService';
 import { BattleService } from '../../battle/BattleService';
 import { MercenaryContractService } from '../../mercenary/MercenaryContractService';
-import { SpectreService } from '../../spectre/SpectreService';
 import { ScheduledTask } from '../ScheduledTask';
 
 /**
- * Main poll: fetch battle data once and fan it out to bounty, mercenary contract,
- * and Spectre processing. Each stage is isolated so one failure doesn't abort the rest.
+ * Fetches battle data once per cycle and fans it out to bounty-battle and mercenary
+ * contract processing (both derived from the same battle poll). Each stage is isolated
+ * so one failure doesn't abort the rest.
  */
-export class BountyPollTask implements ScheduledTask {
-  readonly name = 'bounty-poll';
+export class BattlePollTask implements ScheduledTask {
+  readonly name = 'battle-poll';
   readonly intervalMs: number;
 
   constructor(
     intervalMinutes: number,
     private readonly apiService: ApiService,
     private readonly battleService: BattleService,
-    private readonly mercenaryContractService: MercenaryContractService,
-    private readonly spectreService: SpectreService
+    private readonly mercenaryContractService: MercenaryContractService
   ) {
     this.intervalMs = intervalMinutes * 60 * 1000;
   }
@@ -29,27 +28,20 @@ export class BountyPollTask implements ScheduledTask {
     try {
       pollData = await this.apiService.fetchAllBattles();
     } catch (error) {
-      logger.error('Poll failed to fetch battles', error);
+      logger.error('Battle poll failed to fetch battles', error);
     }
 
     try {
       await this.battleService.processBattles(pollData);
     } catch (error) {
-      logger.error('Poll (battles) failed', error);
+      logger.error('Battle poll (bounties) failed', error);
     }
 
     // Reuses the same battle poll data
     try {
       await this.mercenaryContractService.processContracts(pollData);
     } catch (error) {
-      logger.error('Poll (mercenary contracts) failed', error);
-    }
-
-    // Spectre fetches its own data
-    try {
-      await this.spectreService.runSpectreCycle();
-    } catch (error) {
-      logger.error('Poll (Spectre) failed', error);
+      logger.error('Battle poll (mercenary contracts) failed', error);
     }
   }
 }

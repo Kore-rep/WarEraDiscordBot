@@ -5,6 +5,7 @@ import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
+import { ScheduledTask } from '../scheduler/ScheduledTask';
 import {
   getSpectreSnapshotState,
   getCountrySnapshots,
@@ -49,16 +50,22 @@ type MonitorTask = {
 };
 
 /**
- * Spectre military monitoring: driven each cycle by the scheduler's BountyPollTask.
+ * Spectre military monitoring, run as its own scheduled task on the poll interval.
  * Fetches region data once per cycle; aggregates Discord output per channel.
  */
-export class SpectreService {
+export class SpectreService implements ScheduledTask {
+  readonly name = 'spectre';
+  readonly intervalMs: number;
+
   constructor(
+    intervalMinutes: number,
     private readonly apiService: ApiService,
     private readonly discordService: DiscordService
-  ) {}
+  ) {
+    this.intervalMs = intervalMinutes * 60 * 1000;
+  }
 
-  async runSpectreCycle(): Promise<void> {
+  async runCycle(): Promise<void> {
     const servers = ServerConfigManager.readServerConfigs();
     const tasks: MonitorTask[] = [];
 

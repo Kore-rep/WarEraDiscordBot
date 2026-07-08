@@ -34,7 +34,7 @@ Discord  →  Commands / Scheduler tasks  →  Services  →  ApiService  →  W
 
 > **Command files (`src/commands/**`) must not talk to the WarEra SDK directly.** Do not `import 'warera-sdk'` and do not call `apiService.getClient()` there. Instead, add or call a method on a service, and let the service do the API work. Commands should only: read interaction options, call a service, and reply to the user.
 
-This keeps API logic testable and in one place. (A few older command handlers still break this rule; they are being migrated. Don't copy them.)
+This keeps API logic testable and in one place. Every command currently follows this rule — the `/scanfor` and `/spectre` commands read game data through `ScanService` (`src/services/scan/`), which wraps the SDK and hands back plain data.
 
 ## How to add a new slash command
 
@@ -90,7 +90,7 @@ export interface ScheduledTask {
 
 To add one: make your service implement `ScheduledTask` (or write a small task class), then add an instance to the array passed to `new SchedulerService([...])` in `Bot.ts`. The scheduler runs each task on its own interval and catches errors so one failing task never stops the others.
 
-Existing examples: `UserTrackingService`, `CountryTrackingService`, `ProxyTrackingService`, `LeaderboardService` all implement `ScheduledTask`; `BountyPollTask` and `BountyCleanupTask` (in `scheduler/tasks/`) drive battle/mercenary/spectre work.
+Existing examples: `SpectreService`, `UserTrackingService`, `CountryTrackingService`, `ProxyTrackingService`, and `LeaderboardService` all implement `ScheduledTask` directly; `BattlePollTask` and `BattleCleanupTask` (in `scheduler/tasks/`) group the battle-bounty and mercenary-contract work that shares a single battle fetch per cycle.
 
 ## Where settings and state live
 

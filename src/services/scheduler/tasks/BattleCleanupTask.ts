@@ -6,8 +6,8 @@ import { ScheduledTask } from '../ScheduledTask';
 /**
  * Hourly cleanup of stale battle and mercenary contract tracking data.
  */
-export class BountyCleanupTask implements ScheduledTask {
-  readonly name = 'bounty-cleanup';
+export class BattleCleanupTask implements ScheduledTask {
+  readonly name = 'battle-cleanup';
   readonly intervalMs = 60 * 60 * 1000;
   readonly runOnStart = false;
 

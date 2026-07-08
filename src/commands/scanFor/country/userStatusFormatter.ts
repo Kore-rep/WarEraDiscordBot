@@ -1,8 +1,7 @@
-import { GetUserLiteResponse } from 'warera-sdk';
+import type { ScanUserLite } from '../../../services/scan/ScanService';
 import { analyzePlayerBuild } from './skillAnalyzer';
 
-// Type alias for the actual user data from the API response
-type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
+type UserDTO = ScanUserLite;
 
 export interface UserStatus {
   emoji: string;

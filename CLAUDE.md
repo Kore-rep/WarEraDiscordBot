@@ -25,7 +25,7 @@ Discord → commands / scheduler tasks → services → ApiService → warera-sd
 
 ### Layering rule (important)
 
-**Files under `src/commands/**` must NOT use the SDK directly** — no `import 'warera-sdk'`, no `apiService.getClient()` / `createCommandBatchClient()` in a command. Add or call a **service** method that returns plain data; commands only read interaction options, call a service, and reply. (Some legacy command handlers still violate this and are being migrated — don't imitate them.)
+**Files under `src/commands/**` must NOT use the SDK directly** — no `import 'warera-sdk'`, no `apiService.getClient()` / `createCommandBatchClient()` in a command. Add or call a **service** method that returns plain data; commands only read interaction options, call a service, and reply. The command layer is currently 100% SDK-free — keep it that way. The `/scanfor` and `/spectre` commands read game data via `ScanService` (`src/services/scan/`), which owns country/party/government/user/region lookups and re-exports the domain types (`ScanCountry`, `ScanUserLite`, …) so commands never need the SDK's types either.
 
 ## ApiService: singleton clients & batching (CRITICAL)
 

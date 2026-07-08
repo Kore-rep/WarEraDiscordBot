@@ -1,7 +1,6 @@
-import { GetUserLiteResponse } from 'warera-sdk';
+import type { ScanUserLite } from '../../../services/scan/ScanService';
 
-// Type alias for the actual user data from the API response
-type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
+type UserDTO = ScanUserLite;
 type SkillStatDTO = UserDTO['skills'][keyof UserDTO['skills']];
 
 export interface PlayerAnalysis {

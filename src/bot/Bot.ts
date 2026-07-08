@@ -4,8 +4,8 @@ import { BotConfig } from '../config/config';
 import { ApiService } from '../services/api/ApiService';
 import { DiscordService } from '../services/discord/DiscordService';
 import { SchedulerService } from '../services/scheduler/SchedulerService';
-import { BountyPollTask } from '../services/scheduler/tasks/BountyPollTask';
-import { BountyCleanupTask } from '../services/scheduler/tasks/BountyCleanupTask';
+import { BattlePollTask } from '../services/scheduler/tasks/BattlePollTask';
+import { BattleCleanupTask } from '../services/scheduler/tasks/BattleCleanupTask';
 import { BattleService } from '../services/battle/BattleService';
 import { MercenaryContractService } from '../services/mercenary/MercenaryContractService';
 import { UserTrackingService } from '../services/userTracking';
@@ -51,7 +51,7 @@ export class Bot {
     this.discordService = new DiscordService(this.client);
     this.battleService = new BattleService(this.discordService, this.apiService);
     this.mercenaryContractService = new MercenaryContractService(this.discordService, this.apiService);
-    this.spectreService = new SpectreService(this.apiService, this.discordService);
+    this.spectreService = new SpectreService(config.polling.intervalMinutes, this.apiService, this.discordService);
     this.userTrackingService = new UserTrackingService(this.apiService.getClient(), this.discordService);
     this.countryTrackingService = new CountryTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
     this.proxyTrackingService = new ProxyTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
@@ -63,14 +63,15 @@ export class Bot {
 
     // The scheduler owns every periodic task; each runs on its own interval.
     this.scheduler = new SchedulerService([
-      new BountyPollTask(
+      // Battle bounties + mercenary contracts share one battle fetch per cycle.
+      new BattlePollTask(
         config.polling.intervalMinutes,
         this.apiService,
         this.battleService,
-        this.mercenaryContractService,
-        this.spectreService
+        this.mercenaryContractService
       ),
-      new BountyCleanupTask(this.battleService, this.mercenaryContractService),
+      new BattleCleanupTask(this.battleService, this.mercenaryContractService),
+      this.spectreService,
       this.userTrackingService,
       this.countryTrackingService,
       this.proxyTrackingService,

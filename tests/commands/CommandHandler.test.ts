@@ -123,6 +123,27 @@ jest.mock('../../src/commands/spectre/spectre', () => ({
   },
 }));
 
+jest.mock('../../src/commands/contracts/contracts', () => ({
+  contractsCommand: {
+    data: { name: 'contracts', description: 'Manage mercenary contracts', toJSON: jest.fn().mockReturnValue({ name: 'contracts' }) },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/proxyTracking/proxyTracking', () => ({
+  proxyTrackingCommand: {
+    data: { name: 'proxytracking', description: 'Manage proxy tracking', toJSON: jest.fn().mockReturnValue({ name: 'proxytracking' }) },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/leaderboard/leaderboard', () => ({
+  leaderboardCommand: {
+    data: { name: 'leaderboard', description: 'Manage leaderboards', toJSON: jest.fn().mockReturnValue({ name: 'leaderboard' }) },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -148,9 +169,7 @@ describe('CommandHandler', () => {
       on: jest.fn(),
     };
 
-    mockDiscordService = {
-      clearServerTracking: jest.fn(),
-    } as any;
+    mockDiscordService = {} as any;
 
     mockApiService = {
       getClient: jest.fn(),
@@ -165,8 +184,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load bountyBattles, user tracking, scanfor, countrygroup, and spectre commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(5);
+    it('should load all eight top-level commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(8);
     });
   });
 
@@ -237,6 +256,7 @@ describe('CommandHandler', () => {
       const mockInteraction = {
         isChatInputCommand: jest.fn().mockReturnValue(false),
         isModalSubmit: jest.fn().mockReturnValue(false),
+        isButton: jest.fn().mockReturnValue(false),
       };
 
       await interactionHandler(mockInteraction);
@@ -346,7 +366,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(5);
+      expect(commandHandler.getCommandCount()).toBe(8);
     });
   });
 });

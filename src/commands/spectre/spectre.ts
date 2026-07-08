@@ -4,8 +4,7 @@ import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { TrackedCountry } from '../../config/config';
 import { logger } from '../../utils/logger';
 import { ApiService } from '../../services/api/ApiService';
-import type { APIClient } from 'warera-sdk';
-import { GetAllCountriesResponse } from 'warera-sdk';
+import { ScanService, ScanCountry, ScanRegion } from '../../services/scan/ScanService';
 import {
   getSpectreSnapshotState,
   clearAllCountrySnapshotsForSpectre,
@@ -15,15 +14,10 @@ import {
 import { chunkLines, formatBuildingSnapshotLines } from '../../services/spectre/spectreBuildingLogic';
 import { formatResistanceSnapshotLines } from '../../services/spectre/spectreResistanceLogic';
 
-type GetRegionsObjectResponse = Awaited<
-  ReturnType<APIClient['region']['getRegionsObject']>
->;
-type RegionDTO = GetRegionsObjectResponse['result']['data'][string];
-
 function resolveCountryByName(
-  countries: GetAllCountriesResponse['result']['data'],
+  countries: ScanCountry[],
   input: string
-): { country: GetAllCountriesResponse['result']['data'][number] } | { error: string } {
+): { country: ScanCountry } | { error: string } {
   const needle = input.trim().toLowerCase();
   const matches = countries.filter(c => c.name.toLowerCase() === needle);
   if (matches.length === 0) {
@@ -48,18 +42,8 @@ function hasEnabledSpectreMonitor(
   return (list || []).some(m => m.countryId === countryId && m.enabled !== false);
 }
 
-async function fetchRegionsMap(apiService: ApiService): Promise<Map<string, RegionDTO>> {
-  const batch = apiService.getBatchClient();
-  const regionsPromise = batch.region.getRegionsObject({
-    cache: { ttl: 86400 * 1000 },
-  });
-  await batch.runBatch();
-  const regionsResponse = (await regionsPromise) as GetRegionsObjectResponse;
-  const map = new Map<string, RegionDTO>();
-  for (const [id, r] of Object.entries(regionsResponse.result.data)) {
-    map.set(id, r);
-  }
-  return map;
+async function fetchRegionsMap(apiService: ApiService): Promise<Map<string, ScanRegion>> {
+  return new ScanService(apiService).getRegionsObject(86400 * 1000);
 }
 
 function resolveAlertChannel(
@@ -265,11 +249,8 @@ async function handleMonitorBuildings(
   }
 
   try {
-    const api = apiService.getClient();
-    const res = (await api.country.getAllCountries({
-      cache: { ttl: 60 * 60 * 1000 },
-    })) as GetAllCountriesResponse;
-    const resolved = resolveCountryByName(res.result.data, countryInput);
+    const countries = await new ScanService(apiService).getAllCountries(60 * 60 * 1000);
+    const resolved = resolveCountryByName(countries, countryInput);
     if ('error' in resolved) {
       await interaction.editReply({ content: resolved.error });
       return;
@@ -320,11 +301,8 @@ async function handleMonitorResistance(
   }
 
   try {
-    const api = apiService.getClient();
-    const res = (await api.country.getAllCountries({
-      cache: { ttl: 60 * 60 * 1000 },
-    })) as GetAllCountriesResponse;
-    const resolved = resolveCountryByName(res.result.data, countryInput);
+    const countries = await new ScanService(apiService).getAllCountries(60 * 60 * 1000);
+    const resolved = resolveCountryByName(countries, countryInput);
     if ('error' in resolved) {
       await interaction.editReply({ content: resolved.error });
       return;
@@ -371,11 +349,8 @@ async function handleSnapshotBuildings(
   const guildId = interaction.guildId;
 
   try {
-    const api = apiService.getClient();
-    const res = (await api.country.getAllCountries({
-      cache: { ttl: 60 * 60 * 1000 },
-    })) as GetAllCountriesResponse;
-    const resolved = resolveCountryByName(res.result.data, countryInput);
+    const countries = await new ScanService(apiService).getAllCountries(60 * 60 * 1000);
+    const resolved = resolveCountryByName(countries, countryInput);
     if ('error' in resolved) {
       await interaction.editReply({ content: resolved.error });
       return;
@@ -432,11 +407,8 @@ async function handleSnapshotResistance(
   const guildId = interaction.guildId;
 
   try {
-    const api = apiService.getClient();
-    const res = (await api.country.getAllCountries({
-      cache: { ttl: 60 * 60 * 1000 },
-    })) as GetAllCountriesResponse;
-    const resolved = resolveCountryByName(res.result.data, countryInput);
+    const countries = await new ScanService(apiService).getAllCountries(60 * 60 * 1000);
+    const resolved = resolveCountryByName(countries, countryInput);
     if ('error' in resolved) {
       await interaction.editReply({ content: resolved.error });
       return;
@@ -555,9 +527,8 @@ async function handleMonitorPopulation(interaction: ChatInputCommandInteraction,
 
   try {
     // Fetch all countries to resolve the name
-    const apiClient = apiService.getClient();
-    const countriesResponse = await apiClient.country.getAllCountries();
-    const countries = countriesResponse.result.data;
+    const scan = new ScanService(apiService);
+    const countries = await scan.getAllCountries();
 
     const countryResult = resolveCountryByName(countries, countryName);
     if ('error' in countryResult) {
@@ -593,8 +564,8 @@ async function handleMonitorPopulation(interaction: ChatInputCommandInteraction,
     }
 
     // Get current population
-    const countryResponse = await apiClient.country.getCountryById(country._id);
-    const currentPopulation = countryResponse.result.data.rankings?.countryActivePopulation?.value || 0;
+    const countryData = await scan.getCountryById(country._id);
+    const currentPopulation = countryData?.rankings?.countryActivePopulation?.value || 0;
 
     // Create tracked country object
     const trackedCountry: TrackedCountry = {
@@ -783,44 +754,29 @@ async function sendImmediatePopulationAlert(
     // Add government members info for warn alerts
     if (alertType === 'warn') {
       try {
-        const apiClient = apiService.getClient();
-        const govResponse = await apiClient.government.getByCountryId(trackedCountry.countryId);
-        const government = govResponse.result.data;
-        
+        const scan = new ScanService(apiService);
+        const government = (await scan.getGovernmentsByCountryIds([trackedCountry.countryId]))
+          .get(trackedCountry.countryId);
+
         const playerIds = new Set<string>();
-        
+
         // Add all government members
-        if (government.president) playerIds.add(government.president);
-        if (government.vicePresident) playerIds.add(government.vicePresident);
-        if (government.minOfDefense) playerIds.add(government.minOfDefense);
-        if (government.minOfForeignAffairs) playerIds.add(government.minOfForeignAffairs);
-        if (government.minOfEconomy) playerIds.add(government.minOfEconomy);
-        if (government.congressMembers && Array.isArray(government.congressMembers)) {
+        if (government?.president) playerIds.add(government.president);
+        if (government?.vicePresident) playerIds.add(government.vicePresident);
+        if (government?.minOfDefense) playerIds.add(government.minOfDefense);
+        if (government?.minOfForeignAffairs) playerIds.add(government.minOfForeignAffairs);
+        if (government?.minOfEconomy) playerIds.add(government.minOfEconomy);
+        if (Array.isArray(government?.congressMembers)) {
           government.congressMembers.forEach(id => playerIds.add(id));
         }
 
         if (playerIds.size > 0) {
-          const batchClient = apiService.createCommandBatchClient();
-          const playerIdArray = Array.from(playerIds);
-          const userPromises = playerIdArray.map(id => 
-            batchClient.user.getUserLite(id)
-          );
-          
-          await batchClient.runBatch();
-          const userResults = await Promise.all(userPromises);
-          
-          const playersInfo = [];
-          for (let i = 0; i < playerIdArray.length; i++) {
-            const userResponse = userResults[i];
-            if (userResponse?.result?.data) {
-              const userData = userResponse.result.data;
-              playersInfo.push({
-                username: userData.username,
-                lastLogin: userData.dates.lastConnectionAt
-              });
-            }
-          }
-          
+          const usersById = await scan.getUsersLiteByIds(Array.from(playerIds));
+          const playersInfo = Array.from(usersById.values()).map(userData => ({
+            username: userData.username,
+            lastLogin: userData.dates.lastConnectionAt,
+          }));
+
           if (playersInfo.length > 0) {
             playersInfo.sort((a, b) => new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime());
             
