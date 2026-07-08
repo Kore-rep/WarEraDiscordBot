@@ -1,20 +1,24 @@
 import { loadConfig } from '../../src/config/config';
 import { ServerConfigManager } from '../../src/utils/serverConfigManager';
-import * as fs from 'fs';
+import { prisma } from '../../src/persistence/prisma';
+import { pushTestSchema, clearTables } from '../setup/testDb';
 
-// Mock fs module
-jest.mock('fs');
-const mockFs = fs as jest.Mocked<typeof fs>;
-
-// Mock process.env
 const originalEnv = process.env;
 
 describe('Config', () => {
-  beforeEach(() => {
-    jest.resetModules();
-    process.env = { ...originalEnv };
-    jest.clearAllMocks();
+  beforeAll(() => {
+    pushTestSchema();
+  });
+
+  afterAll(async () => {
     ServerConfigManager.clearCache();
+    await prisma.$disconnect();
+  });
+
+  beforeEach(async () => {
+    process.env = { ...originalEnv };
+    ServerConfigManager.clearCache();
+    await clearTables();
   });
 
   afterEach(() => {
@@ -23,28 +27,24 @@ describe('Config', () => {
   });
 
   describe('loadConfig', () => {
-    it('should load valid configuration', () => {
+    it('should load valid configuration', async () => {
       process.env.DISCORD_TOKEN = 'test-token';
       process.env.POLLING_INTERVAL_MINUTES = '5';
       process.env.API_BASE_URL = 'https://api.test.com';
 
-      const serversConfig = {
-        servers: {
-          'server1': {
-            bountyBattles: {
-              channelId: 'channel1',
-              roleIds: ['role1', 'role2'],
-              enabled: true,
-              bountyThreshold: 0,
-            },
-          },
+      await prisma.server.create({
+        data: {
+          id: 'server1',
+          bountyBattles: JSON.stringify({
+            channelId: 'channel1',
+            roleIds: ['role1', 'role2'],
+            enabled: true,
+            bountyThreshold: 0,
+          }),
         },
-      };
+      });
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(serversConfig));
-
-      const config = loadConfig();
+      const config = await loadConfig();
 
       expect(config.discord.token).toBe('test-token');
       expect(config.polling.intervalMinutes).toBe(5);
@@ -63,92 +63,47 @@ describe('Config', () => {
       });
     });
 
-    it('should throw error when DISCORD_TOKEN is missing', () => {
+    it('should throw error when DISCORD_TOKEN is missing', async () => {
       delete process.env.DISCORD_TOKEN;
       process.env.POLLING_INTERVAL_MINUTES = '5';
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify({ servers: {} }));
-
-      expect(() => loadConfig()).toThrow('DISCORD_TOKEN environment variable is required');
+      await expect(loadConfig()).rejects.toThrow('DISCORD_TOKEN environment variable is required');
     });
 
-    it('should throw error when POLLING_INTERVAL_MINUTES is missing', () => {
+    it('should throw error when POLLING_INTERVAL_MINUTES is missing', async () => {
       process.env.DISCORD_TOKEN = 'test-token';
       delete process.env.POLLING_INTERVAL_MINUTES;
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify({ servers: {} }));
-
-      expect(() => loadConfig()).toThrow('POLLING_INTERVAL_MINUTES environment variable is required');
+      await expect(loadConfig()).rejects.toThrow('POLLING_INTERVAL_MINUTES environment variable is required');
     });
 
-    it('should throw error when servers.json is missing', () => {
-      process.env.DISCORD_TOKEN = 'test-token';
-      process.env.POLLING_INTERVAL_MINUTES = '5';
-
-      mockFs.existsSync.mockReturnValue(false);
-
-      expect(() => loadConfig()).toThrow('serverConfig.json file not found');
-    });
-
-    it('should throw error when servers.json is invalid JSON', () => {
-      process.env.DISCORD_TOKEN = 'test-token';
-      process.env.POLLING_INTERVAL_MINUTES = '5';
-
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue('invalid json');
-
-      expect(() => loadConfig()).toThrow();
-    });
-
-    it('should throw error for invalid polling interval', () => {
+    it('should throw error for invalid polling interval', async () => {
       process.env.DISCORD_TOKEN = 'test-token';
       process.env.POLLING_INTERVAL_MINUTES = 'invalid';
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify({ servers: {} }));
-
-      expect(() => loadConfig()).toThrow('POLLING_INTERVAL_MINUTES must be a positive number');
+      await expect(loadConfig()).rejects.toThrow('POLLING_INTERVAL_MINUTES must be a positive number');
     });
 
-    it('should handle servers with no role IDs', () => {
+    it('should handle servers with no role IDs', async () => {
       process.env.DISCORD_TOKEN = 'test-token';
       process.env.POLLING_INTERVAL_MINUTES = '5';
 
-      const serversConfig = {
-        servers: {
-          'server1': {
-            bountyBattles: {
-              channelId: 'channel1',
-              roleIds: [],
-              enabled: true,
-              bountyThreshold: 0,
-            },
-          },
+      await prisma.server.create({
+        data: {
+          id: 'server1',
+          bountyBattles: JSON.stringify({ channelId: 'channel1', roleIds: [], enabled: true, bountyThreshold: 0 }),
         },
-      };
+      });
 
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(serversConfig));
-
-      const config = loadConfig();
-
+      const config = await loadConfig();
       expect(config.discord.servers.get('server1')?.bountyBattles?.roleIds).toEqual([]);
     });
 
-    it('should allow empty servers configuration', () => {
+    it('should allow empty servers configuration', async () => {
       process.env.DISCORD_TOKEN = 'test-token';
       process.env.POLLING_INTERVAL_MINUTES = '5';
 
-      const serversConfig = {
-        servers: {},
-      };
-
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(serversConfig));
-
-      const config = loadConfig();
+      const config = await loadConfig();
 
       expect(config.discord.servers.size).toBe(0);
       expect(config.discord.token).toBe('test-token');
@@ -156,4 +111,3 @@ describe('Config', () => {
     });
   });
 });
-

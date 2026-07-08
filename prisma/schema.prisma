@@ -1,0 +1,47 @@
+// Prisma schema for the WarEra Discord bot.
+//
+// Persistence model: the bot keeps every server's config in an in-memory cache
+// (ServerConfigManager) as the runtime source of truth, and mirrors it here for
+// durability. Each feature block of ServerConfig is stored as its own JSON-encoded
+// column (String, since the SQLite connector has no native JSON type on this Prisma
+// version) so a server's row round-trips exactly to/from the nested config object,
+// while each feature stays independently inspectable in the database.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// One row per Discord server (guild). Columns mirror the feature blocks of
+/// `ServerConfig` in src/config/config.ts.
+model Server {
+  id                 String   @id
+  bountyBattles      String?
+  mercenaryContracts String?
+  reports            String?
+  userTracking       String?
+  countryTracking    String?
+  proxyTracking      String?
+  countryGroups      String?
+  spectre            String?
+  leaderboard        String?
+  updatedAt          DateTime @updatedAt
+}
+
+/// Weekly damage leaderboard snapshots (replaces the per-server CSV files under
+/// data/weekly-damage/). `kind` is "users" or "mu"; `week` is the week-ending key.
+model WeeklyDamageSnapshot {
+  id        Int      @id @default(autoincrement())
+  serverId  String
+  kind      String
+  week      String
+  csv       String
+  createdAt DateTime @default(now())
+
+  @@unique([serverId, kind, week])
+  @@index([serverId, kind])
+}

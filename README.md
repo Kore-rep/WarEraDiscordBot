@@ -54,6 +54,21 @@ Edit `.env` and fill in your configuration:
 DISCORD_TOKEN=your_discord_bot_token_here
 POLLING_INTERVAL_MINUTES=1
 API_BASE_URL=https://api.example.com
+DATABASE_URL="file:../data/bot.db"
+```
+
+### 3. Set up the database
+
+Per-server config and state are stored in **SQLite via Prisma**. Create/upgrade the database:
+
+```bash
+npx prisma migrate deploy
+```
+
+If you're upgrading from the old JSON/CSV storage, import your existing data once:
+
+```bash
+npm run db:import   # reads config/serverConfig.json and data/weekly-damage/**
 ```
 
 **Getting Discord Credentials:**
@@ -86,9 +101,9 @@ API_BASE_URL=https://api.example.com
    - Select "Copy ID"
    - Or go to Server Settings → Roles → right-click on a role → Copy ID
 
-### 3. Configure Server Settings
+### 4. Configure Server Settings
 
-**Note:** Server configuration is now managed via Discord slash commands (`/bountybattles config set`) for a better user experience. However, you can still manually configure the `config/serverConfig.json` file if needed.
+**Note:** Server configuration is managed via Discord slash commands (`/bountybattles config set`), stored in SQLite. You can also seed configuration by writing `config/serverConfig.json` and running `npm run db:import` (it imports the file into the database); editing that file alone no longer affects a running bot.
 
 **Option A: Using Slash Commands (Recommended)**
 
@@ -146,13 +161,13 @@ Edit `config/serverConfig.json`:
     - `channelId` - Channel for inactivity notifications
     - `inactivityDays` - Days of inactivity before notification (default: 2)
 
-### 4. Build the Project
+### 5. Build the Project
 
 ```bash
 npm run build
 ```
 
-### 5. Run the Bot
+### 6. Run the Bot
 
 **Development mode (with auto-reload):**
 ```bash

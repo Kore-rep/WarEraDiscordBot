@@ -1,8 +1,7 @@
 import { ServerConfigManager } from '../../src/utils/serverConfigManager';
-import * as fs from 'fs';
-import * as path from 'path';
+import { prisma } from '../../src/persistence/prisma';
+import { pushTestSchema, clearTables } from '../setup/testDb';
 
-// Mock the logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
     info: jest.fn(),
@@ -12,62 +11,44 @@ jest.mock('../../src/utils/logger', () => ({
   },
 }));
 
+/** Seed a server row directly in the database (bypassing the manager). */
+async function seedServer(id: string, bountyBattles: unknown): Promise<void> {
+  await prisma.server.create({
+    data: { id, bountyBattles: JSON.stringify(bountyBattles) },
+  });
+}
+
 describe('ServerConfigManager', () => {
-  const testConfigFilePath = path.join(process.cwd(), 'config', 'serverConfig.json');
-  let originalFileContent: string | null = null;
-
-  // Ensure config directory exists
   beforeAll(() => {
-    const configDir = path.dirname(testConfigFilePath);
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-    
-    if (fs.existsSync(testConfigFilePath)) {
-      originalFileContent = fs.readFileSync(testConfigFilePath, 'utf-8');
-    }
+    pushTestSchema();
   });
 
-  // Restore the original file after tests
-  afterAll(() => {
-    if (originalFileContent) {
-      fs.writeFileSync(testConfigFilePath, originalFileContent, 'utf-8');
-    } else if (fs.existsSync(testConfigFilePath)) {
-      fs.unlinkSync(testConfigFilePath);
-    }
+  afterAll(async () => {
     ServerConfigManager.clearCache();
+    await prisma.$disconnect();
   });
 
-  // Create a test file and reload cache before each test
-  beforeEach(() => {
-    const testConfig = {
-      servers: {
-        'test-server-1': {
-          bountyBattles: {
-            channelId: 'channel-1',
-            roleIds: ['role-1', 'role-2'],
-            enabled: true,
-            bountyThreshold: 0,
-          },
-        },
-        'test-server-2': {
-          bountyBattles: {
-            channelId: 'channel-2',
-            roleIds: ['role-3'],
-            enabled: false,
-            bountyThreshold: 10,
-          },
-        },
-      },
-    };
-    fs.writeFileSync(testConfigFilePath, JSON.stringify(testConfig, null, 2), 'utf-8');
-    
-    // Load the test config into memory cache
-    ServerConfigManager.loadConfigs();
+  beforeEach(async () => {
+    // Drain any fire-and-forget persist scheduled by a previous test before resetting.
+    await ServerConfigManager.flush();
+    await clearTables();
+    await seedServer('test-server-1', {
+      channelId: 'channel-1',
+      roleIds: ['role-1', 'role-2'],
+      enabled: true,
+      bountyThreshold: 0,
+    });
+    await seedServer('test-server-2', {
+      channelId: 'channel-2',
+      roleIds: ['role-3'],
+      enabled: false,
+      bountyThreshold: 10,
+    });
+    await ServerConfigManager.loadConfigs();
   });
 
-  // Clear cache after each test
-  afterEach(() => {
+  afterEach(async () => {
+    await ServerConfigManager.flush();
     ServerConfigManager.clearCache();
   });
 
@@ -100,32 +81,11 @@ describe('ServerConfigManager', () => {
       });
     });
 
-    it('should return empty map when no servers are configured', () => {
-      const emptyConfig = { servers: {} };
-      fs.writeFileSync(testConfigFilePath, JSON.stringify(emptyConfig, null, 2), 'utf-8');
-      
-      ServerConfigManager.loadConfigs();
-      const configs = ServerConfigManager.readServerConfigs();
+    it('should return empty map when no servers are configured', async () => {
+      await clearTables();
+      await ServerConfigManager.loadConfigs();
 
-      expect(configs.size).toBe(0);
-    });
-
-    it('should throw error when file does not exist', () => {
-      ServerConfigManager.clearCache();
-      fs.unlinkSync(testConfigFilePath);
-
-      expect(() => {
-        ServerConfigManager.loadConfigs();
-      }).toThrow();
-    });
-
-    it('should throw error when file contains invalid JSON', () => {
-      ServerConfigManager.clearCache();
-      fs.writeFileSync(testConfigFilePath, 'invalid json', 'utf-8');
-
-      expect(() => {
-        ServerConfigManager.loadConfigs();
-      }).toThrow();
+      expect(ServerConfigManager.readServerConfigs().size).toBe(0);
     });
   });
 
@@ -147,40 +107,18 @@ describe('ServerConfigManager', () => {
     });
 
     it('should return undefined for non-existent server', () => {
-      const config = ServerConfigManager.getServerConfig('non-existent-server');
-
-      expect(config).toBeUndefined();
+      expect(ServerConfigManager.getServerConfig('non-existent-server')).toBeUndefined();
     });
   });
 
   describe('updateBountyBattlesConfig', () => {
     it('should update existing server configuration', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        channelId: 'new-channel-1',
-      });
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { channelId: 'new-channel-1' });
 
       const config = ServerConfigManager.getServerConfig('test-server-1');
       expect(config?.bountyBattles?.channelId).toBe('new-channel-1');
       expect(config?.bountyBattles?.roleIds).toEqual(['role-1', 'role-2']);
       expect(config?.bountyBattles?.enabled).toBe(true);
-    });
-
-    it('should update roleIds for existing server', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        roleIds: ['new-role-1'],
-      });
-
-      const config = ServerConfigManager.getServerConfig('test-server-1');
-      expect(config?.bountyBattles?.roleIds).toEqual(['new-role-1']);
-    });
-
-    it('should update enabled status for existing server', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        enabled: false,
-      });
-
-      const config = ServerConfigManager.getServerConfig('test-server-1');
-      expect(config?.bountyBattles?.enabled).toBe(false);
     });
 
     it('should create new server configuration if it does not exist', () => {
@@ -189,24 +127,12 @@ describe('ServerConfigManager', () => {
         roleIds: ['new-role'],
       });
 
-      const config = ServerConfigManager.getServerConfig('new-server');
-      expect(config?.bountyBattles).toEqual({
+      expect(ServerConfigManager.getServerConfig('new-server')?.bountyBattles).toEqual({
         channelId: 'new-channel',
         roleIds: ['new-role'],
         enabled: true,
         bountyThreshold: 0,
       });
-    });
-
-    it('should default to enabled:true when creating new server without specifying', () => {
-      ServerConfigManager.updateBountyBattlesConfig('new-server-2', {
-        channelId: 'channel-123',
-        roleIds: [],
-        bountyThreshold: 0,
-      });
-
-      const config = ServerConfigManager.getServerConfig('new-server-2');
-      expect(config?.bountyBattles?.enabled).toBe(true);
     });
 
     it('should update multiple fields at once', () => {
@@ -217,8 +143,7 @@ describe('ServerConfigManager', () => {
         bountyThreshold: 15,
       });
 
-      const config = ServerConfigManager.getServerConfig('test-server-1');
-      expect(config?.bountyBattles).toEqual({
+      expect(ServerConfigManager.getServerConfig('test-server-1')?.bountyBattles).toEqual({
         channelId: 'updated-channel',
         roleIds: ['updated-role'],
         enabled: false,
@@ -226,42 +151,38 @@ describe('ServerConfigManager', () => {
       });
     });
 
-    it('should persist changes to disk', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        channelId: 'persisted-channel',
-      });
+    it('should persist changes to the database', async () => {
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { channelId: 'persisted-channel' });
+      await ServerConfigManager.flush();
 
-      // Read directly from disk
-      const fileContent = fs.readFileSync(testConfigFilePath, 'utf-8');
-      const diskConfig = JSON.parse(fileContent);
-
-      expect(diskConfig.servers['test-server-1'].bountyBattles.channelId).toBe('persisted-channel');
+      const row = await prisma.server.findUnique({ where: { id: 'test-server-1' } });
+      const bountyBattles = JSON.parse(row!.bountyBattles!);
+      expect(bountyBattles.channelId).toBe('persisted-channel');
     });
 
     it('should preserve other servers when updating one', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        channelId: 'modified-channel',
-      });
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { channelId: 'modified-channel' });
 
-      const config2 = ServerConfigManager.getServerConfig('test-server-2');
-      expect(config2?.bountyBattles?.channelId).toBe('channel-2');
+      expect(ServerConfigManager.getServerConfig('test-server-2')?.bountyBattles?.channelId).toBe('channel-2');
+    });
+
+    it('should round-trip an update through a reload', async () => {
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { channelId: 'reloaded-channel' });
+      await ServerConfigManager.flush();
+      await ServerConfigManager.reloadConfigs();
+
+      expect(ServerConfigManager.getServerConfig('test-server-1')?.bountyBattles?.channelId).toBe('reloaded-channel');
     });
   });
 
   describe('edge cases', () => {
     it('should handle empty roleIds array', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        roleIds: [],
-      });
-
-      const config = ServerConfigManager.getServerConfig('test-server-1');
-      expect(config?.bountyBattles?.roleIds).toEqual([]);
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { roleIds: [] });
+      expect(ServerConfigManager.getServerConfig('test-server-1')?.bountyBattles?.roleIds).toEqual([]);
     });
 
     it('should handle partial updates', () => {
-      ServerConfigManager.updateBountyBattlesConfig('test-server-1', {
-        bountyThreshold: 25,
-      });
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { bountyThreshold: 25 });
 
       const config = ServerConfigManager.getServerConfig('test-server-1');
       expect(config?.bountyBattles?.channelId).toBe('channel-1');

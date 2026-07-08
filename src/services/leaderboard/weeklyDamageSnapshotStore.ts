@@ -1,8 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import { LeaderboardRankEntry } from '../../config/config';
-
-const SNAPSHOT_BASE_DIR = path.join(process.cwd(), 'data', 'weekly-damage');
+import { prisma } from '../../persistence/prisma';
 
 export type WeeklySnapshotKind = 'users' | 'mu';
 
@@ -107,60 +104,34 @@ export function buildMuWeeklyDamageCsv(entries: LeaderboardRankEntry[]): string 
 /** @deprecated Use buildUserWeeklyDamageCsv */
 export const buildWeeklyDamageCsv = buildUserWeeklyDamageCsv;
 
-function getServerSnapshotDir(serverId: string): string {
-  return path.join(SNAPSHOT_BASE_DIR, serverId);
-}
-
-function getSnapshotFilePath(
-  serverId: string,
-  kind: WeeklySnapshotKind,
-  weekEnding: string
-): string {
-  return path.join(getServerSnapshotDir(serverId), kind, `${weekEnding}.csv`);
-}
-
-export function writeWeeklySnapshot(
+export async function writeWeeklySnapshot(
   serverId: string,
   kind: WeeklySnapshotKind,
   weekEnding: string,
   csv: string
-): void {
-  const filePath = getSnapshotFilePath(serverId, kind, weekEnding);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, csv, 'utf-8');
+): Promise<void> {
+  await prisma.weeklyDamageSnapshot.upsert({
+    where: { serverId_kind_week: { serverId, kind, week: weekEnding } },
+    create: { serverId, kind, week: weekEnding, csv },
+    update: { csv },
+  });
 }
 
-export function readWeeklySnapshot(
+export async function readWeeklySnapshot(
   serverId: string,
   kind: WeeklySnapshotKind,
   weekEnding: string
-): string | null {
-  const filePath = getSnapshotFilePath(serverId, kind, weekEnding);
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  return fs.readFileSync(filePath, 'utf-8');
+): Promise<string | null> {
+  const row = await prisma.weeklyDamageSnapshot.findUnique({
+    where: { serverId_kind_week: { serverId, kind, week: weekEnding } },
+  });
+  return row?.csv ?? null;
 }
 
-function listWeeksInDir(dir: string): string[] {
-  if (!fs.existsSync(dir)) {
-    return [];
-  }
-
-  return fs
-    .readdirSync(dir)
-    .filter(name => name.endsWith('.csv'))
-    .map(name => name.slice(0, -4));
-}
-
-export function listAvailableWeeks(serverId: string): string[] {
-  const serverDir = getServerSnapshotDir(serverId);
-  const weeks = new Set([
-    ...listWeeksInDir(path.join(serverDir, 'users')),
-    ...listWeeksInDir(path.join(serverDir, 'mu')),
-    // Legacy flat files from before users/mu split
-    ...listWeeksInDir(serverDir),
-  ]);
-
-  return Array.from(weeks).sort().reverse();
+export async function listAvailableWeeks(serverId: string): Promise<string[]> {
+  const rows = await prisma.weeklyDamageSnapshot.findMany({
+    where: { serverId },
+    select: { week: true },
+  });
+  return Array.from(new Set(rows.map(r => r.week))).sort().reverse();
 }

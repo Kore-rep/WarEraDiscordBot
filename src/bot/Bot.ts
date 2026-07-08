@@ -14,6 +14,8 @@ import { ProxyTrackingService } from '../services/proxyTracking/ProxyTrackingSer
 import { LeaderboardService } from '../services/leaderboard/LeaderboardService';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
+import { ServerConfigManager } from '../utils/serverConfigManager';
+import { prisma } from '../persistence/prisma';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -166,6 +168,10 @@ export class Bot {
 
     // Stop all periodic tasks
     this.scheduler.stop();
+
+    // Flush any pending config writes and close the database connection
+    await ServerConfigManager.flush();
+    await prisma.$disconnect();
 
     // Destroy Discord client
     this.client.destroy();

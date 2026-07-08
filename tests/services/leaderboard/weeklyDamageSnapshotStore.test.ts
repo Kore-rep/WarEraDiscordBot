@@ -1,7 +1,4 @@
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { afterEach, describe, expect, it } from '@jest/globals';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from '@jest/globals';
 import {
   buildMuWeeklyDamageCsv,
   buildUserWeeklyDamageCsv,
@@ -12,6 +9,8 @@ import {
   readWeeklySnapshot,
   writeWeeklySnapshot,
 } from '../../../src/services/leaderboard/weeklyDamageSnapshotStore';
+import { prisma } from '../../../src/persistence/prisma';
+import { pushTestSchema, clearTables } from '../../setup/testDb';
 
 describe('weeklyDamageSnapshotStore', () => {
   describe('getCurrentWeekEndingDate', () => {
@@ -82,35 +81,43 @@ describe('weeklyDamageSnapshotStore', () => {
     });
   });
 
-  describe('snapshot file storage', () => {
-    const tempDirs: string[] = [];
-
-    afterEach(() => {
-      for (const dir of tempDirs) {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-      tempDirs.length = 0;
+  describe('snapshot storage', () => {
+    beforeAll(() => {
+      pushTestSchema();
     });
 
-    it('writes and reads user and MU snapshots separately', () => {
-      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'weekly-damage-test-'));
-      tempDirs.push(tempRoot);
-      const originalCwd = process.cwd();
-      process.chdir(tempRoot);
+    afterAll(async () => {
+      await prisma.$disconnect();
+    });
 
-      try {
-        const serverId = 'server-1';
-        const week = '2026-06-28';
+    beforeEach(async () => {
+      await clearTables();
+    });
 
-        writeWeeklySnapshot(serverId, 'users', week, 'user,data');
-        writeWeeklySnapshot(serverId, 'mu', week, 'mu,data');
+    it('writes and reads user and MU snapshots separately', async () => {
+      const serverId = 'server-1';
+      const week = '2026-06-28';
 
-        expect(readWeeklySnapshot(serverId, 'users', week)).toBe('user,data');
-        expect(readWeeklySnapshot(serverId, 'mu', week)).toBe('mu,data');
-        expect(listAvailableWeeks(serverId)).toEqual(['2026-06-28']);
-      } finally {
-        process.chdir(originalCwd);
-      }
+      await writeWeeklySnapshot(serverId, 'users', week, 'user,data');
+      await writeWeeklySnapshot(serverId, 'mu', week, 'mu,data');
+
+      expect(await readWeeklySnapshot(serverId, 'users', week)).toBe('user,data');
+      expect(await readWeeklySnapshot(serverId, 'mu', week)).toBe('mu,data');
+      expect(await listAvailableWeeks(serverId)).toEqual(['2026-06-28']);
+    });
+
+    it('overwrites an existing snapshot for the same server/kind/week', async () => {
+      await writeWeeklySnapshot('server-1', 'users', '2026-06-28', 'first');
+      await writeWeeklySnapshot('server-1', 'users', '2026-06-28', 'second');
+      expect(await readWeeklySnapshot('server-1', 'users', '2026-06-28')).toBe('second');
+    });
+
+    it('returns null for a missing snapshot and lists weeks newest-first', async () => {
+      expect(await readWeeklySnapshot('server-1', 'users', '2099-01-01')).toBeNull();
+
+      await writeWeeklySnapshot('server-1', 'users', '2026-06-21', 'a');
+      await writeWeeklySnapshot('server-1', 'mu', '2026-06-28', 'b');
+      expect(await listAvailableWeeks('server-1')).toEqual(['2026-06-28', '2026-06-21']);
     });
   });
 });

@@ -224,13 +224,13 @@ export class LeaderboardService implements ScheduledTask {
         mu => mu.name
       );
       const weekEnding = getCurrentWeekEndingDate(now);
-      writeWeeklySnapshot(
+      await writeWeeklySnapshot(
         serverId,
         'users',
         weekEnding,
         buildUserWeeklyDamageCsv(weeklyUserEntries)
       );
-      writeWeeklySnapshot(
+      await writeWeeklySnapshot(
         serverId,
         'mu',
         weekEnding,

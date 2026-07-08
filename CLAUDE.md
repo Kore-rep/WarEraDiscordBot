@@ -58,7 +58,12 @@ All channel sends go through **`DiscordService.sendToChannel(channelId, content,
 
 ## Persistence
 
-Per-server config and state go through `ServerConfigManager` (`src/utils/serverConfigManager.ts`) — always pass `serverId`. Persistence is migrating from JSON files to **SQLite via Prisma** (repository classes); prefer the persistence layer over hand-rolled `fs`/JSON reads.
+Per-server config and state go through `ServerConfigManager` (`src/utils/serverConfigManager.ts`) — always pass `serverId`; never hand-roll `fs`/JSON reads. Backing store is **SQLite via Prisma**:
+
+- An in-memory cache (`Map<serverId, ServerConfig>`) is the runtime source of truth. **Reads are synchronous** (from cache); mutators update the cache and schedule an async persist. `loadConfigs()` is awaited once at startup (`loadConfig()` in `src/config/config.ts`).
+- Schema: `prisma/schema.prisma` — a `Server` table with one JSON-encoded column per feature block, plus `WeeklyDamageSnapshot`. The Prisma client singleton is `src/persistence/prisma.ts`.
+- `DATABASE_URL` (in `.env`) points at `data/bot.db`. Apply schema with `npx prisma migrate deploy` (runtime) / `migrate dev` (local); `npm run db:import` migrates an existing `config/serverConfig.json` + weekly CSVs into SQLite once.
+- After a schema change: edit `prisma/schema.prisma`, run `npx prisma migrate dev --name <change>`, then `npx prisma generate` (the `build` script also generates).
 
 ## Build / test
 

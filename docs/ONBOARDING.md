@@ -96,15 +96,19 @@ Existing examples: `SpectreService`, `UserTrackingService`, `CountryTrackingServ
 
 Per-server settings and state are read/written through **`ServerConfigManager`** (`src/utils/serverConfigManager.ts`). Always go through it rather than reading files yourself, and always pass the `serverId`.
 
-> The project is migrating this persistence from JSON files to **SQLite via Prisma**. When that lands, you'll read/write through repository classes instead — but the "always scope by server id" rule stays the same.
+> Storage is **SQLite via Prisma** (`prisma/schema.prisma`, client in `src/persistence/prisma.ts`). `ServerConfigManager` keeps everything in an in-memory cache for fast synchronous reads and mirrors changes to the database. You rarely touch Prisma directly — go through `ServerConfigManager`. To change the stored shape: edit the schema, run `npx prisma migrate dev`, then `npx prisma generate`.
 
 ## Running and testing
 
 ```bash
-npm run dev      # run the bot from source (needs a .env — see .env.example)
-npm run build    # type-check + compile to dist/
-npm start        # run the compiled bot
-npm test         # run the Jest test suite
+cp .env.example .env         # then fill in DISCORD_TOKEN (DATABASE_URL is preset)
+npx prisma migrate deploy    # create/upgrade the SQLite database (data/bot.db)
+npm run db:import            # ONE-TIME: import an existing config/serverConfig.json + weekly CSVs (skip on a fresh install)
+
+npm run dev      # run the bot from source
+npm run build    # generate the Prisma client, type-check + compile to dist/
+npm start        # apply migrations, then run the compiled bot
+npm test         # run the Jest test suite (uses a throwaway SQLite db per worker)
 ```
 
 The bot depends on the WarEra SDK living next to this repo at `../WarEraSDK`. If the build complains about missing SDK exports, that sibling SDK is probably out of date — rebuild it first.
