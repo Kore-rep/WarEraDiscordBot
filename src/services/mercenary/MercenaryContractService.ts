@@ -2,14 +2,8 @@ import { logger } from '../../utils/logger';
 import { MercenaryContractTracker, NewMercenaryContract } from './MercenaryContractTracker';
 import { MercenaryContractFormatter } from './MercenaryContractFormatter';
 import { DiscordService } from '../discord/DiscordService';
-import { ApiService, BattlePollData } from '../api/ApiService';
+import { ApiService } from '../api/ApiService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
-
-// Infer types from SDK method return types
-type GetPaginatedAuctionsResponse = Awaited<ReturnType<import('warera-sdk').APIClient['mercenaryContractAuction']['getPaginatedAuctions']>>;
-type MercenaryContractAuctionDTO = GetPaginatedAuctionsResponse['result']['data']['items'][number];
-type GetBattlesResponse = Awaited<ReturnType<import('warera-sdk').APIClient['battle']['getBattles']>>;
-type BattleDTO = GetBattlesResponse['result']['data']['items'][number];
 
 /**
  * Service that handles mercenary contract auction tracking and notifications
@@ -30,31 +24,14 @@ export class MercenaryContractService {
   }
 
   /**
-   * Process mercenary contract auctions - detect new contracts and send fire-and-forget alerts
-   * @param pollData Optional pre-fetched battle data from the polling cycle (avoids duplicate API calls)
+   * Process mercenary contract auctions - detect new contracts and send fire-and-forget alerts.
+   * Fetches every open contract in a single paginated sweep (no per-battle requests).
    */
-  async processContracts(pollData?: BattlePollData): Promise<void> {
+  async processContracts(): Promise<void> {
     try {
       logger.debug('Processing mercenary contract auctions for new contracts...');
 
-      let currentBattles: BattleDTO[];
-      let countries: Map<string, unknown>;
-
-      if (pollData) {
-        currentBattles = pollData.battles;
-        countries = pollData.countries;
-      } else {
-        const fetched = await this.apiService.fetchAllBattles();
-        currentBattles = fetched.battles;
-        countries = fetched.countries;
-      }
-
-      if (currentBattles.length === 0) {
-        logger.debug('No battles available, skipping mercenary contract processing');
-        return;
-      }
-
-      const allContracts = await this.fetchContractsForBattles(currentBattles);
+      const allContracts = await this.apiService.fetchAllMercenaryContracts();
       logger.debug(`Fetched ${allContracts.length} mercenary contract auction(s) from API`);
 
       const newContracts = this.contractTracker.detectNewContracts(allContracts);
@@ -66,6 +43,16 @@ export class MercenaryContractService {
 
       logger.info(`Detected ${newContracts.length} new mercenary contract(s) to alert for`);
 
+      // Resolve country names for the countries referenced by the new contracts.
+      // These are cached (24h TTL) and shared with the battle poll, so this is
+      // effectively free when the battle poll has already fetched them.
+      const countryIds = new Set<string>();
+      for (const contract of newContracts) {
+        countryIds.add(contract.country);
+        countryIds.add(contract.forCountry);
+      }
+      const countries = await this.apiService.fetchCountries(Array.from(countryIds));
+
       await this.sendContractAlerts(newContracts, countries as Map<string, any>);
 
       this.contractTracker.cleanup();
@@ -75,15 +62,6 @@ export class MercenaryContractService {
       logger.error('Failed to process mercenary contracts', error);
       throw error;
     }
-  }
-
-  /**
-   * Fetch mercenary contract auctions for multiple battles via batch client
-   */
-  private async fetchContractsForBattles(
-    battles: BattleDTO[]
-  ): Promise<MercenaryContractAuctionDTO[]> {
-    return this.apiService.fetchMercenaryContractsForBattles(battles.map(battle => battle._id));
   }
 
   /**

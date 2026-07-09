@@ -6,6 +6,7 @@ import type {
   MercenaryContractAuctionDTO,
   GetBattlesResponse,
   GetCountryByIdResponse,
+  GetPaginatedAuctionsParams,
   GetPaginatedAuctionsResponse,
   RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
 } from 'warera-sdk';
@@ -18,8 +19,8 @@ import { SharedRateLimiter } from './SharedRateLimiter';
 /** Page size for `battle.getBattles` cursor pagination (matches typical API max page size). */
 const BATTLES_PAGE_SIZE = 100;
 
-/** Max mercenary contract auction requests per batch run */
-const MERCENARY_CONTRACT_BATCH_SIZE = 50;
+/** Page size for `mercenaryContractAuction.getPaginatedAuctions` cursor pagination. */
+const MERCENARY_CONTRACT_PAGE_SIZE = 50;
 
 export interface BattlePollData {
   battles: BattleDTO[];
@@ -99,52 +100,47 @@ export class ApiService {
   }
 
   /**
-   * Fetch mercenary contract auctions for multiple battles using the polling batch client
+   * Fetch ALL open mercenary contract auctions in a single paginated sweep.
+   *
+   * Omitting `battleId` returns every contract across all battles, so we follow
+   * `nextCursor` through the pages instead of issuing one request per battle.
+   * Pagination is cursor-dependent (each page needs the previous page's cursor),
+   * so it can't be batched — use the non-batched client.
    */
-  async fetchMercenaryContractsForBattles(
-    battleIds: string[]
-  ): Promise<MercenaryContractAuctionDTO[]> {
-    if (battleIds.length === 0) {
-      return [];
-    }
-
+  async fetchAllMercenaryContracts(): Promise<MercenaryContractAuctionDTO[]> {
     const allContracts: MercenaryContractAuctionDTO[] = [];
+    let nextCursor: string | undefined;
+    let pageCount = 0;
 
     try {
-      logger.debug(
-        `Fetching mercenary contracts for ${battleIds.length} battle(s) via batch client...`
-      );
+      logger.debug("Fetching all mercenary contract auctions from API...");
 
-      for (let i = 0; i < battleIds.length; i += MERCENARY_CONTRACT_BATCH_SIZE) {
-        const chunk = battleIds.slice(i, i + MERCENARY_CONTRACT_BATCH_SIZE);
-        const contractPromises = chunk.map((battleId) =>
-          this.batchClient.mercenaryContractAuction.getPaginatedAuctions({
-            battleId,
-            limit: 50,
-          })
-        );
-
-        await this.batchClient.runBatch();
-        const results = await Promise.all(contractPromises);
-
-        for (let j = 0; j < chunk.length; j++) {
-          const result = results[j] as GetPaginatedAuctionsResponse | undefined;
-          const items = result?.result?.data?.items;
-          if (items) {
-            allContracts.push(...items);
-            logger.debug(`Fetched ${items.length} contract(s) for battle ${chunk[j]}`);
-          } else {
-            logger.warn(`Failed to fetch mercenary contracts for battle ${chunk[j]}`);
-          }
+      do {
+        const params: GetPaginatedAuctionsParams = {
+          limit: MERCENARY_CONTRACT_PAGE_SIZE,
+        };
+        if (nextCursor) {
+          params.cursor = nextCursor;
         }
-      }
+
+        const response = (await this.client.mercenaryContractAuction.getPaginatedAuctions(
+          params
+        )) as GetPaginatedAuctionsResponse;
+
+        const data = response?.result?.data;
+        if (data?.items) {
+          allContracts.push(...data.items);
+        }
+        nextCursor = data?.nextCursor;
+        pageCount++;
+      } while (nextCursor);
 
       logger.info(
-        `Fetched ${allContracts.length} mercenary contract auction(s) across ${battleIds.length} battle(s)`
+        `Fetched ${allContracts.length} mercenary contract auction(s) across ${pageCount} page(s)`
       );
       return allContracts;
     } catch (error) {
-      const rateLimitStatus = this.batchClient.getRateLimitStatus();
+      const rateLimitStatus = this.client.getRateLimitStatus();
       if (rateLimitStatus) {
         logger.error(
           `Failed to fetch mercenary contracts. Rate limit status: ${rateLimitStatus.requestCount}/${rateLimitStatus.maxRequests} requests (${rateLimitStatus.usagePercent}% usage), at limit: ${rateLimitStatus.isAtLimit}, backoff: ${rateLimitStatus.currentBackoffMs}ms`,

@@ -5,9 +5,9 @@ import { MercenaryContractService } from '../../mercenary/MercenaryContractServi
 import { ScheduledTask } from '../ScheduledTask';
 
 /**
- * Fetches battle data once per cycle and fans it out to bounty-battle and mercenary
- * contract processing (both derived from the same battle poll). Each stage is isolated
- * so one failure doesn't abort the rest.
+ * Runs the per-cycle battle work: fetches battle data once for bounty-battle
+ * processing, then runs mercenary contract processing (which fetches its own
+ * contract data). Each stage is isolated so one failure doesn't abort the rest.
  */
 export class BattlePollTask implements ScheduledTask {
   readonly name = 'battle-poll';
@@ -37,9 +37,10 @@ export class BattlePollTask implements ScheduledTask {
       logger.error('Battle poll (bounties) failed', error);
     }
 
-    // Reuses the same battle poll data
+    // Mercenary contracts are fetched independently (single paginated sweep of all
+    // open contracts), so they don't consume the battle poll data.
     try {
-      await this.mercenaryContractService.processContracts(pollData);
+      await this.mercenaryContractService.processContracts();
     } catch (error) {
       logger.error('Battle poll (mercenary contracts) failed', error);
     }
