@@ -1,4 +1,4 @@
-import { Client, TextChannel, User, EmbedBuilder } from 'discord.js';
+import { Client, TextChannel, User, EmbedBuilder, DiscordAPIError, RESTJSONErrorCodes } from 'discord.js';
 import { logger } from '../../utils/logger';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { splitMessage } from './messageChunker';
@@ -15,6 +15,10 @@ export interface SendOptions {
 export class DiscordService {
   private client: Client;
   private channels: Map<string, TextChannel> = new Map(); // serverId -> channel
+  // Channel ids that failed to initialize (not found / not a text channel / fetch
+  // error). Sends to these are skipped so we don't hammer Discord every task cycle
+  // with requests we know will fail. Cleared for a channel once it initializes OK.
+  private failedChannels: Set<string> = new Set();
 
   constructor(client: Client) {
     this.client = client;
@@ -67,21 +71,25 @@ export class DiscordService {
   async initializeServerChannel(serverId: string, channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
-          
+
           if (!channel) {
         logger.warn(`Channel with ID ${channelId} not found for server ${serverId}`);
+        this.failedChannels.add(channelId);
         return;
           }
 
           if (!channel.isTextBased()) {
         logger.warn(`Channel with ID ${channelId} is not a text channel for server ${serverId}`);
+        this.failedChannels.add(channelId);
         return;
           }
 
           this.channels.set(serverId, channel as TextChannel);
+          this.failedChannels.delete(channelId);
           logger.info(`Initialized channel for server ${serverId}: ${(channel as TextChannel).name}`);
         } catch (error) {
           logger.error(`Failed to initialize channel for server ${serverId}`, error);
+      this.failedChannels.add(channelId);
       // Don't throw - this is recoverable
     }
   }
@@ -94,10 +102,15 @@ export class DiscordService {
    * @returns the id of the first message sent, or null if nothing was sent / it failed.
    */
   async sendToChannel(channelId: string, content: string, options: SendOptions = {}): Promise<string | null> {
+    if (this.failedChannels.has(channelId)) {
+      logger.debug(`Skipping send to channel ${channelId} - it failed to initialize`);
+      return null;
+    }
     try {
       const channel = await this.client.channels.fetch(channelId);
       if (!channel || !channel.isTextBased()) {
         logger.error(`Channel ${channelId} is not a text channel`);
+        this.failedChannels.add(channelId);
         return null;
       }
       const textChannel = channel as TextChannel;
@@ -118,8 +131,23 @@ export class DiscordService {
       return firstMessageId;
     } catch (error) {
       logger.error(`Failed to send message to channel ${channelId}`, error);
+      if (this.isUnrecoverableChannelError(error)) {
+        this.failedChannels.add(channelId);
+      }
       return null;
     }
+  }
+
+  /**
+   * Whether a channel error means the channel is gone or permanently inaccessible
+   * (so retrying every cycle is pointless), versus a transient failure worth retrying.
+   */
+  private isUnrecoverableChannelError(error: unknown): boolean {
+    return (
+      error instanceof DiscordAPIError &&
+      (error.code === RESTJSONErrorCodes.UnknownChannel ||
+        error.code === RESTJSONErrorCodes.MissingAccess)
+    );
   }
 
   /**
