@@ -8,7 +8,7 @@ import { MuDirectoryConfig } from '../../config/config';
 import { computeDamagePotential } from './damage';
 import { computeMuScore } from './score';
 import { renderDirectory, MuDirectoryEntry } from './render';
-import { parseMuInput, buildMuUrl } from './muLink';
+import { buildMuUrl } from './muLink';
 
 // Domain types re-exported so command handlers never import the SDK directly.
 type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
@@ -19,11 +19,6 @@ const BATCH_SIZE = 100;
 
 /** UTC hour at which the daily directory refresh runs (mirrors the original bot's default). */
 const REFRESH_HOUR_UTC = 12;
-
-export type AddUnitResult =
-  | { status: 'added'; name: string }
-  | { status: 'exists'; name: string }
-  | { status: 'invalid' };
 
 function getNextDailyRefresh(from: Date = new Date()): Date {
   const next = new Date(from);
@@ -95,7 +90,7 @@ export class MuDirectoryService implements ScheduledTask {
   private async refreshDirectory(serverId: string, config: MuDirectoryConfig): Promise<void> {
     logger.info(`Refreshing MU directory for server ${serverId}`);
 
-    const mus = await this.fetchMilitaryUnits(config.units.map(u => u.id));
+    const mus = await this.fetchMilitaryUnits(config.militaryUnitIds);
     const musById = new Map(mus.map(m => [m._id, m]));
 
     const userIds = new Set<string>();
@@ -109,13 +104,13 @@ export class MuDirectoryService implements ScheduledTask {
     }
     const users = await this.fetchUsers([...userIds]);
 
-    const entries: MuDirectoryEntry[] = config.units.map(unit => {
-      const mu = musById.get(unit.id);
+    const entries: MuDirectoryEntry[] = config.militaryUnitIds.map(muId => {
+      const mu = musById.get(muId);
       if (!mu) {
-        // API fetch failed for this MU: fall back to the saved entry, like the original bot.
+        // API fetch failed for this MU: render a placeholder rather than dropping it.
         return {
-          name: unit.name,
-          url: unit.url,
+          name: `MU ${muId}`,
+          url: buildMuUrl(muId),
           hqLevel: 0,
           dormsLevel: 0,
           commanders: [],
@@ -135,8 +130,8 @@ export class MuDirectoryService implements ScheduledTask {
       const commanders = (mu.roles?.commanders ?? []).map(id => users.get(id)?.username ?? id);
 
       return {
-        name: mu.name || unit.name,
-        url: unit.url || buildMuUrl(mu._id),
+        name: mu.name || `MU ${muId}`,
+        url: buildMuUrl(muId),
         hqLevel: mu.activeUpgradeLevels?.headquarters ?? 0,
         dormsLevel: mu.activeUpgradeLevels?.dormitories ?? 0,
         commanders,
@@ -201,48 +196,5 @@ export class MuDirectoryService implements ScheduledTask {
     }
 
     return users;
-  }
-
-  /**
-   * Add an MU (by link or id) to a server's directory, resolving its current name
-   * from the API. Kept here so the command stays SDK-free.
-   */
-  async addUnit(serverId: string, input: string): Promise<AddUnitResult> {
-    let parsed;
-    try {
-      parsed = parseMuInput(input);
-    } catch {
-      return { status: 'invalid' };
-    }
-
-    let name = `MU ${parsed.id}`;
-    try {
-      const res = await this.apiService.getClient().mu.getById(parsed.id);
-      const fetchedName = res?.result?.data?.name;
-      if (fetchedName) {
-        name = fetchedName;
-      }
-    } catch (error) {
-      logger.warn(`Could not resolve MU name for ${parsed.id}`, error);
-    }
-
-    const added = ServerConfigManager.addMuDirectoryUnit(serverId, {
-      id: parsed.id,
-      name,
-      url: parsed.url,
-    });
-
-    return added ? { status: 'added', name } : { status: 'exists', name };
-  }
-
-  /** Remove an MU (by link or id) from a server's directory. Returns false if absent. */
-  removeUnit(serverId: string, input: string): boolean {
-    let parsed;
-    try {
-      parsed = parseMuInput(input);
-    } catch {
-      return false;
-    }
-    return ServerConfigManager.removeMuDirectoryUnit(serverId, parsed.id);
   }
 }

@@ -2,7 +2,7 @@
  * Renders the MU directory as a single markdown string (INFO / MU's / LEADERBOARD).
  * Port of `render_directory_lines` from the original MU-Directory-Python bot, minus
  * the chunking — DiscordService owns splitting into ≤2000-char messages. The footer
- * line is adapted to the new slash-command controls.
+ * line is adapted to the new slash-command control.
  */
 
 export interface MuDirectoryEntry {
@@ -42,7 +42,7 @@ export function renderDirectory(entries: MuDirectoryEntry[]): string {
     '**INFO**',
     '> Score: average ranking tier score across MU rankings. Bronze 0, Silver 2.5, Gold 5, Platinum 7.5, Diamond 10.',
     '> Potential Damage: estimated member damage using full/purple gear, all pilled, 18h window, fish food, 70% battle bonus, and a 0.9 safety margin.',
-    '> Use `/mudirectory add` and `/mudirectory remove` to manage this list.',
+    '> Use `/mudirectory config set` to manage the tracked military units.',
     '',
     "**MU's**",
   ];

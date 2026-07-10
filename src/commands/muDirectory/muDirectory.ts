@@ -5,6 +5,9 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { canManageFeature, isGuildAdmin, replyUnauthorized } from '../../utils/commandAuth';
+import { parseMuInput } from '../../services/muDirectory/muLink';
+
+const MANAGE_ROLE_OPTIONS = ['role1', 'role2', 'role3', 'role4', 'role5'] as const;
 
 export const muDirectoryCommand: Command = {
   data: createCommandBuilder(
@@ -12,68 +15,49 @@ export const muDirectoryCommand: Command = {
     'Maintain a WarEra Military-Unit directory in a channel',
     { requireAdmin: false }
   )
-    .addSubcommand(sub =>
-      sub
-        .setName('setup')
-        .setDescription('Set the channel for the MU directory and enable it (admin only)')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel for the living directory (defaults to this channel)')
-            .setRequired(false)
-            .addChannelTypes(ChannelType.GuildText)
+    .addSubcommandGroup(group =>
+      group
+        .setName('config')
+        .setDescription('Configure the MU directory')
+        .addSubcommand(sub => {
+          sub
+            .setName('set')
+            .setDescription('Set MU directory configuration (admin only)')
+            .addStringOption(opt =>
+              opt
+                .setName('mus')
+                .setDescription('Comma-separated MU ids or links (required on first setup)')
+                .setRequired(false)
+            )
+            .addChannelOption(opt =>
+              opt
+                .setName('channel')
+                .setDescription('Channel for the living directory (defaults to this channel)')
+                .setRequired(false)
+                .addChannelTypes(ChannelType.GuildText)
+            );
+          for (const name of MANAGE_ROLE_OPTIONS) {
+            sub.addRoleOption(opt =>
+              opt
+                .setName(name)
+                .setDescription('Role allowed to manage the directory (set any to replace the list)')
+                .setRequired(false)
+            );
+          }
+          return sub;
+        })
+        .addSubcommand(sub =>
+          sub.setName('view').setDescription('View current MU directory settings')
         )
     )
     .addSubcommand(sub =>
-      sub
-        .setName('add')
-        .setDescription('Add a military unit to the directory')
-        .addStringOption(opt =>
-          opt
-            .setName('mu')
-            .setDescription('WarEra MU link or id')
-            .setRequired(true)
-        )
-    )
-    .addSubcommand(sub =>
-      sub
-        .setName('remove')
-        .setDescription('Remove a military unit from the directory')
-        .addStringOption(opt =>
-          opt
-            .setName('mu')
-            .setDescription('WarEra MU link or id')
-            .setRequired(true)
-        )
-    )
-    .addSubcommand(sub =>
-      sub.setName('list').setDescription('List the military units in the directory')
-    )
-    .addSubcommand(sub =>
-      sub.setName('refresh').setDescription('Refresh the directory now')
+      sub.setName('enable').setDescription('Enable daily directory updates (admin only)')
     )
     .addSubcommand(sub =>
       sub.setName('disable').setDescription('Disable daily directory updates (admin only)')
     )
     .addSubcommand(sub =>
-      sub
-        .setName('roles')
-        .setDescription('Set the roles allowed to manage the directory (admin only)')
-        .addRoleOption(opt =>
-          opt.setName('role1').setDescription('Allowed role').setRequired(false)
-        )
-        .addRoleOption(opt =>
-          opt.setName('role2').setDescription('Allowed role').setRequired(false)
-        )
-        .addRoleOption(opt =>
-          opt.setName('role3').setDescription('Allowed role').setRequired(false)
-        )
-        .addRoleOption(opt =>
-          opt.setName('role4').setDescription('Allowed role').setRequired(false)
-        )
-        .addRoleOption(opt =>
-          opt.setName('role5').setDescription('Allowed role').setRequired(false)
-        )
+      sub.setName('refresh').setDescription('Refresh the directory now')
     ),
 
   async execute(
@@ -94,32 +78,21 @@ export const muDirectoryCommand: Command = {
         return;
       }
 
+      const group = interaction.options.getSubcommandGroup(false);
       const subcommand = interaction.options.getSubcommand();
 
-      switch (subcommand) {
-        case 'setup':
-          await handleSetup(interaction, discordService);
-          break;
-        case 'add':
-          await handleAdd(interaction, apiService);
-          break;
-        case 'remove':
-          await handleRemove(interaction, apiService);
-          break;
-        case 'list':
-          await handleList(interaction);
-          break;
-        case 'refresh':
-          await handleRefresh(interaction, apiService);
-          break;
-        case 'disable':
-          await handleDisable(interaction);
-          break;
-        case 'roles':
-          await handleRoles(interaction);
-          break;
-        default:
-          await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
+      if (group === 'config' && subcommand === 'set') {
+        await handleConfigSet(interaction, discordService);
+      } else if (group === 'config' && subcommand === 'view') {
+        await handleConfigView(interaction);
+      } else if (subcommand === 'enable') {
+        await handleEnable(interaction, apiService);
+      } else if (subcommand === 'disable') {
+        await handleDisable(interaction);
+      } else if (subcommand === 'refresh') {
+        await handleRefresh(interaction, apiService);
+      } else {
+        await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
       }
     } catch (error) {
       logger.error('Error in mudirectory command', error);
@@ -133,29 +106,67 @@ export const muDirectoryCommand: Command = {
   },
 };
 
-/** Non-admin gate: member must be admin/owner or hold a configured manage role. */
-function ensureCanManage(interaction: ChatInputCommandInteraction): boolean {
-  const serverId = interaction.guild!.id;
-  const config = ServerConfigManager.getMuDirectoryConfig(serverId);
-  return canManageFeature(interaction, config?.manageRoleIds ?? []);
+/** Parse the `mus` option (comma-separated ids or links) into a deduped id list. */
+function parseMuIds(raw: string): { ids: string[]; invalid: string[] } {
+  const ids: string[] = [];
+  const invalid: string[] = [];
+  for (const token of raw.split(',').map(t => t.trim()).filter(Boolean)) {
+    try {
+      const { id } = parseMuInput(token);
+      if (!ids.includes(id)) {
+        ids.push(id);
+      }
+    } catch {
+      invalid.push(token);
+    }
+  }
+  return { ids, invalid };
 }
 
-async function handleSetup(
+/** Read the manage-role options (role1..role5); returns undefined if none were given. */
+function readManageRoles(interaction: ChatInputCommandInteraction): string[] | undefined {
+  const roleIds: string[] = [];
+  for (const name of MANAGE_ROLE_OPTIONS) {
+    const role = interaction.options.getRole(name);
+    if (role && !roleIds.includes(role.id)) {
+      roleIds.push(role.id);
+    }
+  }
+  return roleIds.length > 0 ? roleIds : undefined;
+}
+
+async function handleConfigSet(
   interaction: ChatInputCommandInteraction,
   discordService: DiscordService
 ): Promise<void> {
   if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can set up the MU directory.');
+    await replyUnauthorized(interaction, 'Only administrators can configure the MU directory.');
     return;
   }
 
   const serverId = interaction.guild!.id;
-  const channelOpt = interaction.options.getChannel('channel');
-  const channelId =
-    channelOpt?.id ??
+  const musInput = interaction.options.getString('mus');
+  const channel = interaction.options.getChannel('channel');
+  const manageRoleIds = readManageRoles(interaction);
+
+  const existing = ServerConfigManager.getMuDirectoryConfig(serverId);
+
+  if (!existing && !musInput) {
+    await interaction.reply({
+      content:
+        'No configuration exists yet. Provide **mus** (MU ids or links) on first setup.\n\n' +
+        'Example: `/mudirectory config set mus:abc123,https://app.warera.io/mu/def456`',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const newChannelId =
+    channel?.id ??
+    existing?.channelId ??
     (interaction.channel?.isTextBased() ? interaction.channelId : undefined);
 
-  if (!channelId) {
+  if (!newChannelId) {
     await interaction.reply({
       content: 'Specify a **channel**, or run this command from a text channel.',
       ephemeral: true,
@@ -165,103 +176,134 @@ async function handleSetup(
 
   await interaction.deferReply({ ephemeral: true });
 
-  const existing = ServerConfigManager.getMuDirectoryConfig(serverId);
-  const channelChanged = existing?.channelId && existing.channelId !== channelId;
+  let militaryUnitIds = existing?.militaryUnitIds ?? [];
+  if (musInput) {
+    const { ids, invalid } = parseMuIds(musInput);
+    if (invalid.length > 0) {
+      await interaction.editReply({
+        content: `These do not look like MU ids or links: ${invalid.join(', ')}`,
+      });
+      return;
+    }
+    if (ids.length === 0) {
+      await interaction.editReply({ content: 'Please provide at least one MU id or link.' });
+      return;
+    }
+    militaryUnitIds = ids;
+  }
+
+  const channelChanged = existing?.channelId && existing.channelId !== newChannelId;
 
   ServerConfigManager.updateMuDirectoryConfig(serverId, {
-    channelId,
-    enabled: true,
+    channelId: newChannelId,
+    militaryUnitIds,
+    ...(manageRoleIds !== undefined ? { manageRoleIds } : {}),
+    enabled: existing?.enabled ?? true,
     // Moving channels invalidates the old living messages.
     messageIds: channelChanged ? [] : existing?.messageIds,
   });
 
-  await discordService.initializeServerChannel(serverId, channelId);
+  await discordService.initializeServerChannel(serverId, newChannelId);
 
-  await interaction.editReply({
-    content:
-      `**MU directory configured**\n` +
-      `Channel: <#${channelId}>\n` +
-      `Tracked MUs: ${existing?.units.length ?? 0}\n\n` +
-      `Add units with \`/mudirectory add\`, then run \`/mudirectory refresh\`.`,
-  });
+  const config = ServerConfigManager.getMuDirectoryConfig(serverId)!;
+  let message = '**MU directory configured**\n\n';
+  message += `**Channel:** <#${newChannelId}>\n`;
+  message += `**Military units:** ${config.militaryUnitIds.length} configured\n`;
+  message += `**Manage roles:** ${formatRoles(config.manageRoleIds)}\n`;
+  message += `**Status:** ${config.enabled === false ? 'Disabled (use /mudirectory enable)' : 'Enabled'}`;
+  if (channelChanged) {
+    message += '\n\nChannel changed — new directory messages will be posted on the next refresh.';
+  }
+  message += '\n\nRun `/mudirectory refresh` to update the directory now.';
+
+  await interaction.editReply({ content: message });
 }
 
-async function handleAdd(
-  interaction: ChatInputCommandInteraction,
-  apiService: ApiService
-): Promise<void> {
-  if (!ensureCanManage(interaction)) {
-    await replyUnauthorized(interaction);
-    return;
-  }
-
-  await interaction.deferReply({ ephemeral: true });
-
+async function handleConfigView(interaction: ChatInputCommandInteraction): Promise<void> {
   const serverId = interaction.guild!.id;
-  const input = interaction.options.getString('mu', true);
+  const config = ServerConfigManager.getMuDirectoryConfig(serverId);
 
-  const service = apiService.getMuDirectoryService();
-  if (!service) {
-    await interaction.editReply({ content: 'MU directory service is not available.' });
-    return;
-  }
-
-  const result = await service.addUnit(serverId, input);
-  if (result.status === 'invalid') {
-    await interaction.editReply({
-      content: 'That does not look like a WarEra MU link or id.',
+  if (!config) {
+    await interaction.reply({
+      content:
+        'The MU directory is not configured for this server.\n\nUse `/mudirectory config set` to get started.',
+      ephemeral: true,
     });
     return;
   }
-  if (result.status === 'exists') {
-    await interaction.editReply({ content: `**${result.name}** is already in the directory.` });
-    return;
-  }
 
-  await interaction.editReply({
-    content: `Added **${result.name}**. Run \`/mudirectory refresh\` to update the directory.`,
-  });
-}
+  const status = config.enabled !== false ? 'Enabled' : 'Disabled';
+  const lastUpdated = config.lastUpdated
+    ? `<t:${Math.floor(new Date(config.lastUpdated).getTime() / 1000)}:R>`
+    : 'Never';
 
-async function handleRemove(
-  interaction: ChatInputCommandInteraction,
-  apiService: ApiService
-): Promise<void> {
-  if (!ensureCanManage(interaction)) {
-    await replyUnauthorized(interaction);
-    return;
-  }
-
-  const service = apiService.getMuDirectoryService();
-  if (!service) {
-    await interaction.reply({ content: 'MU directory service is not available.', ephemeral: true });
-    return;
-  }
-
-  const serverId = interaction.guild!.id;
-  const input = interaction.options.getString('mu', true);
-
-  const removed = service.removeUnit(serverId, input);
   await interaction.reply({
-    content: removed
-      ? 'Removed. Run `/mudirectory refresh` to update the directory.'
-      : 'No matching military unit is tracked.',
+    content:
+      '**MU Directory Settings**\n\n' +
+      `**Channel:** ${config.channelId ? `<#${config.channelId}>` : 'None'}\n` +
+      `**Military unit IDs:** ${config.militaryUnitIds.join(', ') || 'None'}\n` +
+      `**Manage roles:** ${formatRoles(config.manageRoleIds)}\n` +
+      `**Status:** ${status}\n` +
+      `**Last updated:** ${lastUpdated}`,
     ephemeral: true,
   });
 }
 
-async function handleList(interaction: ChatInputCommandInteraction): Promise<void> {
-  const serverId = interaction.guild!.id;
-  const config = ServerConfigManager.getMuDirectoryConfig(serverId);
-
-  if (!config || config.units.length === 0) {
-    await interaction.reply({ content: 'No military units are tracked yet.', ephemeral: true });
+async function handleEnable(
+  interaction: ChatInputCommandInteraction,
+  apiService: ApiService
+): Promise<void> {
+  if (!isGuildAdmin(interaction)) {
+    await replyUnauthorized(interaction, 'Only administrators can enable the MU directory.');
     return;
   }
 
-  const lines = config.units.map((u, i) => `${i + 1}. **${u.name}** — <${u.url}>`);
+  const serverId = interaction.guild!.id;
+  const config = ServerConfigManager.getMuDirectoryConfig(serverId);
+  if (!config) {
+    await interaction.reply({
+      content: 'The MU directory is not configured.\n\nUse `/mudirectory config set` first.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+  ServerConfigManager.updateMuDirectoryConfig(serverId, { enabled: true });
+
+  const service = apiService.getMuDirectoryService();
+  if (service) {
+    try {
+      await service.refreshServer(serverId);
+      await interaction.editReply({ content: '**MU directory enabled.** The directory has been refreshed.' });
+      return;
+    } catch (error) {
+      logger.error('Failed to refresh MU directory on enable', error);
+      await interaction.editReply({
+        content: '**MU directory enabled**, but the initial refresh failed. Check logs and try again later.',
+      });
+      return;
+    }
+  }
+
+  await interaction.editReply({ content: '**MU directory enabled** for this server.' });
+}
+
+async function handleDisable(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!isGuildAdmin(interaction)) {
+    await replyUnauthorized(interaction, 'Only administrators can disable the MU directory.');
+    return;
+  }
+
+  const serverId = interaction.guild!.id;
+  if (!ServerConfigManager.getMuDirectoryConfig(serverId)) {
+    await interaction.reply({ content: 'The MU directory is not configured.', ephemeral: true });
+    return;
+  }
+
+  ServerConfigManager.updateMuDirectoryConfig(serverId, { enabled: false });
   await interaction.reply({
-    content: `**Tracked military units (${config.units.length})**\n${lines.join('\n')}`,
+    content: '**MU directory disabled.** The last messages will remain in place.',
     ephemeral: true,
   });
 }
@@ -270,12 +312,14 @@ async function handleRefresh(
   interaction: ChatInputCommandInteraction,
   apiService: ApiService
 ): Promise<void> {
-  if (!ensureCanManage(interaction)) {
+  const serverId = interaction.guild!.id;
+  const config = ServerConfigManager.getMuDirectoryConfig(serverId);
+
+  if (!canManageFeature(interaction, config?.manageRoleIds ?? [])) {
     await replyUnauthorized(interaction);
     return;
   }
 
-  const serverId = interaction.guild!.id;
   const service = apiService.getMuDirectoryService();
   if (!service) {
     await interaction.reply({ content: 'MU directory service is not available.', ephemeral: true });
@@ -293,42 +337,6 @@ async function handleRefresh(
   }
 }
 
-async function handleDisable(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can disable the MU directory.');
-    return;
-  }
-
-  const serverId = interaction.guild!.id;
-  if (!ServerConfigManager.getMuDirectoryConfig(serverId)) {
-    await interaction.reply({ content: 'The MU directory is not configured.', ephemeral: true });
-    return;
-  }
-
-  ServerConfigManager.updateMuDirectoryConfig(serverId, { enabled: false });
-  await interaction.reply({ content: 'Daily MU directory updates disabled.', ephemeral: true });
-}
-
-async function handleRoles(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can set manage roles.');
-    return;
-  }
-
-  const serverId = interaction.guild!.id;
-  const roleIds: string[] = [];
-  for (const name of ['role1', 'role2', 'role3', 'role4', 'role5']) {
-    const role = interaction.options.getRole(name);
-    if (role) {
-      roleIds.push(role.id);
-    }
-  }
-
-  ServerConfigManager.setMuDirectoryManageRoles(serverId, roleIds);
-  await interaction.reply({
-    content: roleIds.length
-      ? `Roles allowed to manage the directory: ${roleIds.map(id => `<@&${id}>`).join(', ')}`
-      : 'Cleared manage roles. Only administrators can manage the directory now.',
-    ephemeral: true,
-  });
+function formatRoles(roleIds: string[]): string {
+  return roleIds.length ? roleIds.map(id => `<@&${id}>`).join(', ') : 'None (admins only)';
 }
