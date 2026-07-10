@@ -209,6 +209,29 @@ export const DEFAULT_LEVEL_BRACKETS: LevelBracket[] = [
 ];
 
 /**
+ * A single military unit tracked by the MU directory. Name/url are kept so a
+ * stale entry can still render if the API fetch for it fails on a refresh.
+ */
+export interface MuDirectoryUnit {
+  id: string;
+  name: string;
+  url: string;
+}
+
+/**
+ * MU directory feature per server. Maintains a curated list of military units
+ * rendered as a living, positionally-edited set of directory messages.
+ */
+export interface MuDirectoryConfig {
+  enabled?: boolean;
+  channelId: string;
+  messageIds: string[];
+  units: MuDirectoryUnit[];
+  manageRoleIds: string[];
+  lastUpdated?: string;
+}
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -222,6 +245,7 @@ export interface ServerConfig {
   countryGroups?: CountryGroup[];
   spectre?: SpectreConfig;
   leaderboard?: LeaderboardConfig;
+  muDirectory?: MuDirectoryConfig;
 }
 
 /**

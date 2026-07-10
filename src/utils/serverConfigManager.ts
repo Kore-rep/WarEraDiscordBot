@@ -9,6 +9,8 @@ import {
   ProxyUser,
   TrackedProxyCountry,
   LeaderboardConfig,
+  MuDirectoryConfig,
+  MuDirectoryUnit,
 } from '../config/config';
 import { logger } from './logger';
 import { prisma } from '../persistence/prisma';
@@ -50,6 +52,7 @@ export class ServerConfigManager {
           countryGroups: decode(row.countryGroups),
           spectre: decode(row.spectre),
           leaderboard: decode(row.leaderboard),
+          muDirectory: decode(row.muDirectory),
         };
         serversMap.set(row.id, this.normalizeServerConfig(row.id, raw));
       }
@@ -160,6 +163,16 @@ export class ServerConfigManager {
         levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
         lastSnapshot: serverConfig.leaderboard.lastSnapshot,
         lastUpdated: serverConfig.leaderboard.lastUpdated,
+      } : undefined,
+      muDirectory: serverConfig.muDirectory ? {
+        enabled: serverConfig.muDirectory.enabled,
+        channelId: serverConfig.muDirectory.channelId || '',
+        messageIds: (serverConfig.muDirectory.messageIds || []).filter(id => id && id.trim().length > 0),
+        units: (serverConfig.muDirectory.units || [])
+          .filter(u => u && u.id)
+          .map(u => ({ id: u.id, name: u.name || `MU ${u.id}`, url: u.url || `https://app.warera.io/mu/${u.id}` })),
+        manageRoleIds: (serverConfig.muDirectory.manageRoleIds || []).filter(id => id && id.trim().length > 0),
+        lastUpdated: serverConfig.muDirectory.lastUpdated,
       } : undefined,
     };
   }
@@ -321,6 +334,7 @@ export class ServerConfigManager {
           countryGroups: encode(cfg.countryGroups),
           spectre: encode(cfg.spectre),
           leaderboard: encode(cfg.leaderboard),
+          muDirectory: encode(cfg.muDirectory),
         };
         return prisma.server.upsert({ where: { id }, create: { id, ...data }, update: data });
       }),
@@ -385,6 +399,12 @@ export class ServerConfigManager {
           muTotal: config.leaderboard.lastSnapshot.muTotal.map(e => ({ ...e })),
           muWeekly: config.leaderboard.lastSnapshot.muWeekly.map(e => ({ ...e })),
         } : undefined,
+      } : undefined,
+      muDirectory: config.muDirectory ? {
+        ...config.muDirectory,
+        messageIds: [...config.muDirectory.messageIds],
+        units: config.muDirectory.units.map(u => ({ ...u })),
+        manageRoleIds: [...config.muDirectory.manageRoleIds],
       } : undefined,
     };
   }
@@ -1224,5 +1244,101 @@ export class ServerConfigManager {
       logger.error('Failed to update leaderboard config', error);
       throw error;
     }
+  }
+
+  /** Read a server's MU directory config (deep copy), or undefined if unset. */
+  static getMuDirectoryConfig(serverId: string): MuDirectoryConfig | undefined {
+    return this.getServerConfig(serverId)?.muDirectory;
+  }
+
+  private static defaultMuDirectory(): MuDirectoryConfig {
+    return {
+      enabled: true,
+      channelId: '',
+      messageIds: [],
+      units: [],
+      manageRoleIds: [],
+    };
+  }
+
+  /**
+   * Update MU directory configuration for a server, merging over the existing
+   * block (or a default one if none exists yet).
+   */
+  static updateMuDirectoryConfig(serverId: string, config: Partial<MuDirectoryConfig>): void {
+    try {
+      this.ensureCacheInitialized();
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existing = existingServerConfig.muDirectory || this.defaultMuDirectory();
+
+      const updated: MuDirectoryConfig = {
+        enabled: config.enabled !== undefined ? config.enabled : existing.enabled,
+        channelId: config.channelId !== undefined ? config.channelId : existing.channelId,
+        messageIds: config.messageIds !== undefined ? config.messageIds : existing.messageIds,
+        units: config.units !== undefined ? config.units : existing.units,
+        manageRoleIds: config.manageRoleIds !== undefined ? config.manageRoleIds : existing.manageRoleIds,
+        lastUpdated: config.lastUpdated !== undefined ? config.lastUpdated : existing.lastUpdated,
+      };
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        muDirectory: updated,
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Updated MU directory config for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update MU directory config', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add a military unit to a server's directory. Returns false (no-op) if a unit
+   * with the same id is already tracked.
+   */
+  static addMuDirectoryUnit(serverId: string, unit: MuDirectoryUnit): boolean {
+    this.ensureCacheInitialized();
+
+    const existing = this.configCache!.get(serverId)?.muDirectory || this.defaultMuDirectory();
+    if (existing.units.some(u => u.id === unit.id)) {
+      return false;
+    }
+
+    this.updateMuDirectoryConfig(serverId, { units: [...existing.units, unit] });
+    return true;
+  }
+
+  /**
+   * Remove a military unit from a server's directory. Returns false if no unit
+   * with that id was tracked.
+   */
+  static removeMuDirectoryUnit(serverId: string, muId: string): boolean {
+    this.ensureCacheInitialized();
+
+    const existing = this.configCache!.get(serverId)?.muDirectory;
+    if (!existing) {
+      return false;
+    }
+    const kept = existing.units.filter(u => u.id !== muId);
+    if (kept.length === existing.units.length) {
+      return false;
+    }
+
+    this.updateMuDirectoryConfig(serverId, { units: kept });
+    return true;
+  }
+
+  /** Set the roles allowed to manage the MU directory for a server. */
+  static setMuDirectoryManageRoles(serverId: string, roleIds: string[]): void {
+    this.updateMuDirectoryConfig(serverId, {
+      manageRoleIds: roleIds.filter(id => id && id.trim().length > 0),
+    });
+  }
+
+  /** Persist the ids of the living directory messages for a server. */
+  static setMuDirectoryMessageIds(serverId: string, messageIds: string[]): void {
+    this.updateMuDirectoryConfig(serverId, { messageIds });
   }
 }

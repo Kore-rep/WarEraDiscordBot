@@ -23,7 +23,7 @@ export const ETHIC_LABEL_TO_AXIS_VALUE: Record<string, EthicAxisValue> = {
   Republican: { axis: 'imperialism', value: -1 },
   'Fanatic Republican': { axis: 'imperialism', value: -2 },
 
-  'Fanatic Militarist': { axis: 'militarism', value: 2 },
+  'Fanatic Expansionist': { axis: 'militarism', value: 2 },
   Militarist: { axis: 'militarism', value: 1 },
   Pacifist: { axis: 'militarism', value: -1 },
   'Fanatic Pacifist': { axis: 'militarism', value: -2 },
@@ -31,7 +31,7 @@ export const ETHIC_LABEL_TO_AXIS_VALUE: Record<string, EthicAxisValue> = {
   'Fanatic Diplomatic': { axis: 'isolationism', value: 2 },
   Diplomatic: { axis: 'isolationism', value: 1 },
   Isolationist: { axis: 'isolationism', value: -1 },
-  'Fanatic Isolationist': { axis: 'isolationism', value: -2 },
+  'Fanatic Isolationist': { axis: 'isolationism', value: -2 }
 };
 
 /** Slash choices (alphabetical). Discord allows at most 25 per option; we have 16. */

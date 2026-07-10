@@ -212,6 +212,61 @@ export class DiscordService {
   }
 
   /**
+   * Render `content` across as many messages as it needs (chunked via splitMessage)
+   * as a living, positionally-edited set of directory messages: edit existing ids by
+   * position, send new messages for any extra chunks, and delete leftover old ones.
+   * Only ever touches the ids passed in — never other messages in the channel.
+   *
+   * @returns the ids of the messages now composing the directory, in order.
+   */
+  async updateDirectoryMessages(
+    channelId: string,
+    messageIds: string[],
+    content: string
+  ): Promise<string[]> {
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !channel.isTextBased()) {
+      throw new Error(`Channel ${channelId} is not a text channel`);
+    }
+    const textChannel = channel as TextChannel;
+
+    const chunks = splitMessage(content);
+    const newIds: string[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const existingId = messageIds[i];
+
+      if (existingId) {
+        try {
+          const message = await textChannel.messages.fetch(existingId);
+          await message.edit({ content: chunk });
+          newIds.push(existingId);
+          continue;
+        } catch (error) {
+          logger.warn(`Directory message ${existingId} not found, sending a new one`, error);
+        }
+      }
+
+      const sent = await textChannel.send(chunk);
+      newIds.push(sent.id);
+    }
+
+    // Delete leftover directory messages beyond the new chunk count.
+    for (const staleId of messageIds.slice(chunks.length)) {
+      try {
+        const message = await textChannel.messages.fetch(staleId);
+        await message.delete();
+      } catch (error) {
+        logger.debug(`Could not delete stale directory message ${staleId}`, error);
+      }
+    }
+
+    logger.debug(`Updated MU directory in channel ${channelId} (${newIds.length} message(s))`);
+    return newIds;
+  }
+
+  /**
    * Get the channel for a specific server
    * 
    * @param serverId - Discord server ID
