@@ -9,6 +9,14 @@ export interface EthicAxisValue {
 }
 
 /**
+ * A resolved scan target: either a position on an ethics axis, or the standalone
+ * `unethical` boolean flag on `PartyDTO.ethics`.
+ */
+export type EthicTarget =
+  | ({ kind: 'axis' } & EthicAxisValue)
+  | { kind: 'unethical'; value: boolean };
+
+/**
  * Display labels for ruling-party ethics. Values are -2, -1, 1, or 2 per axis.
  * Must stay in sync with game + Discord slash choices.
  */
@@ -34,13 +42,27 @@ export const ETHIC_LABEL_TO_AXIS_VALUE: Record<string, EthicAxisValue> = {
   'Fanatic Isolationist': { axis: 'isolationism', value: -2 }
 };
 
-/** Slash choices (alphabetical). Discord allows at most 25 per option; we have 16. */
-export const ETHIC_SLASH_CHOICES: APIApplicationCommandOptionChoice<string>[] = (
-  Object.keys(ETHIC_LABEL_TO_AXIS_VALUE) as (keyof typeof ETHIC_LABEL_TO_AXIS_VALUE)[]
-)
+/** Labels that filter on the standalone `unethical` boolean rather than an axis. */
+export const ETHIC_LABEL_TO_UNETHICAL: Record<string, boolean> = {
+  Unethical: true,
+  Ethical: false,
+};
+
+/** Slash choices (alphabetical). Discord allows at most 25 per option; we have 18. */
+export const ETHIC_SLASH_CHOICES: APIApplicationCommandOptionChoice<string>[] = [
+  ...Object.keys(ETHIC_LABEL_TO_AXIS_VALUE),
+  ...Object.keys(ETHIC_LABEL_TO_UNETHICAL),
+]
   .sort((a, b) => a.localeCompare(b))
   .map(label => ({ name: label, value: label }));
 
-export function resolveEthicLabel(label: string): EthicAxisValue | undefined {
-  return ETHIC_LABEL_TO_AXIS_VALUE[label];
+export function resolveEthicLabel(label: string): EthicTarget | undefined {
+  const axis = ETHIC_LABEL_TO_AXIS_VALUE[label];
+  if (axis) {
+    return { kind: 'axis', ...axis };
+  }
+  if (label in ETHIC_LABEL_TO_UNETHICAL) {
+    return { kind: 'unethical', value: ETHIC_LABEL_TO_UNETHICAL[label] };
+  }
+  return undefined;
 }

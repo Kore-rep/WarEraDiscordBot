@@ -30,7 +30,9 @@ export async function handleCountryEthicsScan(
     }
 
     const scan = new ScanService(apiService);
-    logger.info(`Ethics scan: ethic="${ethicLabel}" (${target.axis}=${target.value})`);
+    const targetSummary =
+      target.kind === 'axis' ? `${target.axis} = ${target.value}` : `unethical = ${target.value}`;
+    logger.info(`Ethics scan: ethic="${ethicLabel}" (${targetSummary})`);
 
     const countries = await scan.getAllCountries();
 
@@ -48,7 +50,7 @@ export async function handleCountryEthicsScan(
     ];
     const partyById = await scan.getPartiesByIds(uniquePartyIds);
 
-    const matches: { country: CountryRow; partyName: string }[] = [];
+    const matches: { country: CountryRow; partyName: string; unethical: boolean }[] = [];
 
     for (const country of countries) {
       const partyId = country.rulingParty?.trim();
@@ -59,18 +61,24 @@ export async function handleCountryEthicsScan(
       if (!party?.ethics) {
         continue;
       }
-      const axisValue = party.ethics[target.axis];
-      if (axisValue === target.value) {
-        matches.push({ country, partyName: party.name });
+      const isMatch =
+        target.kind === 'axis'
+          ? party.ethics[target.axis] === target.value
+          : Boolean(party.ethics.unethical) === target.value;
+      if (isMatch) {
+        matches.push({
+          country,
+          partyName: party.name,
+          unethical: Boolean(party.ethics.unethical),
+        });
       }
     }
 
     matches.sort((a, b) => a.country.name.localeCompare(b.country.name));
 
-    const axisSummary = `${target.axis} = ${target.value}`;
     const summary =
       `**Country ruling-party ethics scan**\n\n` +
-      `- Ethic: **${ethicLabel}** (${axisSummary})\n` +
+      `- Ethic: **${ethicLabel}** (${targetSummary})\n` +
       `- Countries scanned: **${countries.length}**\n` +
       `- Unique ruling parties fetched: **${uniquePartyIds.length}**\n` +
       `- Matches: **${matches.length}**`;
@@ -81,9 +89,14 @@ export async function handleCountryEthicsScan(
       return;
     }
 
+    // Flag unethical ruling parties, except when the scan itself is the unethical
+    // filter (every match would carry the same marker then).
+    const showUnethicalMarker = target.kind !== 'unethical';
+
     let current = `**Countries (ruling party: ${ethicLabel})**\n`;
-    for (const { country, partyName } of matches) {
-      const line = `- ${country.name} (\`${country._id}\`) — *${partyName}*\n`;
+    for (const { country, partyName, unethical } of matches) {
+      const marker = showUnethicalMarker && unethical ? ' ⚠️ unethical' : '';
+      const line = `- ${country.name} (\`${country._id}\`) — *${partyName}*${marker}\n`;
       if (current.length + line.length > MAX_MESSAGE_LENGTH) {
         await interaction.followUp({ content: current });
         current = `**(continued)**\n` + line;
