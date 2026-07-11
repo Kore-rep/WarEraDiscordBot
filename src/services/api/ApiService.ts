@@ -40,6 +40,7 @@ export class ApiService {
   private sharedRateLimiter: SharedRateLimiter;
   private proxyTrackingService?: any; // Will be set after initialization
   private leaderboardService?: import('../leaderboard/LeaderboardService').LeaderboardService;
+  private muDirectoryService?: import('../muDirectory/MuDirectoryService').MuDirectoryService;
 
   constructor(config: BotConfig) {
     this.config = config;
@@ -642,5 +643,19 @@ export class ApiService {
    */
   getLeaderboardService(): import('../leaderboard/LeaderboardService').LeaderboardService | undefined {
     return this.leaderboardService;
+  }
+
+  /**
+   * Set the MuDirectoryService instance (called after initialization to avoid circular dependency)
+   */
+  setMuDirectoryService(service: import('../muDirectory/MuDirectoryService').MuDirectoryService): void {
+    this.muDirectoryService = service;
+  }
+
+  /**
+   * Get the MuDirectoryService instance
+   */
+  getMuDirectoryService(): import('../muDirectory/MuDirectoryService').MuDirectoryService | undefined {
+    return this.muDirectoryService;
   }
 }

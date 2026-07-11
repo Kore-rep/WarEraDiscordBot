@@ -29,6 +29,7 @@ model Server {
   countryGroups      String?
   spectre            String?
   leaderboard        String?
+  muDirectory        String?
   updatedAt          DateTime @updatedAt
 }
 

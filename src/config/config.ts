@@ -209,6 +209,19 @@ export const DEFAULT_LEVEL_BRACKETS: LevelBracket[] = [
 ];
 
 /**
+ * MU directory feature per server. Maintains a curated list of military units
+ * rendered as a living, positionally-edited set of directory messages.
+ */
+export interface MuDirectoryConfig {
+  enabled?: boolean;
+  channelId: string;
+  messageIds: string[];
+  militaryUnitIds: string[];
+  manageRoleIds: string[];
+  lastUpdated?: string;
+}
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -222,6 +235,7 @@ export interface ServerConfig {
   countryGroups?: CountryGroup[];
   spectre?: SpectreConfig;
   leaderboard?: LeaderboardConfig;
+  muDirectory?: MuDirectoryConfig;
 }
 
 /**

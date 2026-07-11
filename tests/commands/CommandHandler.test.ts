@@ -144,6 +144,13 @@ jest.mock('../../src/commands/leaderboard/leaderboard', () => ({
   },
 }));
 
+jest.mock('../../src/commands/muDirectory', () => ({
+  muDirectoryCommand: {
+    data: { name: 'mudirectory', description: 'Maintain an MU directory', toJSON: jest.fn().mockReturnValue({ name: 'mudirectory' }) },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -184,8 +191,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load all eight top-level commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(8);
+    it('should load all nine top-level commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(9);
     });
   });
 
@@ -366,7 +373,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(8);
+      expect(commandHandler.getCommandCount()).toBe(9);
     });
   });
 });

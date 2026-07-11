@@ -13,6 +13,7 @@ import { leaderboardCommand } from './leaderboard';
 import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 import { spectreCommand } from './spectre/spectre';
+import { muDirectoryCommand } from './muDirectory';
 
 /**
  * Manages slash command registration and execution
@@ -45,6 +46,7 @@ export class CommandHandler {
       scanForCommand,
       countryGroupCommand,
       spectreCommand,
+      muDirectoryCommand,
     ];
 
     for (const command of commandList) {
