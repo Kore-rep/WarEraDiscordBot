@@ -3,6 +3,7 @@ import { Command, createCommandBuilder } from '../types';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
  * Command to manage mercenary contract notification settings for the server
@@ -64,6 +65,9 @@ export const contractsCommand: Command = {
       subcommand
         .setName('disable')
         .setDescription('Disable mercenary contract notifications')
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('How mercenary contract alerts work')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
@@ -80,7 +84,9 @@ export const contractsCommand: Command = {
       const subcommandGroup = interaction.options.getSubcommandGroup(false);
       const subcommand = interaction.options.getSubcommand();
 
-      if (subcommandGroup === 'config' && subcommand === 'set') {
+      if (!subcommandGroup && subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.contracts, ephemeral: true });
+      } else if (subcommandGroup === 'config' && subcommand === 'set') {
         await handleConfigSet(interaction, discordService!);
       } else if (subcommandGroup === 'config' && subcommand === 'view') {
         await handleConfigView(interaction);

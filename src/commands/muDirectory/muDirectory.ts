@@ -6,6 +6,7 @@ import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { canManageFeature, hasManageRoles, replyUnauthorized } from '../../utils/commandAuth';
 import { parseMuInput } from '../../services/muDirectory/muLink';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 const MANAGE_ROLE_OPTIONS = ['role1', 'role2', 'role3', 'role4', 'role5'] as const;
 
@@ -58,6 +59,9 @@ export const muDirectoryCommand: Command = {
     )
     .addSubcommand(sub =>
       sub.setName('refresh').setDescription('Refresh the directory now')
+    )
+    .addSubcommand(sub =>
+      sub.setName('help').setDescription('How the MU directory works')
     ),
 
   async execute(
@@ -91,6 +95,8 @@ export const muDirectoryCommand: Command = {
         await handleDisable(interaction);
       } else if (subcommand === 'refresh') {
         await handleRefresh(interaction, apiService);
+      } else if (subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.mudirectory, ephemeral: true });
       } else {
         await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
       }

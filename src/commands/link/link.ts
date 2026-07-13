@@ -7,6 +7,7 @@ import { ApiService } from '../../services/api/ApiService';
 import { AutoroleService } from '../../services/autorole';
 import { LinkResult, VerifyResult } from '../../services/autorole/linkFlow';
 import { parseUserInput } from '../../services/autorole/parseUserInput';
+import { LINK_HELP } from '../autorole/autoroleHelp';
 
 export const linkCommand: Command = {
   data: createCommandBuilder('link', 'Link your WarEra account to Discord', { requireAdmin: false })
@@ -41,6 +42,9 @@ export const linkCommand: Command = {
             .setDescription('WarEra username, user id, or profile URL to look up')
             .setRequired(false)
         )
+    )
+    .addSubcommand(sub =>
+      sub.setName('help').setDescription('How linking works and what each subcommand does')
     ),
 
   async execute(
@@ -70,6 +74,8 @@ export const linkCommand: Command = {
         await handleWhoami(interaction, service);
       } else if (subcommand === 'whois') {
         await handleWhois(interaction, service);
+      } else if (subcommand === 'help') {
+        await interaction.reply({ content: LINK_HELP, ephemeral: true });
       } else {
         await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
       }

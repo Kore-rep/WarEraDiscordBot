@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, ChannelType } from 'discord.js';
 import { Command, createCommandBuilder } from '../types';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
  * Command to manage bounty battles settings for the server
@@ -63,13 +64,18 @@ export const bountyBattlesCommand: Command = {
       subcommand
         .setName('disable')
         .setDescription('Disable bounty battle notifications for this server')
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('How bounty battle alerts work')
     ),
 
   async execute(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommandGroup = interaction.options.getSubcommandGroup();
     const subcommand = interaction.options.getSubcommand();
 
-    if (subcommandGroup === 'config') {
+    if (!subcommandGroup && subcommand === 'help') {
+      await interaction.reply({ content: COMMAND_HELP.bountybattles, ephemeral: true });
+    } else if (subcommandGroup === 'config') {
       if (subcommand === 'set') {
         await handleConfigSet(interaction);
       } else if (subcommand === 'view') {

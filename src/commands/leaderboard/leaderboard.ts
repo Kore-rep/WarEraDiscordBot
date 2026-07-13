@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { parseLevelBrackets } from '../../services/leaderboard/leaderboardFormatter';
+import { COMMAND_HELP } from '../help/helpTexts';
 import {
   listAvailableWeeks,
   parseWeekEndingDate,
@@ -95,6 +96,9 @@ export const leaderboardCommand: Command = {
             .setName('list')
             .setDescription('List available weekly damage snapshot weeks')
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('How the damage leaderboards work')
     ),
 
   async execute(
@@ -122,7 +126,9 @@ export const leaderboardCommand: Command = {
       const subcommandGroup = interaction.options.getSubcommandGroup(false);
       const subcommand = interaction.options.getSubcommand();
 
-      if (subcommandGroup === 'config' && subcommand === 'set') {
+      if (!subcommandGroup && subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.leaderboard, ephemeral: true });
+      } else if (subcommandGroup === 'config' && subcommand === 'set') {
         await handleConfigSet(interaction, discordService);
       } else if (subcommandGroup === 'config' && subcommand === 'view') {
         await handleConfigView(interaction);

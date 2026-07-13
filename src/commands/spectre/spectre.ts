@@ -5,6 +5,7 @@ import { TrackedCountry } from '../../config/config';
 import { logger } from '../../utils/logger';
 import { ApiService } from '../../services/api/ApiService';
 import { ScanService, ScanCountry, ScanRegion } from '../../services/scan/ScanService';
+import { COMMAND_HELP } from '../help/helpTexts';
 import {
   getSpectreSnapshotState,
   clearAllCountrySnapshotsForSpectre,
@@ -176,11 +177,19 @@ export const spectreCommand: Command = {
             .setName('population')
             .setDescription('List all tracked countries for population monitoring')
         )
+    )
+    .addSubcommand(sub =>
+      sub.setName('help').setDescription('How Spectre monitoring works')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, _discordService?: unknown, apiService?: ApiService): Promise<void> {
     const group = interaction.options.getSubcommandGroup();
     const sub = interaction.options.getSubcommand();
+
+    if (!group && sub === 'help') {
+      await interaction.reply({ content: COMMAND_HELP.spectre, ephemeral: true });
+      return;
+    }
 
     if (!apiService) {
       await interaction.reply({ content: 'This command must be used in a server with API access.', ephemeral: true });

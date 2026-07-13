@@ -16,6 +16,7 @@ import { spectreCommand } from './spectre/spectre';
 import { muDirectoryCommand } from './muDirectory';
 import { linkCommand } from './link';
 import { autoroleCommand } from './autorole';
+import { helpCommand } from './help';
 
 /**
  * Manages slash command registration and execution
@@ -51,6 +52,7 @@ export class CommandHandler {
       muDirectoryCommand,
       linkCommand,
       autoroleCommand,
+      helpCommand,
     ];
 
     for (const command of commandList) {

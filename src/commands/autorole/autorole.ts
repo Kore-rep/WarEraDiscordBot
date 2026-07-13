@@ -7,6 +7,7 @@ import {
   handleBuildRole,
   handleConfig,
   handleCountry,
+  handleHelp,
   handleLevelRole,
   handleLinkMessage,
   handleLinks,
@@ -234,6 +235,28 @@ export const autoroleCommand: Command = {
         )
         .addSubcommand(sub => sub.setName('status').setDescription('Show sync status and counts'))
     )
+    .addSubcommand(sub =>
+      sub
+        .setName('help')
+        .setDescription('How autorole works — beginners guide, or details per topic')
+        .addStringOption(opt =>
+          opt
+            .setName('topic')
+            .setDescription('Which part of autorole to explain (omit for the overall guide)')
+            .setRequired(false)
+            .addChoices(
+              { name: 'levelrole', value: 'levelrole' },
+              { name: 'timedrole', value: 'timedrole' },
+              { name: 'buildrole', value: 'buildrole' },
+              { name: 'murole', value: 'murole' },
+              { name: 'country', value: 'country' },
+              { name: 'links', value: 'links' },
+              { name: 'config', value: 'config' },
+              { name: 'sync', value: 'sync' },
+              { name: 'linkmessage', value: 'linkmessage' }
+            )
+        )
+    )
     .addSubcommandGroup(group =>
       group
         .setName('linkmessage')
@@ -281,6 +304,10 @@ export const autoroleCommand: Command = {
       }
 
       const group = interaction.options.getSubcommandGroup(false);
+      if (!group && interaction.options.getSubcommand() === 'help') {
+        await handleHelp(interaction);
+        return;
+      }
       switch (group) {
         case 'levelrole':
           await handleLevelRole(interaction);

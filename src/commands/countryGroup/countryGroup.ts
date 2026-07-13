@@ -13,6 +13,7 @@ import { ApiService } from '../../services/api/ApiService';
 import { ScanService } from '../../services/scan/ScanService';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { CountryGroup, GroupedCountry } from '../../config/config';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
  * Command builder for /countrygroup
@@ -81,6 +82,9 @@ export const countryGroupCommand = {
             .setDescription('Name of the country group to delete')
             .setRequired(true)
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('How country groups work')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, _discordService?: DiscordService, apiService?: ApiService): Promise<void> {
@@ -117,6 +121,8 @@ export const countryGroupCommand = {
         await handleRemove(interaction);
       } else if (subcommand === 'delete') {
         await handleDelete(interaction);
+      } else if (subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.countrygroup, ephemeral: true });
       }
     } catch (error) {
       logger.error('Error executing countrygroup command', error);

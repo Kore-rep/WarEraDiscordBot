@@ -7,6 +7,7 @@ import { handleCountryLowPop } from './country/lowpop';
 import { handleCountryEthicsScan } from './country/ethics';
 import { ETHIC_SLASH_CHOICES } from './country/partyEthicsMapping';
 import { handleCountryBuilds } from './country/builds';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
  * Command builder for /scanfor
@@ -79,6 +80,9 @@ export const scanForCommand = {
                 .setMinValue(1)
             )
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('What the scans do and how to use them')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, _discordService?: DiscordService, apiService?: ApiService): Promise<void> {
@@ -104,7 +108,9 @@ export const scanForCommand = {
       const subcommandGroup = interaction.options.getSubcommandGroup();
       const subcommand = interaction.options.getSubcommand();
 
-      if (subcommandGroup === 'country') {
+      if (!subcommandGroup && subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.scanfor, ephemeral: true });
+      } else if (subcommandGroup === 'country') {
         if (subcommand === 'nogovernment') {
           await handleCountryNoGovernment(interaction, apiService);
         } else if (subcommand === 'lowpop') {

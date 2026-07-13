@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { ScanService } from '../../services/scan/ScanService';
+import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
  * Command builder for /proxy tracking
@@ -90,6 +91,9 @@ export const proxyTrackingCommand = {
             .setName('status')
             .setDescription('Show proxy tracking status for this server')
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand.setName('help').setDescription('How proxy tracking works')
     ),
 
   async execute(interaction: ChatInputCommandInteraction, _discordService?: DiscordService, apiService?: ApiService): Promise<void> {
@@ -113,7 +117,9 @@ export const proxyTrackingCommand = {
       const subcommandGroup = interaction.options.getSubcommandGroup();
       const subcommand = interaction.options.getSubcommand();
 
-      if (subcommandGroup === 'tracking') {
+      if (!subcommandGroup && subcommand === 'help') {
+        await interaction.reply({ content: COMMAND_HELP.proxy, ephemeral: true });
+      } else if (subcommandGroup === 'tracking') {
         if (subcommand === 'toggle') {
           await handleTrackingToggle(interaction, apiService);
         } else if (subcommand === 'list') {

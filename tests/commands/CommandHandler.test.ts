@@ -165,6 +165,13 @@ jest.mock('../../src/commands/autorole', () => ({
   },
 }));
 
+jest.mock('../../src/commands/help', () => ({
+  helpCommand: {
+    data: { name: 'help', description: 'List every command', toJSON: jest.fn().mockReturnValue({ name: 'help' }) },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -205,8 +212,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load all eleven top-level commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(11);
+    it('should load all twelve top-level commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(12);
     });
   });
 
@@ -387,7 +394,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(11);
+      expect(commandHandler.getCommandCount()).toBe(12);
     });
   });
 });

@@ -6,6 +6,7 @@ import { DiscordService } from '../../services/discord/DiscordService';
 import { AutoroleService } from '../../services/autorole';
 import { analyzeUserBuild, SkillLevels } from '../../services/autorole/build';
 import { buildLinkBlockComponents, LINK_BLOCK_CONTENT } from '../../services/autorole/reviewMessages';
+import { AUTOROLE_GUIDE, AUTOROLE_TOPIC_HELP } from './autoroleHelp';
 import { parseMuInput } from '../../services/muDirectory/muLink';
 import { splitMessage } from '../../services/discord/messageChunker';
 
@@ -33,6 +34,14 @@ async function replyChunked(interaction: ChatInputCommandInteraction, content: s
   for (const chunk of chunks.slice(1)) {
     await interaction.followUp({ content: chunk, ephemeral: true });
   }
+}
+
+// --- help ---
+
+export async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
+  const topic = interaction.options.getString('topic');
+  const text = topic ? AUTOROLE_TOPIC_HELP[topic] : AUTOROLE_GUIDE;
+  await replyChunked(interaction, text ?? AUTOROLE_GUIDE);
 }
 
 // --- levelrole ---
