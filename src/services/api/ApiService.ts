@@ -477,13 +477,6 @@ export class ApiService {
     return this.client;
   }
 
-  /**
-   * The configured tRPC base URL (for the rare raw request the SDK can't make)
-   */
-  getApiBaseUrl(): string | undefined {
-    return this.config.api.baseUrl;
-  }
-
 
   /**
    * Get the batch-enabled API client for battle polling operations

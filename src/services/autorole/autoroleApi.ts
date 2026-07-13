@@ -9,16 +9,15 @@ export type AutoroleMu = MuDTO;
 
 const BATCH_SIZE = 100;
 const MU_CACHE_TTL_MS = 6 * 3600 * 1000;
-const DEFAULT_TRPC_BASE_URL = 'https://api2.warera.io/trpc';
+// Verification must see company renames immediately, so those requests bypass
+// the SDK's default 30s cache entirely.
+const NO_CACHE = { cache: { enabled: false } } as const;
 
 /**
  * All WarEra API access for the autorole feature: user profiles (single and
  * batched), MU lookups, company-name verification, and username resolution.
  */
 export class AutoroleApi {
-  // mu.getById takes no cache options in the SDK, so memoize locally.
-  private muCache = new Map<string, { mu: AutoroleMu | null; fetchedAt: number }>();
-
   constructor(private readonly apiService: ApiService) {}
 
   /** A single lite user record by id, or null if not found. */
@@ -52,28 +51,26 @@ export class AutoroleApi {
     return out;
   }
 
-  /** MU details by id (cached — MU names change rarely), or null. */
+  /** MU details by id (cached 6h — MU names change rarely), or null. */
   async getMuById(muId: string): Promise<AutoroleMu | null> {
-    const cached = this.muCache.get(muId);
-    if (cached && Date.now() - cached.fetchedAt < MU_CACHE_TTL_MS) {
-      return cached.mu;
-    }
     try {
-      const res = await this.apiService.getClient().mu.getById(muId);
-      const mu = (res?.result?.data as AutoroleMu) ?? null;
-      this.muCache.set(muId, { mu, fetchedAt: Date.now() });
-      return mu;
+      const res = await this.apiService.getClient().mu.getById(muId, { cache: { ttl: MU_CACHE_TTL_MS } });
+      return (res?.result?.data as AutoroleMu) ?? null;
     } catch (error) {
       logger.debug(`Autorole: getMuById(${muId}) failed`, error);
       return null;
     }
   }
 
-  /** Names of all companies owned by a user (for code verification). */
+  /**
+   * Names of all companies owned by a user (for code verification). Uncached:
+   * a member renames a company and immediately presses the verify button, so
+   * a 30s-stale list would wrongly report the code as missing.
+   */
   async getCompanyNamesForUser(userId: string): Promise<string[]> {
     const listRes = (await this.apiService
       .getClient()
-      .company.getCompanies({ userId, perPage: 100 })) as GetCompaniesResponse;
+      .company.getCompanies({ userId, perPage: 100 }, NO_CACHE)) as GetCompaniesResponse;
     const companyIds = listRes?.result?.data?.items ?? [];
     if (companyIds.length === 0) {
       return [];
@@ -84,7 +81,7 @@ export class AutoroleApi {
       const chunk = companyIds.slice(i, i + BATCH_SIZE);
       const batch = this.apiService.createCommandBatchClient();
       const promises = chunk.map(companyId =>
-        batch.company.getById({ companyId }).catch(() => null)
+        batch.company.getById({ companyId }, NO_CACHE).catch(() => null)
       );
       await batch.runBatch();
       for (const r of await Promise.all(promises)) {
@@ -97,23 +94,13 @@ export class AutoroleApi {
     return names;
   }
 
-  /**
-   * User ids matching a search string. Raw tRPC GET rather than the SDK:
-   * the SDK's search.searchAnything sends `{query}` but the live API requires
-   * `{searchText}` (upstream bug in Kore-rep/WarEraSDK). One request per
-   * username link attempt, so bypassing the shared rate limiter is acceptable.
-   */
+  /** User ids matching a search string. */
   async searchUserIdsByName(searchText: string): Promise<string[]> {
-    const baseUrl = this.apiService.getApiBaseUrl() ?? DEFAULT_TRPC_BASE_URL;
-    const url = `${baseUrl}/search.searchAnything?input=${encodeURIComponent(JSON.stringify({ searchText }))}`;
     try {
-      const res = await fetch(url, { headers: { Accept: 'application/json' } });
-      if (!res.ok) {
-        logger.warn(`Autorole: search.searchAnything returned ${res.status}`);
-        return [];
-      }
-      const payload = (await res.json()) as { result?: { data?: { userIds?: string[] } } };
-      return payload?.result?.data?.userIds ?? [];
+      const res = (await this.apiService.getClient().search.searchAnything(searchText)) as unknown as {
+        result?: { data?: { userIds?: string[] } };
+      };
+      return res?.result?.data?.userIds ?? [];
     } catch (error) {
       logger.error('Autorole: search.searchAnything request failed', error);
       return [];

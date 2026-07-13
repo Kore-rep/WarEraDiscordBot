@@ -6,6 +6,7 @@ import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 type UserDTO = ScanUserLite;
 import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
 import { formatUserList, createBuildSummary } from './userStatusFormatter';
+import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
 
 /**
  * Handle button interactions for the builds command
@@ -63,7 +64,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
     // Re-fetch user data (no persistent storage, so we rebuild it each time)
     let allUserIds: string[];
     try {
-      allUserIds = (await scan.getUserIdsByCountry(countryId)).userIds;
+      allUserIds = (await scan.getUserIdsByCountry(countryId, undefined, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).userIds;
     } catch (error) {
       logger.error('Error fetching users by country in button handler:', error);
       await interaction.editReply({
@@ -79,7 +80,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
       return;
     }
 
-    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds)).values());
+    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
 
     if (users.length === 0) {
       await interaction.editReply({
@@ -230,7 +231,7 @@ async function handleSummaryRequest(interaction: ButtonInteraction, apiService: 
     // Re-fetch and analyze users (same logic as in main handler)
     let allUserIds: string[];
     try {
-      allUserIds = (await scan.getUserIdsByCountry(countryId)).userIds;
+      allUserIds = (await scan.getUserIdsByCountry(countryId, undefined, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).userIds;
     } catch (error) {
       logger.error('Error fetching users for summary:', error);
       await interaction.editReply({
@@ -239,7 +240,7 @@ async function handleSummaryRequest(interaction: ButtonInteraction, apiService: 
       return;
     }
 
-    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds)).values());
+    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
 
     // Use minimum level from the original command
     const filteredUsers = users.filter(user => 

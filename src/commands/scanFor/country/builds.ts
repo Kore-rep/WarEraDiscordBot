@@ -6,6 +6,7 @@ import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 type UserDTO = ScanUserLite;
 import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
 import { createBuildSummary } from './userStatusFormatter';
+import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
 
 /**
  * Handle /scanfor country builds
@@ -41,7 +42,7 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
     } else {
       // Search by name
       try {
-        const countries = await scan.getAllCountries();
+        const countries = await scan.getAllCountries(3_600_000);
 
         const foundCountry = countries.find(c => 
           c.name.toLowerCase() === countryParam.toLowerCase()
@@ -109,7 +110,8 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
             });
           }
         },
-        MAX_PAGES
+        MAX_PAGES,
+        BUILDS_SWEEP_CACHE_TTL_MS
       );
       allUserIds = result.userIds;
       totalCitizens = result.total;
@@ -161,7 +163,7 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
             `✅ **Users Loaded:** ${loaded.toLocaleString()}`,
         });
       }
-    });
+    }, BUILDS_SWEEP_CACHE_TTL_MS);
     const users: UserDTO[] = Array.from(usersById.values());
 
     if (users.length === 0) {

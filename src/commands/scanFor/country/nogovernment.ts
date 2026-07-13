@@ -42,7 +42,7 @@ export async function handleCountryNoGovernment(interaction: ChatInputCommandInt
       // Fetch full country data for countries in the group
       logger.info(`Fetching ${group.countries.length} countries from group "${groupName}"...`);
       const countryIds = group.countries.map(c => c.countryId);
-      countries = await scan.getCountriesByIds(countryIds, 86400);
+      countries = await scan.getCountriesByIds(countryIds, 86_400_000);
 
       scanScope = `group "${groupName}" (${countries.length} countries)`;
       logger.info(`Scanning ${countries.length} countries from group "${groupName}"`);

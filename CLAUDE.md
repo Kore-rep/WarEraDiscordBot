@@ -46,7 +46,7 @@ await batch.runBatch();               // all queued calls = 1 rate-limit request
 const results = await Promise.all(promises);
 ```
 
-Sequential/dependent requests (request 2 needs request 1's result) can't be batched — use `getClient()`. Cache TTL is per-request: `{ cache: { ttl: 86400 } }`.
+Sequential/dependent requests (request 2 needs request 1's result) can't be batched — use `getClient()`. **Every request is cached for 30s by default** (shared cache across all clients; batches pre-check it per sub-call). Override per request with a TTL in **milliseconds**: `{ cache: { ttl: 86400 * 1000 } }` — never pass seconds. Only some SDK resources accept the options param (country, battle, region, party, mercenaryContractAuction); for the rest (user, mu, company, government, search, gameConfig, …) the 30s default always applies — memoize in the service if you need longer (see `AutoroleApi`'s MU cache or `ScanService.getSkillResetCooldownDays`).
 
 ## Scheduling (all periodic work)
 

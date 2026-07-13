@@ -55,7 +55,7 @@ export async function handleCountryLowPop(
 
       logger.info(`Lowpop: fetching ${group.countries.length} countries from group "${groupName}"...`);
       const countryIds = group.countries.map(c => c.countryId);
-      countries = await scan.getCountriesByIds(countryIds, 10);
+      countries = await scan.getCountriesByIds(countryIds, 10_000);
 
       scanScope = `group "${groupName}" (${countries.length} countries)`;
     } else {

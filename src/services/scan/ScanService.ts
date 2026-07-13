@@ -23,11 +23,8 @@ export type ScanRegion = RegionDTO;
 
 const BATCH_SIZE = 100;
 
-// Skill-reset cooldown from the game config, memoized across ScanService
-// instances (one is constructed per command execution).
 const DEFAULT_RESET_COOLDOWN_DAYS = 7;
-const RESET_COOLDOWN_MEMO_TTL_MS = 3600 * 1000;
-let resetCooldownMemo: { days: number; fetchedAt: number } | null = null;
+const GAME_CONFIG_CACHE_TTL_MS = 3600 * 1000;
 
 /**
  * All WarEra API access used by the `/scanfor` command family. Command handlers
@@ -65,9 +62,9 @@ export class ScanService {
     return (res?.result?.data as ScanUserLite) ?? null;
   }
 
-  /** Full country data for a set of ids, batched (≤100 per request). Pass a cache TTL (seconds) to reuse recent results. */
-  async getCountriesByIds(ids: string[], ttlSeconds?: number): Promise<ScanCountry[]> {
-    const options = ttlSeconds !== undefined ? { cache: { ttl: ttlSeconds } } : undefined;
+  /** Full country data for a set of ids, batched (≤100 per request). Pass a cache TTL (ms) to reuse recent results. */
+  async getCountriesByIds(ids: string[], cacheTtlMs?: number): Promise<ScanCountry[]> {
+    const options = cacheTtlMs !== undefined ? { cache: { ttl: cacheTtlMs } } : undefined;
     const out: ScanCountry[] = [];
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const chunk = ids.slice(i, i + BATCH_SIZE);
@@ -82,13 +79,13 @@ export class ScanService {
     return out;
   }
 
-  /** Ruling/other parties by id, batched. Returns a map keyed by party id. */
-  async getPartiesByIds(ids: string[], ttlSeconds = 86400): Promise<Map<string, ScanParty>> {
+  /** Ruling/other parties by id, batched. Returns a map keyed by party id. Cache TTL is in ms (default 24h — party names/ethics change rarely). */
+  async getPartiesByIds(ids: string[], cacheTtlMs = 86_400_000): Promise<Map<string, ScanParty>> {
     const map = new Map<string, ScanParty>();
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const chunk = ids.slice(i, i + BATCH_SIZE);
       const batch = this.apiService.createCommandBatchClient();
-      const promises = chunk.map(id => batch.party.getPartyById(id, { cache: { ttl: ttlSeconds } }));
+      const promises = chunk.map(id => batch.party.getPartyById(id, { cache: { ttl: cacheTtlMs } }));
       await batch.runBatch();
       const results = await Promise.all(promises);
       for (let j = 0; j < chunk.length; j++) {
@@ -132,18 +129,20 @@ export class ScanService {
     return map;
   }
 
-  /** Lite user records for a set of ids, batched. Returns a map keyed by user id. */
+  /** Lite user records for a set of ids, batched. Returns a map keyed by user id. Pass a cache TTL (ms) to reuse recent results. */
   async getUsersLiteByIds(
     ids: string[],
-    onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void
+    onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void,
+    cacheTtlMs?: number
   ): Promise<Map<string, ScanUserLite>> {
+    const options = cacheTtlMs !== undefined ? { cache: { ttl: cacheTtlMs } } : undefined;
     const map = new Map<string, ScanUserLite>();
     const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
     let batchesDone = 0;
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const chunk = ids.slice(i, i + BATCH_SIZE);
       const batch = this.apiService.createCommandBatchClient();
-      const promises = chunk.map(id => batch.user.getUserLite(id));
+      const promises = chunk.map(id => batch.user.getUserLite(id, options));
       try {
         await batch.runBatch();
         const results = await Promise.all(promises);
@@ -164,13 +163,16 @@ export class ScanService {
 
   /**
    * All citizen user ids for a country, following pagination. `onPage(total, pages)`
-   * fires after each page. Stops at `maxPages` as a safety limit.
+   * fires after each page. Stops at `maxPages` as a safety limit. Pass a cache
+   * TTL (ms) to reuse recently fetched pages (each page caches under its cursor).
    */
   async getUserIdsByCountry(
     countryId: string,
     onPage?: (total: number, pages: number) => void,
-    maxPages = 1000
+    maxPages = 1000,
+    cacheTtlMs?: number
   ): Promise<{ userIds: string[]; total: number; hitPageLimit: boolean }> {
+    const options = cacheTtlMs !== undefined ? { cache: { ttl: cacheTtlMs } } : undefined;
     const userIds: string[] = [];
     let cursor: string | null = null;
     let pages = 0;
@@ -180,7 +182,7 @@ export class ScanService {
       if (cursor) {
         params.cursor = cursor;
       }
-      const res = await this.apiService.getClient().user.getUsersByCountry(params);
+      const res = await this.apiService.getClient().user.getUsersByCountry(params, options);
       const data = res.result.data;
       userIds.push(...data.items.map((item: { _id: string }) => item._id));
       cursor = data.nextCursor;
@@ -195,19 +197,17 @@ export class ScanService {
 
   /**
    * Days between free skill resets (`user.resetSkillDaysCooldown` in the game
-   * config). Memoized for an hour; falls back to the known default on failure.
+   * config, cached 1h); falls back to the known default on failure.
    */
   async getSkillResetCooldownDays(): Promise<number> {
-    if (resetCooldownMemo && Date.now() - resetCooldownMemo.fetchedAt < RESET_COOLDOWN_MEMO_TTL_MS) {
-      return resetCooldownMemo.days;
-    }
     try {
-      const res = (await this.apiService.getClient().gameConfig.getGameConfig()) as {
+      const res = (await this.apiService
+        .getClient()
+        .gameConfig.getGameConfig({ cache: { ttl: GAME_CONFIG_CACHE_TTL_MS } })) as {
         result?: { data?: { user?: { resetSkillDaysCooldown?: number } } };
       };
       const days = res?.result?.data?.user?.resetSkillDaysCooldown;
       if (typeof days === 'number' && days > 0) {
-        resetCooldownMemo = { days, fetchedAt: Date.now() };
         return days;
       }
     } catch (error) {
