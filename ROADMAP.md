@@ -26,6 +26,7 @@ This is the roadmap for the bot. Features, integrations and optimizations. No ti
  - [x] Donut's MU directory bot
  - [x] Donut's Autorole bot
  - [ ] Kingio's contract, agreement and pact bot
+ - [ ] Syd's MU coordination bot
 
 ## Spinoffs
  - [ ] Web dashboard
