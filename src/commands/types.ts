@@ -13,6 +13,8 @@ export interface Command {
 export type CreateCommandBuilderOptions = {
   /** When false, any member who can use slash commands may run it (still subject to channel overwrites). Default true. */
   requireAdmin?: boolean;
+  /** Explicit permission bits gating the command (e.g. PermissionFlagsBits.ManageRoles). Takes precedence over requireAdmin. */
+  defaultMemberPermissions?: bigint;
 };
 
 /**
@@ -28,7 +30,9 @@ export function createCommandBuilder(
     .setDescription(description)
     .setContexts(InteractionContextType.Guild);
 
-  if (options?.requireAdmin === false) {
+  if (options?.defaultMemberPermissions !== undefined) {
+    builder.setDefaultMemberPermissions(options.defaultMemberPermissions);
+  } else if (options?.requireAdmin === false) {
     builder.setDefaultMemberPermissions(null);
   } else {
     builder.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);

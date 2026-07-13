@@ -50,10 +50,34 @@ function formatDiscordTimestamp(date: Date): string {
   return `<t:${timestamp}:f>`;
 }
 
+const DEFAULT_RESET_COOLDOWN_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Whether a skill reset is currently available: either a stored bonus reset
+ * (`leveling.freeReset`), or the periodic free reset — available once
+ * `resetCooldownDays` (game config `user.resetSkillDaysCooldown`) have passed
+ * since `dates.lastSkillsResetAt` (never having reset also counts).
+ */
+export function isSkillResetAvailable(
+  user: UserDTO,
+  resetCooldownDays: number = DEFAULT_RESET_COOLDOWN_DAYS,
+  now: Date = new Date()
+): boolean {
+  if ((user.leveling?.freeReset ?? 0) > 0) {
+    return true;
+  }
+  const lastReset = user.dates?.lastSkillsResetAt ? parseDate(user.dates.lastSkillsResetAt) : null;
+  if (!lastReset) {
+    return true;
+  }
+  return now.getTime() - lastReset.getTime() >= resetCooldownDays * MS_PER_DAY;
+}
+
 /**
  * Get user status information including emoji and text
  */
-export function getUserStatus(user: UserDTO): UserStatus {
+export function getUserStatus(user: UserDTO, resetCooldownDays?: number): UserStatus {
   // Handle nullable buffs object and its properties
   const buffEndDate = user.buffs?.buffEndAt ? parseDate(user.buffs.buffEndAt) : null;
   const debuffEndDate = user.buffs?.debuffEndAt ? parseDate(user.buffs.debuffEndAt) : null;
@@ -77,8 +101,9 @@ export function getUserStatus(user: UserDTO): UserStatus {
   }
 
   // Determine reset availability text
-  const hasReset = user.leveling?.freeReset ? user.leveling.freeReset > 0 : false;
-  const resetText = hasReset ? 'Reset available' : 'Reset unavailable';
+  const resetText = isSkillResetAvailable(user, resetCooldownDays)
+    ? 'Reset available'
+    : 'Reset unavailable';
 
   return {
     emoji,
@@ -94,8 +119,8 @@ export function getUserStatus(user: UserDTO): UserStatus {
 /**
  * Format a single user entry for the detailed list
  */
-export function formatUserEntry(user: UserDTO): string {
-  const status = getUserStatus(user);
+export function formatUserEntry(user: UserDTO, resetCooldownDays?: number): string {
+  const status = getUserStatus(user, resetCooldownDays);
   const level = user.leveling?.level || 0;
   const username = user.username || 'Unknown';
   
@@ -126,12 +151,17 @@ export function formatUserEntry(user: UserDTO): string {
 /**
  * Format multiple users for display, handling message length limits
  */
-export function formatUserList(users: UserDTO[], mode: string, maxLength: number = 1800): string[] {
+export function formatUserList(
+  users: UserDTO[],
+  mode: string,
+  maxLength: number = 1800,
+  resetCooldownDays?: number
+): string[] {
   const messages: string[] = [];
   let currentMessage = `**${mode} Mode Players (${users.length}):**\n`;
-  
+
   for (const user of users) {
-    const userEntry = formatUserEntry(user) + '\n';
+    const userEntry = formatUserEntry(user, resetCooldownDays) + '\n';
     
     // Check if adding this user would exceed the length limit
     if (currentMessage.length + userEntry.length > maxLength) {

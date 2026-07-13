@@ -1,0 +1,1 @@
+export { linkCommand } from './link';

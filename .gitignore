@@ -11,6 +11,7 @@ dist/
 
 # Server configuration (contains sensitive IDs)
 config/serverConfig.json
+config/autorole-import.json
 
 # Legacy server configuration (for backwards compatibility)
 servers.json

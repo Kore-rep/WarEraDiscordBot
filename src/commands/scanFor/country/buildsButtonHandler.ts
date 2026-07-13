@@ -108,7 +108,13 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
     const sortedUsers = sortUsersByLevel(modeUsers);
 
     // Format user list with pagination support
-    const userListMessages = formatUserList(sortedUsers, mode.charAt(0).toUpperCase() + mode.slice(1), 1800);
+    const resetCooldownDays = await scan.getSkillResetCooldownDays();
+    const userListMessages = formatUserList(
+      sortedUsers,
+      mode.charAt(0).toUpperCase() + mode.slice(1),
+      1800,
+      resetCooldownDays
+    );
     
     if (userListMessages.length === 0) {
       await interaction.editReply({

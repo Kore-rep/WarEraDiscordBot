@@ -1,0 +1,1 @@
+export { autoroleCommand } from './autorole';

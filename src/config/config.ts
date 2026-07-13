@@ -222,6 +222,66 @@ export interface MuDirectoryConfig {
 }
 
 /**
+ * A Discord role granted at (and above) a WarEra level
+ */
+export interface LevelRoleEntry {
+  roleId: string;
+  minLevel: number;
+}
+
+/**
+ * A Discord role removed after a period of WarEra inactivity
+ */
+export interface TimedRoleEntry {
+  roleId: string;
+  timeoutDays: number;
+}
+
+/**
+ * Maps a WarEra military unit to a Discord role
+ */
+export interface MuRoleEntry {
+  muId: string;
+  muName: string;
+  roleId: string;
+}
+
+/**
+ * A posted "Link WarEra" button message
+ */
+export interface LinkMessageEntry {
+  channelId: string;
+  messageId: string;
+}
+
+/**
+ * Autorole feature per server: WarEra account linking plus periodic
+ * role/nickname sync of linked members.
+ */
+export interface AutoroleConfig {
+  enabled?: boolean; // default true
+  checkIntervalSeconds: number; // per-server sync cadence (default 3600, floor 60)
+  lastSyncAt?: string; // ISO timestamp of the last completed sync
+  levelRoles: LevelRoleEntry[];
+  timedRoles: TimedRoleEntry[];
+  muRoles: MuRoleEntry[];
+  ecoRoleId?: string;
+  warRoleId?: string;
+  hybridRoleId?: string;
+  ecoThreshold: number; // percent of skill points in eco skills to earn the eco role
+  warThreshold: number;
+  manageRoleIds: string[]; // roles allowed to act on review approve/deny buttons
+  manageUserIds: string[]; // individual users with the same allowance
+  proxyRoleIds: string[]; // roles that bypass the country allowlist when linking
+  protectedRoleIds: string[]; // never auto-removed by sync
+  allowedCountryIds: string[];
+  reviewChannelId?: string;
+  skipCompanyVerification: boolean;
+  linkMessages: LinkMessageEntry[];
+  syncNicknames?: boolean; // default true
+}
+
+/**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
  */
@@ -236,6 +296,7 @@ export interface ServerConfig {
   spectre?: SpectreConfig;
   leaderboard?: LeaderboardConfig;
   muDirectory?: MuDirectoryConfig;
+  autorole?: AutoroleConfig;
 }
 
 /**

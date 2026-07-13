@@ -23,6 +23,12 @@ export type ScanRegion = RegionDTO;
 
 const BATCH_SIZE = 100;
 
+// Skill-reset cooldown from the game config, memoized across ScanService
+// instances (one is constructed per command execution).
+const DEFAULT_RESET_COOLDOWN_DAYS = 7;
+const RESET_COOLDOWN_MEMO_TTL_MS = 3600 * 1000;
+let resetCooldownMemo: { days: number; fetchedAt: number } | null = null;
+
 /**
  * All WarEra API access used by the `/scanfor` command family. Command handlers
  * call these methods and only handle Discord I/O + formatting.
@@ -185,5 +191,28 @@ export class ScanService {
     } while (cursor && pages < maxPages);
 
     return { userIds, total: userIds.length, hitPageLimit: pages >= maxPages };
+  }
+
+  /**
+   * Days between free skill resets (`user.resetSkillDaysCooldown` in the game
+   * config). Memoized for an hour; falls back to the known default on failure.
+   */
+  async getSkillResetCooldownDays(): Promise<number> {
+    if (resetCooldownMemo && Date.now() - resetCooldownMemo.fetchedAt < RESET_COOLDOWN_MEMO_TTL_MS) {
+      return resetCooldownMemo.days;
+    }
+    try {
+      const res = (await this.apiService.getClient().gameConfig.getGameConfig()) as {
+        result?: { data?: { user?: { resetSkillDaysCooldown?: number } } };
+      };
+      const days = res?.result?.data?.user?.resetSkillDaysCooldown;
+      if (typeof days === 'number' && days > 0) {
+        resetCooldownMemo = { days, fetchedAt: Date.now() };
+        return days;
+      }
+    } catch (error) {
+      logger.warn('Failed to fetch game config for skill-reset cooldown', error);
+    }
+    return DEFAULT_RESET_COOLDOWN_DAYS;
   }
 }

@@ -13,6 +13,7 @@ import { CountryTrackingService } from '../services/countryTracking/CountryTrack
 import { ProxyTrackingService } from '../services/proxyTracking/ProxyTrackingService';
 import { LeaderboardService } from '../services/leaderboard/LeaderboardService';
 import { MuDirectoryService } from '../services/muDirectory/MuDirectoryService';
+import { AutoroleService } from '../services/autorole';
 import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
 import { ServerConfigManager } from '../utils/serverConfigManager';
@@ -34,6 +35,7 @@ export class Bot {
   private proxyTrackingService: ProxyTrackingService;
   private leaderboardService: LeaderboardService;
   private muDirectoryService: MuDirectoryService;
+  private autoroleService: AutoroleService;
   private scheduler: SchedulerService;
   private commandHandler: CommandHandler;
   private isRunning = false;
@@ -61,11 +63,13 @@ export class Bot {
     this.proxyTrackingService = new ProxyTrackingService(this.apiService.getClient(), this.discordService, this.apiService);
     this.leaderboardService = new LeaderboardService(this.discordService, this.apiService);
     this.muDirectoryService = new MuDirectoryService(this.discordService, this.apiService);
+    this.autoroleService = new AutoroleService(this.client, this.discordService, this.apiService);
 
     // Set services on ApiService to avoid circular dependency
     this.apiService.setProxyTrackingService(this.proxyTrackingService);
     this.apiService.setLeaderboardService(this.leaderboardService);
     this.apiService.setMuDirectoryService(this.muDirectoryService);
+    this.apiService.setAutoroleService(this.autoroleService);
 
     // The scheduler owns every periodic task; each runs on its own interval.
     this.scheduler = new SchedulerService([
@@ -83,6 +87,7 @@ export class Bot {
       this.proxyTrackingService,
       this.leaderboardService,
       this.muDirectoryService,
+      this.autoroleService,
     ]);
 
 

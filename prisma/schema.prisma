@@ -30,7 +30,49 @@ model Server {
   spectre            String?
   leaderboard        String?
   muDirectory        String?
+  autorole           String?
   updatedAt          DateTime @updatedAt
+}
+
+/// A Discord member linked to a WarEra account, per server. Grows with
+/// membership, so it lives in its own table rather than the JSON blob.
+model LinkedUser {
+  serverId       String
+  discordUserId  String
+  wareraUserId   String
+  linkedAt       DateTime  @default(now())
+  muNoticeSentAt DateTime?
+
+  @@id([serverId, discordUserId])
+  @@unique([serverId, wareraUserId])
+}
+
+/// A link request awaiting staff approval (user's country not allowlisted).
+model PendingLink {
+  serverId        String
+  discordUserId   String
+  wareraUserId    String
+  wareraUsername  String
+  countryId       String?
+  reviewChannelId String?
+  reviewMessageId String?
+  createdAt       DateTime @default(now())
+
+  @@id([serverId, discordUserId])
+  @@unique([serverId, wareraUserId])
+}
+
+/// An in-flight company-rename verification (short-lived; rows expire).
+model PendingVerification {
+  serverId       String
+  discordUserId  String
+  wareraUserId   String
+  wareraUsername String
+  code           String
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+
+  @@id([serverId, discordUserId])
 }
 
 /// Weekly damage leaderboard snapshots (replaces the per-server CSV files under

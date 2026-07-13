@@ -14,7 +14,8 @@
     "test:coverage": "jest --coverage",
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:import": "ts-node src/scripts/importJsonToSqlite.ts"
+    "db:import": "ts-node src/scripts/importJsonToSqlite.ts",
+    "db:import-autorole": "ts-node src/scripts/importAutoroleJson.ts"
   },
   "keywords": [
     "discord",

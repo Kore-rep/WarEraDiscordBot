@@ -10,6 +10,7 @@ import {
   TrackedProxyCountry,
   LeaderboardConfig,
   MuDirectoryConfig,
+  AutoroleConfig,
 } from '../config/config';
 import { logger } from './logger';
 import { prisma } from '../persistence/prisma';
@@ -52,6 +53,7 @@ export class ServerConfigManager {
           spectre: decode(row.spectre),
           leaderboard: decode(row.leaderboard),
           muDirectory: decode(row.muDirectory),
+          autorole: decode(row.autorole),
         };
         serversMap.set(row.id, this.normalizeServerConfig(row.id, raw));
       }
@@ -170,6 +172,28 @@ export class ServerConfigManager {
         militaryUnitIds: (serverConfig.muDirectory.militaryUnitIds || []).filter(id => id && id.trim().length > 0),
         manageRoleIds: (serverConfig.muDirectory.manageRoleIds || []).filter(id => id && id.trim().length > 0),
         lastUpdated: serverConfig.muDirectory.lastUpdated,
+      } : undefined,
+      autorole: serverConfig.autorole ? {
+        enabled: serverConfig.autorole.enabled,
+        checkIntervalSeconds: Math.max(60, serverConfig.autorole.checkIntervalSeconds ?? 3600),
+        lastSyncAt: serverConfig.autorole.lastSyncAt,
+        levelRoles: (serverConfig.autorole.levelRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
+        timedRoles: (serverConfig.autorole.timedRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
+        muRoles: (serverConfig.autorole.muRoles || []).filter(e => e.roleId?.trim() && e.muId?.trim()),
+        ecoRoleId: serverConfig.autorole.ecoRoleId,
+        warRoleId: serverConfig.autorole.warRoleId,
+        hybridRoleId: serverConfig.autorole.hybridRoleId,
+        ecoThreshold: serverConfig.autorole.ecoThreshold ?? 60,
+        warThreshold: serverConfig.autorole.warThreshold ?? 60,
+        manageRoleIds: (serverConfig.autorole.manageRoleIds || []).filter(id => id && id.trim().length > 0),
+        manageUserIds: (serverConfig.autorole.manageUserIds || []).filter(id => id && id.trim().length > 0),
+        proxyRoleIds: (serverConfig.autorole.proxyRoleIds || []).filter(id => id && id.trim().length > 0),
+        protectedRoleIds: (serverConfig.autorole.protectedRoleIds || []).filter(id => id && id.trim().length > 0),
+        allowedCountryIds: (serverConfig.autorole.allowedCountryIds || []).filter(id => id && id.trim().length > 0),
+        reviewChannelId: serverConfig.autorole.reviewChannelId,
+        skipCompanyVerification: serverConfig.autorole.skipCompanyVerification ?? false,
+        linkMessages: (serverConfig.autorole.linkMessages || []).filter(m => m.channelId?.trim() && m.messageId?.trim()),
+        syncNicknames: serverConfig.autorole.syncNicknames,
       } : undefined,
     };
   }
@@ -332,6 +356,7 @@ export class ServerConfigManager {
           spectre: encode(cfg.spectre),
           leaderboard: encode(cfg.leaderboard),
           muDirectory: encode(cfg.muDirectory),
+          autorole: encode(cfg.autorole),
         };
         return prisma.server.upsert({ where: { id }, create: { id, ...data }, update: data });
       }),
@@ -402,6 +427,18 @@ export class ServerConfigManager {
         messageIds: [...config.muDirectory.messageIds],
         militaryUnitIds: [...config.muDirectory.militaryUnitIds],
         manageRoleIds: [...config.muDirectory.manageRoleIds],
+      } : undefined,
+      autorole: config.autorole ? {
+        ...config.autorole,
+        levelRoles: config.autorole.levelRoles.map(e => ({ ...e })),
+        timedRoles: config.autorole.timedRoles.map(e => ({ ...e })),
+        muRoles: config.autorole.muRoles.map(e => ({ ...e })),
+        manageRoleIds: [...config.autorole.manageRoleIds],
+        manageUserIds: [...config.autorole.manageUserIds],
+        proxyRoleIds: [...config.autorole.proxyRoleIds],
+        protectedRoleIds: [...config.autorole.protectedRoleIds],
+        allowedCountryIds: [...config.autorole.allowedCountryIds],
+        linkMessages: config.autorole.linkMessages.map(m => ({ ...m })),
       } : undefined,
     };
   }
@@ -1287,6 +1324,77 @@ export class ServerConfigManager {
       logger.info(`Updated MU directory config for server ${serverId}`);
     } catch (error) {
       logger.error('Failed to update MU directory config', error);
+      throw error;
+    }
+  }
+
+  /** Read a server's autorole config (deep copy), or undefined if unset. */
+  static getAutoroleConfig(serverId: string): AutoroleConfig | undefined {
+    return this.getServerConfig(serverId)?.autorole;
+  }
+
+  private static defaultAutorole(): AutoroleConfig {
+    return {
+      enabled: true,
+      checkIntervalSeconds: 3600,
+      levelRoles: [],
+      timedRoles: [],
+      muRoles: [],
+      ecoThreshold: 60,
+      warThreshold: 60,
+      manageRoleIds: [],
+      manageUserIds: [],
+      proxyRoleIds: [],
+      protectedRoleIds: [],
+      allowedCountryIds: [],
+      skipCompanyVerification: false,
+      linkMessages: [],
+    };
+  }
+
+  /**
+   * Update autorole configuration for a server, merging over the existing
+   * block (or a default one if none exists yet).
+   */
+  static updateAutoroleConfig(serverId: string, config: Partial<AutoroleConfig>): void {
+    try {
+      this.ensureCacheInitialized();
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      const existing = existingServerConfig.autorole || this.defaultAutorole();
+
+      const updated: AutoroleConfig = {
+        enabled: config.enabled !== undefined ? config.enabled : existing.enabled,
+        checkIntervalSeconds: Math.max(60, config.checkIntervalSeconds !== undefined ? config.checkIntervalSeconds : existing.checkIntervalSeconds),
+        lastSyncAt: config.lastSyncAt !== undefined ? config.lastSyncAt : existing.lastSyncAt,
+        levelRoles: config.levelRoles !== undefined ? config.levelRoles : existing.levelRoles,
+        timedRoles: config.timedRoles !== undefined ? config.timedRoles : existing.timedRoles,
+        muRoles: config.muRoles !== undefined ? config.muRoles : existing.muRoles,
+        ecoRoleId: config.ecoRoleId !== undefined ? config.ecoRoleId : existing.ecoRoleId,
+        warRoleId: config.warRoleId !== undefined ? config.warRoleId : existing.warRoleId,
+        hybridRoleId: config.hybridRoleId !== undefined ? config.hybridRoleId : existing.hybridRoleId,
+        ecoThreshold: config.ecoThreshold !== undefined ? config.ecoThreshold : existing.ecoThreshold,
+        warThreshold: config.warThreshold !== undefined ? config.warThreshold : existing.warThreshold,
+        manageRoleIds: config.manageRoleIds !== undefined ? config.manageRoleIds : existing.manageRoleIds,
+        manageUserIds: config.manageUserIds !== undefined ? config.manageUserIds : existing.manageUserIds,
+        proxyRoleIds: config.proxyRoleIds !== undefined ? config.proxyRoleIds : existing.proxyRoleIds,
+        protectedRoleIds: config.protectedRoleIds !== undefined ? config.protectedRoleIds : existing.protectedRoleIds,
+        allowedCountryIds: config.allowedCountryIds !== undefined ? config.allowedCountryIds : existing.allowedCountryIds,
+        reviewChannelId: config.reviewChannelId !== undefined ? config.reviewChannelId : existing.reviewChannelId,
+        skipCompanyVerification: config.skipCompanyVerification !== undefined ? config.skipCompanyVerification : existing.skipCompanyVerification,
+        linkMessages: config.linkMessages !== undefined ? config.linkMessages : existing.linkMessages,
+        syncNicknames: config.syncNicknames !== undefined ? config.syncNicknames : existing.syncNicknames,
+      };
+
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        autorole: updated,
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Updated autorole config for server ${serverId}`);
+    } catch (error) {
+      logger.error('Failed to update autorole config', error);
       throw error;
     }
   }

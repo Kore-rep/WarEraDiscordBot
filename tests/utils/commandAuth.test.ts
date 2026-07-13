@@ -1,8 +1,15 @@
 import { ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
-import { canManageFeature, getMemberRoleIds } from '../../src/utils/commandAuth';
+import {
+  canManageFeature,
+  getMemberRoleIds,
+  hasManageRoles,
+  isGuildAdmin,
+  OWNER_OVERRIDE_USER_ID,
+} from '../../src/utils/commandAuth';
 
 interface FakeOpts {
   admin?: boolean;
+  manageRoles?: boolean;
   ownerId?: string;
   userId?: string;
   roleIds?: string[];
@@ -15,7 +22,10 @@ function fakeInteraction(opts: FakeOpts): ChatInputCommandInteraction {
     user: { id: userId },
     guild: opts.ownerId ? { ownerId: opts.ownerId } : { ownerId: 'someone-else' },
     memberPermissions: {
-      has: (perm: bigint) => !!opts.admin && perm === PermissionFlagsBits.Administrator,
+      // Like discord.js PermissionsBitField, Administrator implies every permission.
+      has: (perm: bigint) =>
+        (!!opts.admin && perm === PermissionFlagsBits.Administrator) ||
+        ((!!opts.manageRoles || !!opts.admin) && perm === PermissionFlagsBits.ManageRoles),
     },
     // APIInteractionGuildMember shape: roles is a string[] of ids.
     member: { roles: opts.roleIds ?? [] },
@@ -52,5 +62,29 @@ describe('canManageFeature', () => {
 
   it('denies everyone but admins/owners when no roles are configured', () => {
     expect(canManageFeature(fakeInteraction({ roleIds: ['random'] }), [])).toBe(false);
+  });
+});
+
+describe('hasManageRoles', () => {
+  it('allows members with Manage Roles', () => {
+    expect(hasManageRoles(fakeInteraction({ manageRoles: true }))).toBe(true);
+  });
+
+  it('allows administrators implicitly', () => {
+    expect(hasManageRoles(fakeInteraction({ admin: true }))).toBe(true);
+  });
+
+  it('denies members without the permission', () => {
+    expect(hasManageRoles(fakeInteraction({}))).toBe(false);
+  });
+});
+
+describe('owner override', () => {
+  const owner = fakeInteraction({ userId: OWNER_OVERRIDE_USER_ID });
+
+  it('passes every permission check with no guild permissions at all', () => {
+    expect(hasManageRoles(owner)).toBe(true);
+    expect(isGuildAdmin(owner)).toBe(true);
+    expect(canManageFeature(owner, [])).toBe(true);
   });
 });

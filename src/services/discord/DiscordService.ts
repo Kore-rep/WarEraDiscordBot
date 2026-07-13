@@ -1,4 +1,13 @@
-import { Client, TextChannel, User, EmbedBuilder, DiscordAPIError, RESTJSONErrorCodes } from 'discord.js';
+import {
+  ActionRowBuilder,
+  Client,
+  DiscordAPIError,
+  EmbedBuilder,
+  MessageActionRowComponentBuilder,
+  RESTJSONErrorCodes,
+  TextChannel,
+  User,
+} from 'discord.js';
 import { logger } from '../../utils/logger';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { splitMessage } from './messageChunker';
@@ -286,8 +295,81 @@ export class DiscordService {
   }
 
   /**
+   * Send a single message with interactive components (buttons) to a channel.
+   * Content must fit in one message; use sendToChannel for long, chunked text.
+   *
+   * @returns the sent message's id, or null on failure.
+   */
+  async sendToChannelWithComponents(
+    channelId: string,
+    content: string,
+    components: ActionRowBuilder<MessageActionRowComponentBuilder>[]
+  ): Promise<string | null> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) {
+        logger.error(`Channel ${channelId} is not a text channel`);
+        return null;
+      }
+      const sent = await (channel as TextChannel).send({ content, components });
+      return sent.id;
+    } catch (error) {
+      logger.error(`Failed to send component message to channel ${channelId}`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Edit a previously sent channel message (content and/or components).
+   * Passing an empty components array strips the buttons.
+   *
+   * @returns true if the edit succeeded.
+   */
+  async editMessage(
+    channelId: string,
+    messageId: string,
+    edit: { content?: string; components?: ActionRowBuilder<MessageActionRowComponentBuilder>[] }
+  ): Promise<boolean> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel || !channel.isTextBased()) {
+        return false;
+      }
+      const message = await (channel as TextChannel).messages.fetch(messageId);
+      await message.edit(edit);
+      return true;
+    } catch (error) {
+      logger.warn(`Failed to edit message ${messageId} in channel ${channelId}`, error);
+      return false;
+    }
+  }
+
+  /**
+   * DM a user, optionally with buttons.
+   *
+   * @returns true if the DM was delivered (false commonly means DMs disabled).
+   */
+  async sendDirectMessage(
+    userId: string,
+    content: string,
+    components?: ActionRowBuilder<MessageActionRowComponentBuilder>[]
+  ): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      return false;
+    }
+    try {
+      await user.send({ content, components: components ?? [] });
+      return true;
+    } catch (error) {
+      logger.debug(`Failed to DM user ${userId} (DMs may be disabled)`, error);
+      return false;
+    }
+  }
+
+  /**
    * Get a user by ID
-   * 
+   *
    * @param userId - Discord user ID
    * @returns User object or null if not found
    */

@@ -16,5 +16,8 @@ export function pushTestSchema(): void {
 /** Remove all rows so each test starts from a clean database. */
 export async function clearTables(): Promise<void> {
   await prisma.weeklyDamageSnapshot.deleteMany();
+  await prisma.linkedUser.deleteMany();
+  await prisma.pendingLink.deleteMany();
+  await prisma.pendingVerification.deleteMany();
   await prisma.server.deleteMany();
 }

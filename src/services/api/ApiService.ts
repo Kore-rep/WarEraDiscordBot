@@ -41,6 +41,7 @@ export class ApiService {
   private proxyTrackingService?: any; // Will be set after initialization
   private leaderboardService?: import('../leaderboard/LeaderboardService').LeaderboardService;
   private muDirectoryService?: import('../muDirectory/MuDirectoryService').MuDirectoryService;
+  private autoroleService?: import('../autorole/AutoroleService').AutoroleService;
 
   constructor(config: BotConfig) {
     this.config = config;
@@ -476,6 +477,13 @@ export class ApiService {
     return this.client;
   }
 
+  /**
+   * The configured tRPC base URL (for the rare raw request the SDK can't make)
+   */
+  getApiBaseUrl(): string | undefined {
+    return this.config.api.baseUrl;
+  }
+
 
   /**
    * Get the batch-enabled API client for battle polling operations
@@ -657,5 +665,19 @@ export class ApiService {
    */
   getMuDirectoryService(): import('../muDirectory/MuDirectoryService').MuDirectoryService | undefined {
     return this.muDirectoryService;
+  }
+
+  /**
+   * Set the AutoroleService instance (called after initialization to avoid circular dependency)
+   */
+  setAutoroleService(service: import('../autorole/AutoroleService').AutoroleService): void {
+    this.autoroleService = service;
+  }
+
+  /**
+   * Get the AutoroleService instance
+   */
+  getAutoroleService(): import('../autorole/AutoroleService').AutoroleService | undefined {
+    return this.autoroleService;
   }
 }

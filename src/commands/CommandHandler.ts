@@ -14,6 +14,8 @@ import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 import { spectreCommand } from './spectre/spectre';
 import { muDirectoryCommand } from './muDirectory';
+import { linkCommand } from './link';
+import { autoroleCommand } from './autorole';
 
 /**
  * Manages slash command registration and execution
@@ -47,6 +49,8 @@ export class CommandHandler {
       countryGroupCommand,
       spectreCommand,
       muDirectoryCommand,
+      linkCommand,
+      autoroleCommand,
     ];
 
     for (const command of commandList) {
@@ -162,6 +166,13 @@ export class CommandHandler {
         return;
       }
 
+      // Autorole link modal
+      if (customId.startsWith('autorole:')) {
+        const { handleAutoroleModal } = await import('./autorole/autoroleInteractionHandler');
+        await handleAutoroleModal(interaction, this.apiService);
+        return;
+      }
+
       // Unknown modal
       logger.warn(`Unknown modal submission: ${customId}`);
     } catch (error) {
@@ -190,6 +201,10 @@ export class CommandHandler {
         // Handle builds command button interactions
         const { handleBuildsButtonInteraction } = await import('./scanFor/country/buildsButtonHandler');
         await handleBuildsButtonInteraction(interaction, this.apiService!);
+      } else if (command === 'autorole') {
+        // Link/verify/review buttons for the autorole feature
+        const { handleAutoroleButton } = await import('./autorole/autoroleInteractionHandler');
+        await handleAutoroleButton(interaction, this.apiService);
       } else {
         logger.warn(`Unknown button interaction: ${interaction.customId}`);
         await interaction.reply({

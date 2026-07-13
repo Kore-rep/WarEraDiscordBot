@@ -4,7 +4,7 @@ import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
-import { canManageFeature, isGuildAdmin, replyUnauthorized } from '../../utils/commandAuth';
+import { canManageFeature, hasManageRoles, replyUnauthorized } from '../../utils/commandAuth';
 import { parseMuInput } from '../../services/muDirectory/muLink';
 
 const MANAGE_ROLE_OPTIONS = ['role1', 'role2', 'role3', 'role4', 'role5'] as const;
@@ -22,7 +22,7 @@ export const muDirectoryCommand: Command = {
         .addSubcommand(sub => {
           sub
             .setName('set')
-            .setDescription('Set MU directory configuration (admin only)')
+            .setDescription('Set MU directory configuration (requires Manage Roles)')
             .addStringOption(opt =>
               opt
                 .setName('mus')
@@ -51,10 +51,10 @@ export const muDirectoryCommand: Command = {
         )
     )
     .addSubcommand(sub =>
-      sub.setName('enable').setDescription('Enable daily directory updates (admin only)')
+      sub.setName('enable').setDescription('Enable daily directory updates (requires Manage Roles)')
     )
     .addSubcommand(sub =>
-      sub.setName('disable').setDescription('Disable daily directory updates (admin only)')
+      sub.setName('disable').setDescription('Disable daily directory updates (requires Manage Roles)')
     )
     .addSubcommand(sub =>
       sub.setName('refresh').setDescription('Refresh the directory now')
@@ -139,8 +139,8 @@ async function handleConfigSet(
   interaction: ChatInputCommandInteraction,
   discordService: DiscordService
 ): Promise<void> {
-  if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can configure the MU directory.');
+  if (!hasManageRoles(interaction)) {
+    await replyUnauthorized(interaction, 'You need the Manage Roles permission to configure the MU directory.');
     return;
   }
 
@@ -253,8 +253,8 @@ async function handleEnable(
   interaction: ChatInputCommandInteraction,
   apiService: ApiService
 ): Promise<void> {
-  if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can enable the MU directory.');
+  if (!hasManageRoles(interaction)) {
+    await replyUnauthorized(interaction, 'You need the Manage Roles permission to enable the MU directory.');
     return;
   }
 
@@ -290,8 +290,8 @@ async function handleEnable(
 }
 
 async function handleDisable(interaction: ChatInputCommandInteraction): Promise<void> {
-  if (!isGuildAdmin(interaction)) {
-    await replyUnauthorized(interaction, 'Only administrators can disable the MU directory.');
+  if (!hasManageRoles(interaction)) {
+    await replyUnauthorized(interaction, 'You need the Manage Roles permission to disable the MU directory.');
     return;
   }
 

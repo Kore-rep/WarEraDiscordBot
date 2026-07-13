@@ -11,6 +11,18 @@ import {
  * `requireAdmin: false` (visible to everyone) that gate mutations at runtime.
  */
 
+/**
+ * Bot-owner override: this user passes every runtime permission check,
+ * regardless of guild roles/permissions (Discord-level default_member_permissions
+ * still apply to command visibility). Escape hatch for channel permission
+ * overwrites silently dropping Manage Roles from `interaction.memberPermissions`.
+ */
+export const OWNER_OVERRIDE_USER_ID = '168785206826762240';
+
+export function isOwnerOverride(userId: string): boolean {
+  return userId === OWNER_OVERRIDE_USER_ID;
+}
+
 /** Role ids held by the interacting member, tolerating cached and raw members. */
 export function getMemberRoleIds(interaction: ChatInputCommandInteraction): string[] {
   const roles = interaction.member?.roles;
@@ -25,7 +37,18 @@ export function getMemberRoleIds(interaction: ChatInputCommandInteraction): stri
 }
 
 export function isGuildAdmin(interaction: ChatInputCommandInteraction): boolean {
+  if (isOwnerOverride(interaction.user.id)) {
+    return true;
+  }
   return interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) ?? false;
+}
+
+/** Manage Roles permission (admins and the owner override pass implicitly). */
+export function hasManageRoles(interaction: ChatInputCommandInteraction): boolean {
+  if (isOwnerOverride(interaction.user.id)) {
+    return true;
+  }
+  return interaction.memberPermissions?.has(PermissionFlagsBits.ManageRoles) ?? false;
 }
 
 export function isGuildOwner(interaction: ChatInputCommandInteraction): boolean {

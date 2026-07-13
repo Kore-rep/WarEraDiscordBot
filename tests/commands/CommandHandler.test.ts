@@ -151,6 +151,20 @@ jest.mock('../../src/commands/muDirectory', () => ({
   },
 }));
 
+jest.mock('../../src/commands/link', () => ({
+  linkCommand: {
+    data: { name: 'link', description: 'Link your WarEra account', toJSON: jest.fn().mockReturnValue({ name: 'link' }) },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/autorole', () => ({
+  autoroleCommand: {
+    data: { name: 'autorole', description: 'Configure account linking and role sync', toJSON: jest.fn().mockReturnValue({ name: 'autorole' }) },
+    execute: jest.fn(),
+  },
+}));
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -191,8 +205,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load all nine top-level commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(9);
+    it('should load all eleven top-level commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(11);
     });
   });
 
@@ -373,7 +387,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(9);
+      expect(commandHandler.getCommandCount()).toBe(11);
     });
   });
 });
