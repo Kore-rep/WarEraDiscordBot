@@ -15,7 +15,7 @@ This is the roadmap for the bot. Features, integrations and optimizations. No ti
 ## Bugfixes && code improvements
  - [ ] Reject link requests from already-linked users
  - [x] Correctly report skill reset availability 
- - [ ] Centralize logic for calculating a user's build based on their skills
+ - [x] Centralize logic for calculating a user's build based on their skills
 
 ## Optimizations
  - [ ] Ensure caching is being used everywhere possible
