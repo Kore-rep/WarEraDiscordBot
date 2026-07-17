@@ -105,6 +105,16 @@ describe('computeMemberSyncPlan', () => {
     expect(plan.desiredNickname).toBeUndefined();
   });
 
+  it('grants the linked role to a linked member and keeps it', () => {
+    const cfg = baseConfig({ linkedRoleId: 'linked' });
+    const missing = computeMemberSyncPlan(baseUser(), [], null, cfg, now);
+    expect(missing.rolesToAdd).toContain('linked');
+
+    const held = computeMemberSyncPlan(baseUser(), ['linked'], null, cfg, now);
+    expect(held.rolesToAdd).not.toContain('linked');
+    expect(held.rolesToRemove).not.toContain('linked');
+  });
+
   it('strips the unlinked role from a linked member (never targets it)', () => {
     const plan = computeMemberSyncPlan(
       baseUser(),

@@ -350,7 +350,7 @@ export async function handleLinks(
     await interaction.deferReply({ ephemeral: true });
     const result = await service.getLinkFlow().unlink(serverId, target.id);
     if (result.removedLink) {
-      await service.assignUnlinkedRole(serverId, target.id);
+      await service.onUnlinked(serverId, target.id);
     }
     await interaction.editReply({
       content:
@@ -430,6 +430,7 @@ export async function handleConfig(
         `**Timed roles:** ${cfg.timedRoles.length}\n` +
         `**MU roles:** ${cfg.muRoles.length}\n` +
         `**Build roles:** eco ${cfg.ecoRoleId ? `<@&${cfg.ecoRoleId}>` : 'None'} (${cfg.ecoThreshold}%), war ${cfg.warRoleId ? `<@&${cfg.warRoleId}>` : 'None'} (${cfg.warThreshold}%), hybrid ${cfg.hybridRoleId ? `<@&${cfg.hybridRoleId}>` : 'None'}\n` +
+        `**Linked role:** ${cfg.linkedRoleId ? `<@&${cfg.linkedRoleId}>` : 'None'}\n` +
         `**Unlinked role:** ${cfg.unlinkedRoleId ? `<@&${cfg.unlinkedRoleId}>` : 'None'}\n` +
         `**Link messages:** ${cfg.linkMessages.map(m => `<#${m.channelId}>`).join(', ') || 'None'}`
     );
@@ -451,6 +452,8 @@ export async function handleConfig(
     const syncNicknames = interaction.options.getBoolean('sync_nicknames');
     const unlinkedRole = interaction.options.getRole('unlinked_role');
     const clearUnlinkedRole = interaction.options.getBoolean('clear_unlinked_role');
+    const linkedRole = interaction.options.getRole('linked_role');
+    const clearLinkedRole = interaction.options.getBoolean('clear_linked_role');
     if (reviewChannel) update.reviewChannelId = reviewChannel.id;
     if (skipVerification !== null) update.skipCompanyVerification = skipVerification;
     if (intervalSeconds !== null) update.checkIntervalSeconds = intervalSeconds;
@@ -462,6 +465,11 @@ export async function handleConfig(
       update.unlinkedRoleId = unlinkedRole.id;
       // Re-run the one-time backfill for the newly chosen role.
       update.unlinkedBackfillAt = '';
+    }
+    if (clearLinkedRole) {
+      update.linkedRoleId = '';
+    } else if (linkedRole) {
+      update.linkedRoleId = linkedRole.id;
     }
     if (Object.keys(update).length === 0) {
       await interaction.reply({ content: 'Pass at least one option to change.', ephemeral: true });

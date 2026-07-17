@@ -207,6 +207,18 @@ export const autoroleCommand: Command = {
                 .setDescription('Stop assigning an unlinked role (leaves existing holders untouched)')
                 .setRequired(false)
             )
+            .addRoleOption(opt =>
+              opt
+                .setName('linked_role')
+                .setDescription('Role given to every member who has linked a WarEra account')
+                .setRequired(false)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('clear_linked_role')
+                .setDescription('Stop assigning a linked role (leaves existing holders untouched)')
+                .setRequired(false)
+            )
         );
       for (const [name, description] of [
         ['staffroles', 'Roles allowed to act on review buttons (replaces the list)'],

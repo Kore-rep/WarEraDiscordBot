@@ -270,6 +270,7 @@ export interface AutoroleConfig {
   hybridRoleId?: string;
   ecoThreshold: number; // percent of skill points in eco skills to earn the eco role
   warThreshold: number;
+  linkedRoleId?: string; // role given to every member who has linked a WarEra account
   unlinkedRoleId?: string; // role given to members who have not linked a WarEra account
   unlinkedBackfillAt?: string; // ISO timestamp of the one-time backfill sweep (unset = not run yet)
   manageRoleIds: string[]; // roles allowed to act on review approve/deny buttons

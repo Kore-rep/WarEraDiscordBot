@@ -116,6 +116,8 @@ export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
     '  - `sync_nicknames` — let sync manage nicknames or leave them alone',
     '  - `unlinked_role` — role given to members who have not linked; assigned on join and once via a backfill sweep, and removed the moment they link. Needs the Server Members privileged intent.',
     '  - `clear_unlinked_role` — stop assigning it (existing holders keep the role until you remove it manually)',
+    '  - `linked_role` — role given to every linked member on each sync, removed when they unlink (unless it is a protected role). Apply it to current members immediately with `/autorole sync now`.',
+    '  - `clear_linked_role` — stop assigning it (existing holders keep the role until you remove it manually)',
     '- `staffroles role1..role5` / `staffusers users:<ids>` — who may act on review buttons (replaces the list; empty clears)',
     '- `proxyroles role1..role5` — roles that bypass the country check when linking',
     '- `protectedroles role1..role5` — roles the sync must never remove',

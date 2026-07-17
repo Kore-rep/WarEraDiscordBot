@@ -148,6 +148,9 @@ async function handleVerify(interaction: ChatInputCommandInteraction, service: A
 async function handleUnlink(interaction: ChatInputCommandInteraction, service: AutoroleService): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
   const result = await service.getLinkFlow().unlink(interaction.guild!.id, interaction.user.id);
+  if (result.removedLink) {
+    await service.onUnlinked(interaction.guild!.id, interaction.user.id);
+  }
   const removed: string[] = [];
   if (result.removedLink) removed.push('your account link');
   if (result.removedPending) removed.push('your pending review request');

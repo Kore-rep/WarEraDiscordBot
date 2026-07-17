@@ -58,6 +58,11 @@ export function computeMemberSyncPlan(
   if (cfg.unlinkedRoleId) {
     managed.add(cfg.unlinkedRoleId);
   }
+  // The "linked" role is the inverse: every member reaching this plan is linked,
+  // so it is always a target (granted and kept). Removal happens on unlink.
+  if (cfg.linkedRoleId) {
+    targets.push(cfg.linkedRoleId);
+  }
 
   const muEntry = user.muId ? cfg.muRoles.find(e => e.muId === user.muId) : undefined;
   for (const entry of cfg.muRoles) {

@@ -141,10 +141,14 @@ export class AutoroleService implements ScheduledTask {
     await this.addRole(member, cfg.unlinkedRoleId, 'unlinked (join)');
   }
 
-  /** Re-apply the unlinked role to a member after their link is removed. */
-  async assignUnlinkedRole(serverId: string, discordUserId: string): Promise<void> {
+  /**
+   * Reconcile a member's link-status roles after their link is removed: add the
+   * unlinked role and drop the linked role. Both are no-ops unless configured;
+   * a protected linked role is left in place (protected roles are never removed).
+   */
+  async onUnlinked(serverId: string, discordUserId: string): Promise<void> {
     const cfg = ServerConfigManager.getAutoroleConfig(serverId);
-    if (!cfg || !cfg.unlinkedRoleId) {
+    if (!cfg || (!cfg.unlinkedRoleId && !cfg.linkedRoleId)) {
       return;
     }
     const guild = await this.fetchGuild(serverId);
@@ -152,7 +156,12 @@ export class AutoroleService implements ScheduledTask {
     if (!member || member.user.bot) {
       return;
     }
-    await this.addRole(member, cfg.unlinkedRoleId, 'unlinked (unlink)');
+    if (cfg.unlinkedRoleId) {
+      await this.addRole(member, cfg.unlinkedRoleId, 'unlinked (unlink)');
+    }
+    if (cfg.linkedRoleId && !cfg.protectedRoleIds.includes(cfg.linkedRoleId)) {
+      await this.removeRole(member, cfg.linkedRoleId, 'linked (unlink)');
+    }
   }
 
   /**
@@ -203,6 +212,17 @@ export class AutoroleService implements ScheduledTask {
       await member.roles.add(roleId);
     } catch (error) {
       logger.warn(`Autorole: could not add ${why} role ${roleId} to ${member.id} in ${member.guild.id}`, error);
+    }
+  }
+
+  private async removeRole(member: GuildMember, roleId: string, why: string): Promise<void> {
+    if (!member.roles.cache.has(roleId)) {
+      return;
+    }
+    try {
+      await member.roles.remove(roleId);
+    } catch (error) {
+      logger.warn(`Autorole: could not remove ${why} role ${roleId} from ${member.id} in ${member.guild.id}`, error);
     }
   }
 
