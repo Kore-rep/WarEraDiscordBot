@@ -4,7 +4,7 @@ import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { hasManageRoles, replyUnauthorized } from '../../utils/commandAuth';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { AutoroleService } from '../../services/autorole';
-import { analyzeUserBuild, SkillLevels } from '../../services/autorole/build';
+import { analyzeUserBuild, SkillLevels, ECO_SKILLS, WAR_SKILLS } from '../../services/autorole/build';
 import { buildLinkBlockComponents, LINK_BLOCK_CONTENT } from '../../services/autorole/reviewMessages';
 import { AUTOROLE_GUIDE, AUTOROLE_TOPIC_HELP } from './autoroleHelp';
 import { parseMuInput } from '../../services/muDirectory/muLink';
@@ -178,8 +178,8 @@ async function replyBuildRoleView(interaction: ChatInputCommandInteraction, pref
       `${roleLine('Eco', cfg?.ecoRoleId)} (threshold ${cfg?.ecoThreshold ?? 60}%)\n` +
       `${roleLine('War', cfg?.warRoleId)} (threshold ${cfg?.warThreshold ?? 60}%)\n` +
       `${roleLine('Hybrid', cfg?.hybridRoleId)}\n\n` +
-      'Eco skills: companies, entrepreneurship, production, management\n' +
-      'War skills: attack, armor, precision, dodge, criticalChance, criticalDamages, lootChance',
+      `Eco skills: ${ECO_SKILLS.join(', ')}\n` +
+      `War skills: ${WAR_SKILLS.join(', ')}`,
     ephemeral: true,
   });
 }
@@ -349,6 +349,9 @@ export async function handleLinks(
   if (sub === 'unlink') {
     await interaction.deferReply({ ephemeral: true });
     const result = await service.getLinkFlow().unlink(serverId, target.id);
+    if (result.removedLink) {
+      await service.assignUnlinkedRole(serverId, target.id);
+    }
     await interaction.editReply({
       content:
         result.removedLink || result.removedPending || result.removedVerification
@@ -427,6 +430,7 @@ export async function handleConfig(
         `**Timed roles:** ${cfg.timedRoles.length}\n` +
         `**MU roles:** ${cfg.muRoles.length}\n` +
         `**Build roles:** eco ${cfg.ecoRoleId ? `<@&${cfg.ecoRoleId}>` : 'None'} (${cfg.ecoThreshold}%), war ${cfg.warRoleId ? `<@&${cfg.warRoleId}>` : 'None'} (${cfg.warThreshold}%), hybrid ${cfg.hybridRoleId ? `<@&${cfg.hybridRoleId}>` : 'None'}\n` +
+        `**Unlinked role:** ${cfg.unlinkedRoleId ? `<@&${cfg.unlinkedRoleId}>` : 'None'}\n` +
         `**Link messages:** ${cfg.linkMessages.map(m => `<#${m.channelId}>`).join(', ') || 'None'}`
     );
     return;
@@ -445,11 +449,20 @@ export async function handleConfig(
     const intervalSeconds = interaction.options.getInteger('interval_seconds');
     const enabled = interaction.options.getBoolean('enabled');
     const syncNicknames = interaction.options.getBoolean('sync_nicknames');
+    const unlinkedRole = interaction.options.getRole('unlinked_role');
+    const clearUnlinkedRole = interaction.options.getBoolean('clear_unlinked_role');
     if (reviewChannel) update.reviewChannelId = reviewChannel.id;
     if (skipVerification !== null) update.skipCompanyVerification = skipVerification;
     if (intervalSeconds !== null) update.checkIntervalSeconds = intervalSeconds;
     if (enabled !== null) update.enabled = enabled;
     if (syncNicknames !== null) update.syncNicknames = syncNicknames;
+    if (clearUnlinkedRole) {
+      update.unlinkedRoleId = '';
+    } else if (unlinkedRole) {
+      update.unlinkedRoleId = unlinkedRole.id;
+      // Re-run the one-time backfill for the newly chosen role.
+      update.unlinkedBackfillAt = '';
+    }
     if (Object.keys(update).length === 0) {
       await interaction.reply({ content: 'Pass at least one option to change.', ephemeral: true });
       return;

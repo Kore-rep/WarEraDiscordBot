@@ -49,6 +49,9 @@ export class Bot {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        // Privileged: needed to assign the autorole "unlinked" role on member join.
+        // Must also be enabled in the Discord Developer Portal.
+        GatewayIntentBits.GuildMembers,
       ],
     });
 
@@ -124,6 +127,13 @@ export class Bot {
         logger.error('Failed to initialize bot services', error);
         // Don't exit - let the bot try to recover
       }
+    });
+
+    // Give new members the autorole "unlinked" role (no-op unless configured).
+    this.client.on(Events.GuildMemberAdd, (member) => {
+      void this.autoroleService.handleMemberJoin(member).catch((error) => {
+        logger.warn(`Autorole: member-join handling failed for ${member.id} in ${member.guild.id}`, error);
+      });
     });
 
     // Handle errors

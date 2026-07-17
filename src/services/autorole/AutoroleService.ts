@@ -114,8 +114,96 @@ export class AutoroleService implements ScheduledTask {
       await this.applySync(serverId, cfg, member, user, link.muNoticeSentAt);
       synced++;
     }
+
+    // One-time sweep to seed the unlinked role onto members who joined before the
+    // feature was enabled. Ongoing assignment is handled on member join / unlink.
+    if (cfg.unlinkedRoleId && !cfg.unlinkedBackfillAt) {
+      await this.backfillUnlinkedRole(serverId, cfg.unlinkedRoleId, guild, links.map(l => l.discordUserId));
+    }
+
     logger.info(`Autorole: synced ${synced}/${links.length} linked member(s) in server ${serverId}`);
     return { synced, skipped };
+  }
+
+  /** Give a newly-joined member the unlinked role (unless linked or a bot). */
+  async handleMemberJoin(member: GuildMember): Promise<void> {
+    if (member.user.bot) {
+      return;
+    }
+    const cfg = ServerConfigManager.getAutoroleConfig(member.guild.id);
+    if (!cfg || cfg.enabled === false || !cfg.unlinkedRoleId) {
+      return;
+    }
+    const link = await this.store.getLink(member.guild.id, member.id);
+    if (link) {
+      return; // already linked (e.g. a rejoin)
+    }
+    await this.addRole(member, cfg.unlinkedRoleId, 'unlinked (join)');
+  }
+
+  /** Re-apply the unlinked role to a member after their link is removed. */
+  async assignUnlinkedRole(serverId: string, discordUserId: string): Promise<void> {
+    const cfg = ServerConfigManager.getAutoroleConfig(serverId);
+    if (!cfg || !cfg.unlinkedRoleId) {
+      return;
+    }
+    const guild = await this.fetchGuild(serverId);
+    const member = guild ? await this.fetchMember(guild, discordUserId) : null;
+    if (!member || member.user.bot) {
+      return;
+    }
+    await this.addRole(member, cfg.unlinkedRoleId, 'unlinked (unlink)');
+  }
+
+  /**
+   * Add the unlinked role to every non-bot member without a link (and strip it
+   * from linked members), then record that the sweep has run so it does not
+   * repeat. Marks completion only if the member list was fetched successfully.
+   */
+  private async backfillUnlinkedRole(
+    serverId: string,
+    unlinkedRoleId: string,
+    guild: Guild,
+    linkedIds: string[]
+  ): Promise<void> {
+    const linked = new Set(linkedIds);
+    try {
+      const members = await guild.members.fetch();
+      let added = 0;
+      for (const member of members.values()) {
+        if (member.user.bot) {
+          continue;
+        }
+        const hasRole = member.roles.cache.has(unlinkedRoleId);
+        if (linked.has(member.id)) {
+          if (hasRole) {
+            await member.roles.remove(unlinkedRoleId).catch(error =>
+              logger.warn(`Autorole: could not remove unlinked role from ${member.id} in ${serverId}`, error)
+            );
+          }
+          continue;
+        }
+        if (!hasRole) {
+          await this.addRole(member, unlinkedRoleId, 'unlinked (backfill)');
+          added++;
+        }
+      }
+      ServerConfigManager.updateAutoroleConfig(serverId, { unlinkedBackfillAt: new Date().toISOString() });
+      logger.info(`Autorole: unlinked-role backfill added the role to ${added} member(s) in server ${serverId}`);
+    } catch (error) {
+      logger.warn(`Autorole: unlinked-role backfill failed for server ${serverId}`, error);
+    }
+  }
+
+  private async addRole(member: GuildMember, roleId: string, why: string): Promise<void> {
+    if (member.roles.cache.has(roleId)) {
+      return;
+    }
+    try {
+      await member.roles.add(roleId);
+    } catch (error) {
+      logger.warn(`Autorole: could not add ${why} role ${roleId} to ${member.id} in ${member.guild.id}`, error);
+    }
   }
 
   /** Sync a single linked member (post-link and `/autorole sync now user:`). */

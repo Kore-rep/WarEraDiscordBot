@@ -3,7 +3,7 @@ This is the roadmap for the bot. Features, integrations and optimizations. No ti
 
 ## Features
  - [ ] Add Military Unit Commander to autorole
- - [ ] Add unverified role to un-linked users
+ - [x] Add unverified role to un-linked users
  - [ ] Add local government roles to autorole
  - [ ] Add foreign government roles to autorole (and auto give permissions to embassy channels)
  - [ ] Add auto channel creation for foreign diplomats (must verify)

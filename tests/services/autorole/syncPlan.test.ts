@@ -105,6 +105,18 @@ describe('computeMemberSyncPlan', () => {
     expect(plan.desiredNickname).toBeUndefined();
   });
 
+  it('strips the unlinked role from a linked member (never targets it)', () => {
+    const plan = computeMemberSyncPlan(
+      baseUser(),
+      ['unlinked', 'lvl10', 'war', 'mu-role-1'],
+      'Player (Assegai)',
+      baseConfig({ unlinkedRoleId: 'unlinked' }),
+      now
+    );
+    expect(plan.rolesToRemove).toContain('unlinked');
+    expect(plan.rolesToAdd).not.toContain('unlinked');
+  });
+
   it('removes a held MU role when the user left that MU', () => {
     const plan = computeMemberSyncPlan(baseUser({ muId: undefined }), ['mu-role-1'], null, baseConfig(), now);
     expect(plan.rolesToRemove).toContain('mu-role-1');

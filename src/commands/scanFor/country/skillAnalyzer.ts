@@ -1,7 +1,7 @@
 import type { ScanUserLite } from '../../../services/scan/ScanService';
+import { analyzeUserBuild, SkillLevels } from '../../../services/build/buildAnalysis';
 
 type UserDTO = ScanUserLite;
-type SkillStatDTO = UserDTO['skills'][keyof UserDTO['skills']];
 
 export interface PlayerAnalysis {
   mode: 'eco' | 'war' | 'hybrid';
@@ -14,78 +14,29 @@ export interface PlayerAnalysis {
   dominantPercentage: number;
 }
 
-/**
- * Skill categorization based on their primary use
- * Note: 'management' skill mentioned in requirements doesn't exist in API
- */
-export const SKILL_CATEGORIES = {
-  eco: ['energy', 'companies', 'entrepreneurship', 'production'] as const,
-  war: ['attack', 'criticalChance', 'criticalDamages', 'armor', 'precision', 'dodge', 'lootChance'] as const,
-  utility: ['health', 'hunger'] as const,
-} as const;
+/** A player counts as pure eco/war only above this share of their eco+war points. */
+const MODE_THRESHOLD = 85;
 
 /**
- * Calculate skill points required for a given skill level
- * Formula: Sum from 1 to level = level * (level + 1) / 2
- * Example: Level 7 = 1+2+3+4+5+6+7 = 28 points
- */
-export function calculateSkillPoints(level: number): number {
-  return level * (level + 1) / 2;
-}
-
-/**
- * Get the skill category for a given skill name
- */
-export function getSkillCategory(skillName: string): 'eco' | 'war' | 'utility' | null {
-  if (SKILL_CATEGORIES.eco.includes(skillName as any)) return 'eco';
-  if (SKILL_CATEGORIES.war.includes(skillName as any)) return 'war';
-  if (SKILL_CATEGORIES.utility.includes(skillName as any)) return 'utility';
-  return null;
-}
-
-/**
- * Analyze a player's skill point distribution and determine their build mode
+ * Analyze a player's skill point distribution and determine their build mode.
+ * The eco/war point split comes from the shared `analyzeUserBuild`; this adds the
+ * `/scanfor`-specific 85% mode classification on top.
  */
 export function analyzePlayerBuild(user: UserDTO): PlayerAnalysis {
-  let ecoSkillPoints = 0;
-  let warSkillPoints = 0;
-  let totalRelevantPoints = 0;
+  const build = analyzeUserBuild((user.skills ?? {}) as SkillLevels);
+  const ecoPercentage = build.ecoPct;
+  const warPercentage = build.warPct;
 
-  // Handle nullable skills object
-  if (user.skills) {
-    // Calculate skill points for each skill category
-    Object.entries(user.skills).forEach(([skillName, skillData]: [string, SkillStatDTO]) => {
-      // Handle nullable skill data and level
-      if (skillData && typeof skillData.level === 'number') {
-        const category = getSkillCategory(skillName);
-        const skillPoints = calculateSkillPoints(skillData.level);
-
-        if (category === 'eco') {
-          ecoSkillPoints += skillPoints;
-          totalRelevantPoints += skillPoints;
-        } else if (category === 'war') {
-          warSkillPoints += skillPoints;
-          totalRelevantPoints += skillPoints;
-        }
-        // Utility skills are excluded from mode calculation
-      }
-    });
-  }
-
-  // Calculate percentages
-  const ecoPercentage = totalRelevantPoints > 0 ? (ecoSkillPoints / totalRelevantPoints) * 100 : 0;
-  const warPercentage = totalRelevantPoints > 0 ? (warSkillPoints / totalRelevantPoints) * 100 : 0;
-
-  // Determine mode based on 85% threshold
+  // Determine mode based on the threshold
   let mode: 'eco' | 'war' | 'hybrid';
   let dominantMode: 'eco' | 'war';
   let dominantPercentage: number;
 
-  if (ecoPercentage >= 85) {
+  if (ecoPercentage >= MODE_THRESHOLD) {
     mode = 'eco';
     dominantMode = 'eco';
     dominantPercentage = ecoPercentage;
-  } else if (warPercentage >= 85) {
+  } else if (warPercentage >= MODE_THRESHOLD) {
     mode = 'war';
     dominantMode = 'war';
     dominantPercentage = warPercentage;
@@ -104,9 +55,9 @@ export function analyzePlayerBuild(user: UserDTO): PlayerAnalysis {
     mode,
     ecoPercentage: Math.round(ecoPercentage),
     warPercentage: Math.round(warPercentage),
-    totalSkillPoints: totalRelevantPoints,
-    ecoSkillPoints,
-    warSkillPoints,
+    totalSkillPoints: build.totalPoints,
+    ecoSkillPoints: build.ecoPoints,
+    warSkillPoints: build.warPoints,
     dominantMode,
     dominantPercentage: Math.round(dominantPercentage),
   };

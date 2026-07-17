@@ -53,6 +53,12 @@ export function computeMemberSyncPlan(
   }
   targets.push(pickBuildRoleId(cfg, analyzeUserBuild(user.skills)));
 
+  // The "unlinked" role is only for members with no link — a member reaching
+  // this plan is linked, so it is managed (removed) but never targeted.
+  if (cfg.unlinkedRoleId) {
+    managed.add(cfg.unlinkedRoleId);
+  }
+
   const muEntry = user.muId ? cfg.muRoles.find(e => e.muId === user.muId) : undefined;
   for (const entry of cfg.muRoles) {
     managed.add(entry.roleId);

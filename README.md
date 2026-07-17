@@ -80,8 +80,8 @@ npm run db:import   # reads config/serverConfig.json and data/weekly-damage/**
    - Click "Reset Token" or "Copy" to get your bot token
    - **Enable the following Privileged Gateway Intents:**
      - ✅ **MESSAGE CONTENT INTENT** (Required - allows bot to read message content)
-     - The bot also uses SERVER MEMBERS INTENT and PRESENCE INTENT if needed
-   - Scroll down to "Privileged Gateway Intents" and enable "Message Content Intent"
+     - ✅ **SERVER MEMBERS INTENT** (Required - powers the autorole "unlinked" role, assigned on member join)
+   - Scroll down to "Privileged Gateway Intents" and enable both intents above
    - Invite the bot to your servers with appropriate permissions:
      - Send Messages
      - View Channels
@@ -618,7 +618,7 @@ The bot includes error handling for:
   - Go to https://discord.com/developers/applications
   - Select your application → "Bot" section
   - Scroll down to "Privileged Gateway Intents"
-  - Enable **"MESSAGE CONTENT INTENT"** toggle
+  - Enable both the **"MESSAGE CONTENT INTENT"** and **"SERVER MEMBERS INTENT"** toggles
   - Click "Save Changes"
   - Restart your bot/container
 - Ensure bot has been invited to your servers with appropriate permissions

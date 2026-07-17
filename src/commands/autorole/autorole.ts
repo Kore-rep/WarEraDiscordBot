@@ -195,6 +195,18 @@ export const autoroleCommand: Command = {
             .addBooleanOption(opt =>
               opt.setName('sync_nicknames').setDescription('Whether sync manages nicknames').setRequired(false)
             )
+            .addRoleOption(opt =>
+              opt
+                .setName('unlinked_role')
+                .setDescription('Role given to members who have not linked a WarEra account')
+                .setRequired(false)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('clear_unlinked_role')
+                .setDescription('Stop assigning an unlinked role (leaves existing holders untouched)')
+                .setRequired(false)
+            )
         );
       for (const [name, description] of [
         ['staffroles', 'Roles allowed to act on review buttons (replaces the list)'],
