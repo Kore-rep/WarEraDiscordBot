@@ -16,7 +16,7 @@
  */
 import * as fs from 'fs';
 import { prisma } from '../persistence/prisma';
-import type { AutoroleConfig } from '../config/config';
+import type { AutoroleConfig, MilitaryUnitEntry } from '../config/config';
 
 // The Python bot hard-coded this role id as never-auto-removed.
 const LEGACY_PROTECTED_ROLE_ID = '1442875774829985895';
@@ -87,14 +87,13 @@ function buildAutoroleConfig(guild: LegacyGuildData): AutoroleConfig {
     timedRoles: (guild.timed_roles ?? [])
       .map(e => ({ roleId: asId(e.role_id) ?? '', timeoutDays: e.timeout_days }))
       .filter(e => e.roleId),
-    muRoles: (guild.mu_roles ?? [])
-      .map(e => ({ muId: e.mu_id, muName: e.mu_name ?? e.mu_id, roleId: asId(e.role_id) ?? '' }))
-      .filter(e => e.roleId && e.muId),
     ecoRoleId: asId(guild.eco_role_id),
     warRoleId: asId(guild.war_role_id),
     hybridRoleId: asId(guild.hybrid_role_id),
     ecoThreshold: guild.eco_threshold ?? 60,
     warThreshold: guild.war_threshold ?? 60,
+    opsecMinLevel: 15,
+    opsecInactivityDays: 2,
     manageRoleIds: asIdList(guild.staff_role_ids),
     manageUserIds: asIdList(guild.staff_user_ids),
     proxyRoleIds: asIdList(guild.proxy_role_ids),
@@ -107,12 +106,21 @@ function buildAutoroleConfig(guild: LegacyGuildData): AutoroleConfig {
   };
 }
 
+/** The Python bot's mu_roles become the shared military-unit list (with role mappings). */
+function buildMilitaryUnits(guild: LegacyGuildData): MilitaryUnitEntry[] {
+  return (guild.mu_roles ?? [])
+    .filter(e => e.mu_id && asId(e.role_id))
+    .map(e => ({ muId: e.mu_id, muName: e.mu_name ?? e.mu_id, roleId: asId(e.role_id) as string }));
+}
+
 async function importGuild(serverId: string, guild: LegacyGuildData): Promise<void> {
   const autorole = JSON.stringify(buildAutoroleConfig(guild));
+  const units = buildMilitaryUnits(guild);
+  const militaryUnits = units.length ? JSON.stringify(units) : null;
   await prisma.server.upsert({
     where: { id: serverId },
-    create: { id: serverId, autorole },
-    update: { autorole },
+    create: { id: serverId, autorole, militaryUnits },
+    update: { autorole, militaryUnits },
   });
 
   let links = 0;

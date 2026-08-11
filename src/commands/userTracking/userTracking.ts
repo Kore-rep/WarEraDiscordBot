@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { ScanService } from '../../services/scan/ScanService';
+import { daysSinceLastConnection, isInactive } from '../../services/userTracking/inactivity';
 import { COMMAND_HELP } from '../help/helpTexts';
 
 /**
@@ -154,9 +155,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
     // Calculate current inactivity
     const now = new Date();
     const lastConnection = new Date(lastConnectionAt);
-    const daysSinceConnection = Math.floor(
-      (now.getTime() - lastConnection.getTime()) / (1000 * 60 * 60 * 24)
-    );
+    const daysSinceConnection = Math.floor(daysSinceLastConnection(lastConnection, now) ?? 0);
 
     // Parse mention IDs from the mentions string - store full mention format
     let mentionIds: string[] | undefined;
@@ -174,7 +173,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
     }
 
     // Determine if user is already inactive
-    const isAlreadyInactive = daysSinceConnection >= inactivityDays;
+    const isAlreadyInactive = isInactive(lastConnection, inactivityDays, now);
 
     // Create tracked user object
     const trackedUser: TrackedUser = {
@@ -320,13 +319,11 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction): Pro
     if (user.lastActive) {
       const lastActiveDate = new Date(user.lastActive);
       const now = new Date();
-      const daysSinceActive = Math.floor(
-        (now.getTime() - lastActiveDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
+      const daysSinceActive = Math.floor(daysSinceLastConnection(lastActiveDate, now) ?? 0);
       message += `- Last active: <t:${Math.floor(lastActiveDate.getTime() / 1000)}:F>`;
       message += ` (${daysSinceActive} day${daysSinceActive !== 1 ? 's' : ''} ago)`;
-      
-      if (daysSinceActive >= user.inactivityDays) {
+
+      if (isInactive(lastActiveDate, user.inactivityDays, now)) {
         message += ` ⚠️ **INACTIVE**`;
       } else {
         message += ` ✅`;

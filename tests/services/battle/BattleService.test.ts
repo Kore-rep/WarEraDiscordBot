@@ -43,7 +43,7 @@ describe('BattleService', () => {
   const regions = new Map([['region-1', { name: 'Texas' }]]);
 
   const configureServers = (
-    servers: Record<string, { enabled?: boolean; channelId?: string; bountyThreshold?: number; minBountyToSend?: number; roleIds?: string[] }>
+    servers: Record<string, { enabled?: boolean; channelId?: string; bountyThreshold?: number; minBountyToSend?: number; minPool?: number; roleIds?: string[] }>
   ) => {
     const map = new Map(
       Object.entries(servers).map(([id, cfg]) => [id, { bountyBattles: { channelId: 'channel-1', roleIds: [], ...cfg } }])
@@ -99,6 +99,22 @@ describe('BattleService', () => {
       await battleService.processBattles();
 
       expect(mockDiscordService.sendBountyAlert).not.toHaveBeenCalled();
+    });
+
+    it('skips bounties whose pool is below minPool', async () => {
+      configureServers({ 'server-1': { enabled: true, minPool: 10000 } });
+
+      await battleService.processBattles();
+
+      expect(mockDiscordService.sendBountyAlert).not.toHaveBeenCalled();
+    });
+
+    it('sends bounties whose pool meets minPool', async () => {
+      configureServers({ 'server-1': { enabled: true, minPool: 5000 } });
+
+      await battleService.processBattles();
+
+      expect(mockDiscordService.sendBountyAlert).toHaveBeenCalledTimes(1);
     });
 
     it('does not alert for the same bounty twice', async () => {

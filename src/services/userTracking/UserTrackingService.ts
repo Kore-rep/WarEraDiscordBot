@@ -4,6 +4,7 @@ import { DiscordService } from '../discord/DiscordService';
 import { logger } from '../../utils/logger';
 import { TrackedUser } from '../../config/config';
 import { ScheduledTask } from '../scheduler/ScheduledTask';
+import { daysSinceLastConnection, isInactive } from './inactivity';
 
 /**
  * Tracks user activity and sends inactivity notifications, once per hour.
@@ -66,11 +67,9 @@ export class UserTrackingService implements ScheduledTask {
       const lastConnectionAt = userData.dates.lastConnectionAt;
       const now = new Date();
       const lastConnection = new Date(lastConnectionAt);
-      
-      // Calculate days since last connection
-      const daysSinceConnection = Math.floor(
-        (now.getTime() - lastConnection.getTime()) / (1000 * 60 * 60 * 24)
-      );
+
+      // Calculate days since last connection (floored for display)
+      const daysSinceConnection = Math.floor(daysSinceLastConnection(lastConnection, now) ?? 0);
 
       // Check if user has come back online (lastActive changed)
       const hasReturnedOnline = trackedUser.lastActive && trackedUser.lastActive !== lastConnectionAt;
@@ -96,7 +95,7 @@ export class UserTrackingService implements ScheduledTask {
       }
 
       // Check if user has been inactive for the threshold period
-      if (daysSinceConnection >= trackedUser.inactivityDays) {
+      if (isInactive(lastConnection, trackedUser.inactivityDays, now)) {
         // Only send notification if we haven't reported this inactivity yet
         if (!trackedUser.reported) {
           await this.sendInactivityNotification(

@@ -5,7 +5,6 @@ import { logger } from '../../utils/logger';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { canManageFeature, hasManageRoles, replyUnauthorized } from '../../utils/commandAuth';
-import { parseMuInput } from '../../services/muDirectory/muLink';
 import { COMMAND_HELP } from '../help/helpTexts';
 
 const MANAGE_ROLE_OPTIONS = ['role1', 'role2', 'role3', 'role4', 'role5'] as const;
@@ -24,12 +23,6 @@ export const muDirectoryCommand: Command = {
           sub
             .setName('set')
             .setDescription('Set MU directory configuration (requires Manage Roles)')
-            .addStringOption(opt =>
-              opt
-                .setName('mus')
-                .setDescription('Comma-separated MU ids or links (required on first setup)')
-                .setRequired(false)
-            )
             .addChannelOption(opt =>
               opt
                 .setName('channel')
@@ -112,23 +105,6 @@ export const muDirectoryCommand: Command = {
   },
 };
 
-/** Parse the `mus` option (comma-separated ids or links) into a deduped id list. */
-function parseMuIds(raw: string): { ids: string[]; invalid: string[] } {
-  const ids: string[] = [];
-  const invalid: string[] = [];
-  for (const token of raw.split(',').map(t => t.trim()).filter(Boolean)) {
-    try {
-      const { id } = parseMuInput(token);
-      if (!ids.includes(id)) {
-        ids.push(id);
-      }
-    } catch {
-      invalid.push(token);
-    }
-  }
-  return { ids, invalid };
-}
-
 /** Read the manage-role options (role1..role5); returns undefined if none were given. */
 function readManageRoles(interaction: ChatInputCommandInteraction): string[] | undefined {
   const roleIds: string[] = [];
@@ -151,21 +127,10 @@ async function handleConfigSet(
   }
 
   const serverId = interaction.guild!.id;
-  const musInput = interaction.options.getString('mus');
   const channel = interaction.options.getChannel('channel');
   const manageRoleIds = readManageRoles(interaction);
 
   const existing = ServerConfigManager.getMuDirectoryConfig(serverId);
-
-  if (!existing && !musInput) {
-    await interaction.reply({
-      content:
-        'No configuration exists yet. Provide **mus** (MU ids or links) on first setup.\n\n' +
-        'Example: `/mudirectory config set mus:abc123,https://app.warera.io/mu/def456`',
-      ephemeral: true,
-    });
-    return;
-  }
 
   const newChannelId =
     channel?.id ??
@@ -182,27 +147,10 @@ async function handleConfigSet(
 
   await interaction.deferReply({ ephemeral: true });
 
-  let militaryUnitIds = existing?.militaryUnitIds ?? [];
-  if (musInput) {
-    const { ids, invalid } = parseMuIds(musInput);
-    if (invalid.length > 0) {
-      await interaction.editReply({
-        content: `These do not look like MU ids or links: ${invalid.join(', ')}`,
-      });
-      return;
-    }
-    if (ids.length === 0) {
-      await interaction.editReply({ content: 'Please provide at least one MU id or link.' });
-      return;
-    }
-    militaryUnitIds = ids;
-  }
-
   const channelChanged = existing?.channelId && existing.channelId !== newChannelId;
 
   ServerConfigManager.updateMuDirectoryConfig(serverId, {
     channelId: newChannelId,
-    militaryUnitIds,
     ...(manageRoleIds !== undefined ? { manageRoleIds } : {}),
     enabled: existing?.enabled ?? true,
     // Moving channels invalidates the old living messages.
@@ -212,9 +160,10 @@ async function handleConfigSet(
   await discordService.initializeServerChannel(serverId, newChannelId);
 
   const config = ServerConfigManager.getMuDirectoryConfig(serverId)!;
+  const militaryUnitCount = ServerConfigManager.getMilitaryUnits(serverId).length;
   let message = '**MU directory configured**\n\n';
   message += `**Channel:** <#${newChannelId}>\n`;
-  message += `**Military units:** ${config.militaryUnitIds.length} configured\n`;
+  message += `**Military units:** ${militaryUnitCount} configured (manage with \`/mu\`)\n`;
   message += `**Manage roles:** ${formatRoles(config.manageRoleIds)}\n`;
   message += `**Status:** ${config.enabled === false ? 'Disabled (use /mudirectory enable)' : 'Enabled'}`;
   if (channelChanged) {
@@ -242,12 +191,14 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
   const lastUpdated = config.lastUpdated
     ? `<t:${Math.floor(new Date(config.lastUpdated).getTime() / 1000)}:R>`
     : 'Never';
+  const units = ServerConfigManager.getMilitaryUnits(serverId);
+  const muList = units.length ? units.map(u => u.muName).join(', ') : 'None (add with /mu add)';
 
   await interaction.reply({
     content:
       '**MU Directory Settings**\n\n' +
       `**Channel:** ${config.channelId ? `<#${config.channelId}>` : 'None'}\n` +
-      `**Military unit IDs:** ${config.militaryUnitIds.join(', ') || 'None'}\n` +
+      `**Military units:** ${muList}\n` +
       `**Manage roles:** ${formatRoles(config.manageRoleIds)}\n` +
       `**Status:** ${status}\n` +
       `**Last updated:** ${lastUpdated}`,

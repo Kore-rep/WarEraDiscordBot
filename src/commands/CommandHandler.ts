@@ -14,6 +14,7 @@ import { scanForCommand } from './scanFor';
 import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 import { spectreCommand } from './spectre/spectre';
 import { muDirectoryCommand } from './muDirectory';
+import { militaryUnitsCommand } from './militaryUnits';
 import { linkCommand } from './link';
 import { autoroleCommand } from './autorole';
 import { helpCommand } from './help';
@@ -50,6 +51,7 @@ export class CommandHandler {
       countryGroupCommand,
       spectreCommand,
       muDirectoryCommand,
+      militaryUnitsCommand,
       linkCommand,
       autoroleCommand,
       helpCommand,

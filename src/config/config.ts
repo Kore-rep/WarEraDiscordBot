@@ -13,6 +13,7 @@ export interface BountyBattlesConfig {
   enabled?: boolean; // Whether bounty battle notifications are enabled (default: true)
   bountyThreshold?: number; // Minimum total bounty (attacker + defender) to trigger role mentions (default: 0)
   minBountyToSend?: number; // Minimum total bounty to send a message at all; below this no message is sent (default: none)
+  minPool?: number; // Minimum total money pool to send a message at all; below this no message is sent (default: none)
 }
 
 /**
@@ -24,6 +25,7 @@ export interface MercenaryContractsConfig {
   enabled?: boolean; // Whether mercenary contract notifications are enabled (default: true)
   contractThreshold?: number; // Minimum gold per 1k damage to trigger role mentions (default: 0)
   minContractToSend?: number; // Minimum gold per 1k damage to send a message at all; below this no message is sent (default: none)
+  minPayout?: number; // Minimum contract payout (total budget) to send a message at all; below this no message is sent (default: none)
 }
 
 /**
@@ -195,7 +197,6 @@ export interface LeaderboardConfig {
   messageId?: string;
   countryIds: string[];
   countryNames: string[];
-  militaryUnitIds: string[];
   topCount: number;
   levelBrackets: LevelBracket[];
   lastSnapshot?: LeaderboardSnapshot;
@@ -216,7 +217,6 @@ export interface MuDirectoryConfig {
   enabled?: boolean;
   channelId: string;
   messageIds: string[];
-  militaryUnitIds: string[];
   manageRoleIds: string[];
   lastUpdated?: string;
 }
@@ -238,12 +238,14 @@ export interface TimedRoleEntry {
 }
 
 /**
- * Maps a WarEra military unit to a Discord role
+ * A WarEra military unit in the shared per-server directory. Consumed by the
+ * leaderboard, the MU directory, and autorole. `roleId` is the autorole
+ * mapping — when unset, autorole displays the MU as "TBD".
  */
-export interface MuRoleEntry {
+export interface MilitaryUnitEntry {
   muId: string;
   muName: string;
-  roleId: string;
+  roleId?: string;
 }
 
 /**
@@ -264,7 +266,6 @@ export interface AutoroleConfig {
   lastSyncAt?: string; // ISO timestamp of the last completed sync
   levelRoles: LevelRoleEntry[];
   timedRoles: TimedRoleEntry[];
-  muRoles: MuRoleEntry[];
   ecoRoleId?: string;
   warRoleId?: string;
   hybridRoleId?: string;
@@ -273,6 +274,12 @@ export interface AutoroleConfig {
   linkedRoleId?: string; // role given to every member who has linked a WarEra account
   unlinkedRoleId?: string; // role given to members who have not linked a WarEra account
   unlinkedBackfillAt?: string; // ISO timestamp of the one-time backfill sweep (unset = not run yet)
+  // OPSEC role: granted once at opsecMinLevel, removed on inactivity during sync,
+  // and never auto re-added (see LinkedUser.opsecRevoked). Re-granting is manual.
+  opsecRoleId?: string;
+  opsecMinLevel: number; // WarEra level at which OPSEC is first granted (default 15)
+  opsecInactivityDays: number; // days of inactivity before OPSEC is revoked (default 2)
+  opsecAutoApply?: boolean; // whether sync auto-grants OPSEC at opsecMinLevel (default true); revocation on inactivity is unaffected
   manageRoleIds: string[]; // roles allowed to act on review approve/deny buttons
   manageUserIds: string[]; // individual users with the same allowance
   proxyRoleIds: string[]; // roles that bypass the country allowlist when linking
@@ -300,6 +307,7 @@ export interface ServerConfig {
   leaderboard?: LeaderboardConfig;
   muDirectory?: MuDirectoryConfig;
   autorole?: AutoroleConfig;
+  militaryUnits?: MilitaryUnitEntry[]; // shared MU directory used by leaderboard, MU directory, and autorole
 }
 
 /**

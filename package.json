@@ -15,7 +15,8 @@
     "prisma:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
     "db:import": "ts-node src/scripts/importJsonToSqlite.ts",
-    "db:import-autorole": "ts-node src/scripts/importAutoroleJson.ts"
+    "db:import-autorole": "ts-node src/scripts/importAutoroleJson.ts",
+    "db:merge-mu": "ts-node src/scripts/mergeMilitaryUnits.ts"
   },
   "keywords": [
     "discord",

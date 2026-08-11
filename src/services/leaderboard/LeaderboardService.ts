@@ -124,7 +124,8 @@ export class LeaderboardService implements ScheduledTask {
     try {
       logger.info(`Refreshing leaderboard for server ${serverId}`);
 
-      const muEntries = await this.fetchMilitaryUnits(config.militaryUnitIds);
+      const militaryUnitIds = ServerConfigManager.getMilitaryUnits(serverId).map(u => u.muId);
+      const muEntries = await this.fetchMilitaryUnits(militaryUnitIds);
       const users = await this.fetchUsersForMembers(muEntries);
       const countryCodes = await this.fetchCountryCodes(users.map(user => user.country));
 

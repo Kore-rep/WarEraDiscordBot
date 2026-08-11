@@ -48,6 +48,13 @@ export const bountyBattlesCommand: Command = {
                 .setRequired(false)
                 .setMinValue(0)
             )
+            .addNumberOption(option =>
+              option
+                .setName('minpool')
+                .setDescription('Min total pool to send any message; below this no message sent (empty=keep, 0=all)')
+                .setRequired(false)
+                .setMinValue(0)
+            )
         )
         .addSubcommand(subcommand =>
           subcommand
@@ -108,6 +115,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
     const role = interaction.options.getRole('role', false);
     const threshold = interaction.options.getNumber('threshold', false);
     const minBountyToSend = interaction.options.getNumber('min', false);
+    const minPool = interaction.options.getNumber('minpool', false);
 
     // Get current server config
     const currentConfig = ServerConfigManager.getServerConfig(interaction.guildId);
@@ -153,6 +161,8 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
     const bountyThreshold = threshold !== null ? threshold : (currentBountyConfig?.bountyThreshold ?? 0);
     // minBountyToSend: undefined = not set (send all), 0 = send all, >0 = only send if totalBounty >= value
     const resolvedMinBountyToSend = minBountyToSend !== null ? minBountyToSend : currentBountyConfig?.minBountyToSend;
+    // minPool: undefined = not set (send all), 0 = send all, >0 = only send if moneyPool >= value
+    const resolvedMinPool = minPool !== null ? minPool : currentBountyConfig?.minPool;
 
     // Update bounty battles configuration (enable by default if new)
     // This updates both in-memory cache and disk
@@ -162,6 +172,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
       enabled: currentBountyConfig?.enabled !== undefined ? currentBountyConfig.enabled : true,
       bountyThreshold: bountyThreshold,
       minBountyToSend: resolvedMinBountyToSend,
+      minPool: resolvedMinPool,
     });
 
     // Build confirmation message
@@ -172,6 +183,10 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
       ? (resolvedMinBountyToSend === 0 ? '0 (send all)' : resolvedMinBountyToSend)
       : 'None (send all)';
     confirmationMessage += `**Min bounty to send:** ${minDisplay}\n`;
+    const minPoolDisplay = resolvedMinPool !== undefined && resolvedMinPool !== null
+      ? (resolvedMinPool === 0 ? '0 (send all)' : resolvedMinPool)
+      : 'None (send all)';
+    confirmationMessage += `**Min pool to send:** ${minPoolDisplay}\n`;
 
     if (roleIds.length > 0) {
       confirmationMessage += `**Roles:** ${roleIds.map(id => `<@&${id}>`).join(', ')}`;
@@ -185,7 +200,8 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
     if (role) updates.push(role.name.toLowerCase() === 'null' ? 'role (removed)' : 'role');
     if (threshold !== null) updates.push('threshold');
     if (minBountyToSend !== null) updates.push('min');
-    
+    if (minPool !== null) updates.push('minpool');
+
     if (updates.length > 0) {
       confirmationMessage += `\n\n*Updated: ${updates.join(', ')}*`;
     }
@@ -197,7 +213,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction): Promis
     });
 
     logger.info(
-      `Server ${interaction.guildId} configured: channel=${newChannelId}, roles=[${roleIds.join(', ')}], threshold=${bountyThreshold}, minBountyToSend=${resolvedMinBountyToSend ?? 'none'}`
+      `Server ${interaction.guildId} configured: channel=${newChannelId}, roles=[${roleIds.join(', ')}], threshold=${bountyThreshold}, minBountyToSend=${resolvedMinBountyToSend ?? 'none'}, minPool=${resolvedMinPool ?? 'none'}`
     );
   } catch (error) {
     logger.error('Error executing bountybattles config set command', error);
@@ -242,12 +258,16 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
       const minBountyToSendDisplay = bountyBattlesConfig.minBountyToSend !== undefined && bountyBattlesConfig.minBountyToSend !== null
         ? bountyBattlesConfig.minBountyToSend
         : 'None (send all)';
+      const minPoolDisplay = bountyBattlesConfig.minPool !== undefined && bountyBattlesConfig.minPool !== null
+        ? bountyBattlesConfig.minPool
+        : 'None (send all)';
 
       let message = `**Bounty Battles Configuration**\n\n`;
       message += `**Status:** ${statusText}\n`;
       message += `**Channel:** <#${bountyBattlesConfig.channelId}>\n`;
       message += `**Bounty Threshold:** ${bountyThreshold}\n`;
       message += `**Min bounty to send:** ${minBountyToSendDisplay}\n`;
+      message += `**Min pool to send:** ${minPoolDisplay}\n`;
 
       if (bountyBattlesConfig.roleIds && bountyBattlesConfig.roleIds.length > 0) {
         message += `**Roles:** ${bountyBattlesConfig.roleIds.map(id => `<@&${id}>`).join(', ')}`;

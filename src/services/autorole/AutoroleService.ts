@@ -6,7 +6,7 @@ import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ScheduledTask } from '../scheduler/ScheduledTask';
 import { AutoroleApi, AutoroleUser } from './autoroleApi';
-import { LinkStore } from './linkStore';
+import { LinkStore, LinkedUser } from './linkStore';
 import { LinkFlow } from './linkFlow';
 import { computeMemberSyncPlan, SyncUserView } from './syncPlan';
 import { SkillLevels } from './build';
@@ -111,7 +111,7 @@ export class AutoroleService implements ScheduledTask {
         skipped++;
         continue;
       }
-      await this.applySync(serverId, cfg, member, user, link.muNoticeSentAt);
+      await this.applySync(serverId, cfg, member, user, link);
       synced++;
     }
 
@@ -148,7 +148,7 @@ export class AutoroleService implements ScheduledTask {
    */
   async onUnlinked(serverId: string, discordUserId: string): Promise<void> {
     const cfg = ServerConfigManager.getAutoroleConfig(serverId);
-    if (!cfg || (!cfg.unlinkedRoleId && !cfg.linkedRoleId)) {
+    if (!cfg || (!cfg.unlinkedRoleId && !cfg.linkedRoleId && !cfg.opsecRoleId)) {
       return;
     }
     const guild = await this.fetchGuild(serverId);
@@ -161,6 +161,10 @@ export class AutoroleService implements ScheduledTask {
     }
     if (cfg.linkedRoleId && !cfg.protectedRoleIds.includes(cfg.linkedRoleId)) {
       await this.removeRole(member, cfg.linkedRoleId, 'linked (unlink)');
+    }
+    // An unlinked member has lost linked status, so OPSEC (restricted access) goes too.
+    if (cfg.opsecRoleId) {
+      await this.removeRole(member, cfg.opsecRoleId, 'opsec (unlink)');
     }
   }
 
@@ -204,6 +208,37 @@ export class AutoroleService implements ScheduledTask {
     }
   }
 
+  /**
+   * Remove the OPSEC role from every member who currently holds the unlinked
+   * role. One-shot cleanup for members who lost linked status while keeping
+   * OPSEC. Returns how many had it removed and how many were scanned.
+   */
+  async purgeOpsecFromUnlinked(serverId: string): Promise<{ removed: number; scanned: number }> {
+    const cfg = ServerConfigManager.getAutoroleConfig(serverId);
+    if (!cfg?.opsecRoleId || !cfg.unlinkedRoleId) {
+      return { removed: 0, scanned: 0 };
+    }
+    const guild = await this.fetchGuild(serverId);
+    if (!guild) {
+      return { removed: 0, scanned: 0 };
+    }
+    const members = await guild.members.fetch();
+    let removed = 0;
+    let scanned = 0;
+    for (const member of members.values()) {
+      if (member.user.bot || !member.roles.cache.has(cfg.unlinkedRoleId)) {
+        continue;
+      }
+      scanned++;
+      if (member.roles.cache.has(cfg.opsecRoleId)) {
+        await this.removeRole(member, cfg.opsecRoleId, 'opsec (purge-unlinked)');
+        removed++;
+      }
+    }
+    logger.info(`Autorole: OPSEC purge removed the role from ${removed}/${scanned} unlinked member(s) in server ${serverId}`);
+    return { removed, scanned };
+  }
+
   private async addRole(member: GuildMember, roleId: string, why: string): Promise<void> {
     if (member.roles.cache.has(roleId)) {
       return;
@@ -242,7 +277,7 @@ export class AutoroleService implements ScheduledTask {
     if (!user) {
       return { synced: false, reason: 'user-not-found' };
     }
-    await this.applySync(serverId, cfg, member, user, link.muNoticeSentAt);
+    await this.applySync(serverId, cfg, member, user, link);
     return { synced: true };
   }
 
@@ -251,10 +286,15 @@ export class AutoroleService implements ScheduledTask {
     cfg: AutoroleConfig,
     member: GuildMember,
     user: AutoroleUser,
-    muNoticeSentAt: Date | null
+    link: LinkedUser
   ): Promise<void> {
     const view = toSyncUserView(user);
-    const plan = computeMemberSyncPlan(view, [...member.roles.cache.keys()], member.nickname, cfg, new Date());
+    const plan = computeMemberSyncPlan(view, [...member.roles.cache.keys()], member.nickname, {
+      cfg,
+      militaryUnits: ServerConfigManager.getMilitaryUnits(serverId),
+      opsecRevoked: link.opsecRevoked,
+      now: new Date(),
+    });
 
     for (const roleId of plan.rolesToAdd) {
       try {
@@ -271,6 +311,12 @@ export class AutoroleService implements ScheduledTask {
       }
     }
 
+    // Persist the one-way OPSEC revocation so sync never re-grants it automatically.
+    if (plan.revokeOpsec) {
+      await this.store.setOpsecRevoked(serverId, member.id, true);
+      logger.info(`Autorole: revoked OPSEC from ${member.id} in ${serverId} (inactive)`);
+    }
+
     if (plan.desiredNickname !== undefined) {
       try {
         await member.setNickname(plan.desiredNickname);
@@ -280,6 +326,7 @@ export class AutoroleService implements ScheduledTask {
     }
 
     if (plan.needsMuNotice) {
+      const muNoticeSentAt = link.muNoticeSentAt;
       const throttled = muNoticeSentAt && Date.now() - muNoticeSentAt.getTime() < MU_NOTICE_THROTTLE_MS;
       if (!throttled) {
         const delivered = await this.discordService.sendDirectMessage(member.id, NO_MU_DM_MESSAGE);

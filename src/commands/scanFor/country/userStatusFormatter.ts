@@ -1,7 +1,13 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { ScanUserLite } from '../../../services/scan/ScanService';
-import { analyzePlayerBuild } from './skillAnalyzer';
+import { analyzePlayerBuild, type BuildMode, type GroupedUsers } from './skillAnalyzer';
 
 type UserDTO = ScanUserLite;
+
+/** Human-readable label for a build mode (customId keys are lowercase/no-space). */
+export function modeLabel(mode: BuildMode): string {
+  return { war: 'War', softwar: 'Soft War', hybrid: 'Hybrid', eco: 'Eco' }[mode];
+}
 
 export interface UserStatus {
   emoji: string;
@@ -129,9 +135,12 @@ export function formatUserEntry(user: UserDTO, resetCooldownDays?: number): stri
 
   let entry = `\`Level ${level}\` ${username}`;
   
-  // Add build percentage for eco and hybrid players
+  // Add build percentage for eco, hybrid, and soft war players
   if (buildAnalysis.mode === 'eco') {
     entry += ` (${buildAnalysis.ecoPercentage}% Eco)`;
+  } else if (buildAnalysis.mode === 'softwar') {
+    // War-dominant with companies on the side — show the companies split too.
+    entry += ` (${buildAnalysis.dominantPercentage}% War, ${buildAnalysis.companiesPercentage}% Companies)`;
   } else if (buildAnalysis.mode === 'hybrid') {
     const dominantModeText = buildAnalysis.dominantMode === 'eco' ? 'Eco' : 'War';
     entry += ` (${buildAnalysis.dominantPercentage}% ${dominantModeText})`;
@@ -191,16 +200,47 @@ export function createBuildSummary(
   minLevel: number,
   ecoCount: number,
   warCount: number,
-  hybridCount: number
+  hybridCount: number,
+  softWarCount: number
 ): string {
   return [
     `**Country:** ${countryName}`,
     `**Total Citizens:** ${totalCitizens.toLocaleString()}`,
     `**Included (Lvl >= ${minLevel}):** ${includedCount.toLocaleString()}`,
     `**War Mode:** ${warCount.toLocaleString()}`,
+    `**Soft War:** ${softWarCount.toLocaleString()}`,
     `**Hybrid:** ${hybridCount.toLocaleString()}`,
     `**Eco Mode:** ${ecoCount.toLocaleString()}`,
     '',
     'Click buttons below for detailed player lists:'
   ].join('\n');
+}
+
+/**
+ * Build the row of per-mode "details" buttons shown under a build summary.
+ * customId format: builds:{countryId}:{mode}:{page}:{minLevel} (see buildsButtonHandler).
+ */
+export function buildDetailButtonRow(
+  countryId: string,
+  minLevel: number,
+  groupedUsers: GroupedUsers
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`builds:${countryId}:war:0:${minLevel}`)
+      .setLabel(`War Details (${groupedUsers.war.length})`)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`builds:${countryId}:softwar:0:${minLevel}`)
+      .setLabel(`Soft War Details (${groupedUsers.softwar.length})`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`builds:${countryId}:hybrid:0:${minLevel}`)
+      .setLabel(`Hybrid Details (${groupedUsers.hybrid.length})`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`builds:${countryId}:eco:0:${minLevel}`)
+      .setLabel(`Eco Details (${groupedUsers.eco.length})`)
+      .setStyle(ButtonStyle.Success)
+  );
 }

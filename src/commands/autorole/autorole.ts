@@ -11,7 +11,7 @@ import {
   handleLevelRole,
   handleLinkMessage,
   handleLinks,
-  handleMuRole,
+  handleOpsec,
   handleSync,
   handleTimedRole,
 } from './autoroleHandlers';
@@ -103,22 +103,13 @@ export const autoroleCommand: Command = {
     )
     .addSubcommandGroup(group =>
       group
-        .setName('murole')
-        .setDescription('Roles mapped to WarEra military units')
+        .setName('opsec')
+        .setDescription('Manage the OPSEC (restricted-access) role')
         .addSubcommand(sub =>
           sub
-            .setName('set')
-            .setDescription('Map a military unit to a role')
-            .addRoleOption(opt => opt.setName('role').setDescription('Role for members of this MU').setRequired(true))
-            .addStringOption(opt => opt.setName('mu').setDescription('MU id or app.warera.io/mu/... link').setRequired(true))
+            .setName('purge-unlinked')
+            .setDescription('Remove the OPSEC role from every member holding the unlinked role')
         )
-        .addSubcommand(sub =>
-          sub
-            .setName('remove')
-            .setDescription('Remove an MU mapping')
-            .addStringOption(opt => opt.setName('mu').setDescription('MU id or link').setRequired(true))
-        )
-        .addSubcommand(sub => sub.setName('list').setDescription('List MU role mappings'))
     )
     .addSubcommandGroup(group =>
       group
@@ -219,6 +210,38 @@ export const autoroleCommand: Command = {
                 .setDescription('Stop assigning a linked role (leaves existing holders untouched)')
                 .setRequired(false)
             )
+            .addRoleOption(opt =>
+              opt
+                .setName('opsec_role')
+                .setDescription('OPSEC role: granted at a level, removed on inactivity, never auto re-added')
+                .setRequired(false)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('clear_opsec_role')
+                .setDescription('Stop managing an OPSEC role (leaves existing holders untouched)')
+                .setRequired(false)
+            )
+            .addIntegerOption(opt =>
+              opt
+                .setName('opsec_min_level')
+                .setDescription('WarEra level at which OPSEC is first granted (default 15)')
+                .setRequired(false)
+                .setMinValue(0)
+            )
+            .addNumberOption(opt =>
+              opt
+                .setName('opsec_inactivity_days')
+                .setDescription('Days of inactivity before OPSEC is revoked (default 2)')
+                .setRequired(false)
+                .setMinValue(0.1)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('opsec_auto_apply')
+                .setDescription('Auto-grant OPSEC at the min level during sync (default true; revocation still applies)')
+                .setRequired(false)
+            )
         );
       for (const [name, description] of [
         ['staffroles', 'Roles allowed to act on review buttons (replaces the list)'],
@@ -272,7 +295,7 @@ export const autoroleCommand: Command = {
               { name: 'levelrole', value: 'levelrole' },
               { name: 'timedrole', value: 'timedrole' },
               { name: 'buildrole', value: 'buildrole' },
-              { name: 'murole', value: 'murole' },
+              { name: 'opsec', value: 'opsec' },
               { name: 'country', value: 'country' },
               { name: 'links', value: 'links' },
               { name: 'config', value: 'config' },
@@ -342,8 +365,8 @@ export const autoroleCommand: Command = {
         case 'buildrole':
           await handleBuildRole(interaction);
           return;
-        case 'murole':
-          await handleMuRole(interaction, service);
+        case 'opsec':
+          await handleOpsec(interaction, service);
           return;
         case 'country':
           await handleCountry(interaction);

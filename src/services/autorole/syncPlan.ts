@@ -1,8 +1,9 @@
-import { AutoroleConfig, MuRoleEntry } from '../../config/config';
+import { AutoroleConfig, MilitaryUnitEntry } from '../../config/config';
 import { analyzeUserBuild, pickBuildRoleId, SkillLevels } from './build';
 import { getBestRoleForLevel } from './levelRoles';
 import { timedRolesToRemove } from './timedRoles';
 import { computeNickname } from './nickname';
+import { isInactive } from '../userTracking/inactivity';
 
 /** The slice of a WarEra user profile the sync needs. */
 export interface SyncUserView {
@@ -13,31 +14,49 @@ export interface SyncUserView {
   lastConnectionAt?: Date;
 }
 
+/** Everything the plan needs beyond the member's own state. */
+export interface MemberSyncContext {
+  cfg: AutoroleConfig;
+  /** The shared MU list; entries with a roleId are the autorole mappings. */
+  militaryUnits: MilitaryUnitEntry[];
+  /** Whether OPSEC has already been revoked for this member (sync then leaves it alone). */
+  opsecRevoked: boolean;
+  now: Date;
+}
+
 export interface MemberSyncPlan {
   rolesToAdd: string[];
   rolesToRemove: string[];
   /** Set only when the nickname should change. */
   desiredNickname?: string;
-  /** Member is not in any MU mapped in config (candidate for the no-MU DM). */
+  /** Member is not in any MU mapped to a role in config (candidate for the no-MU DM). */
   needsMuNotice: boolean;
   /** The mapped MU entry, if any (for status output). */
-  muEntry?: MuRoleEntry;
+  muEntry?: MilitaryUnitEntry;
+  /** OPSEC was just revoked for inactivity — persist LinkedUser.opsecRevoked = true. */
+  revokeOpsec: boolean;
 }
 
 /**
  * Compute the full role/nickname diff for one linked member: level role
  * (highest qualifying minLevel wins), build role (eco/war/hybrid by skill
- * percentages), MU role (config mapping by the user's MU id), and timed
- * inactivity removals. Roles in `protectedRoleIds` are never removed, and a
- * role that one facet wants to add is never simultaneously removed by another.
+ * percentages), MU role (shared-list mapping by the user's MU id), timed
+ * inactivity removals, and the OPSEC role. Roles in `protectedRoleIds` are
+ * never removed, and a role that one facet wants to add is never simultaneously
+ * removed by another.
+ *
+ * OPSEC is handled outside the generic managed/target sets: it is granted once
+ * at `opsecMinLevel`, removed on inactivity, and — once revoked — left entirely
+ * to manual control (`opsecRevoked`), so it is neither auto re-added nor
+ * auto-stripped again.
  */
 export function computeMemberSyncPlan(
   user: SyncUserView,
   memberRoleIds: string[],
   currentNickname: string | null,
-  cfg: AutoroleConfig,
-  now: Date
+  ctx: MemberSyncContext
 ): MemberSyncPlan {
+  const { cfg, militaryUnits, opsecRevoked, now } = ctx;
   const targets: (string | undefined)[] = [];
   const managed = new Set<string>();
 
@@ -64,9 +83,11 @@ export function computeMemberSyncPlan(
     targets.push(cfg.linkedRoleId);
   }
 
-  const muEntry = user.muId ? cfg.muRoles.find(e => e.muId === user.muId) : undefined;
-  for (const entry of cfg.muRoles) {
-    managed.add(entry.roleId);
+  const muEntry = user.muId ? militaryUnits.find(e => e.muId === user.muId && e.roleId) : undefined;
+  for (const entry of militaryUnits) {
+    if (entry.roleId) {
+      managed.add(entry.roleId);
+    }
   }
   targets.push(muEntry?.roleId);
 
@@ -81,11 +102,38 @@ export function computeMemberSyncPlan(
     id => memberSet.has(id) && !targetSet.has(id) && !protectedSet.has(id)
   );
 
+  // OPSEC is deliberately excluded from the generic sets above. It is granted
+  // once at level, revoked on inactivity, and hands-off once revoked.
+  let revokeOpsec = false;
+  const opsecRoleId = cfg.opsecRoleId;
+  if (opsecRoleId && !opsecRevoked) {
+    const hasOpsec = memberSet.has(opsecRoleId);
+    const inactive = isInactive(user.lastConnectionAt, cfg.opsecInactivityDays, now);
+    if (hasOpsec && inactive) {
+      if (!rolesToRemove.includes(opsecRoleId)) {
+        rolesToRemove.push(opsecRoleId);
+      }
+      revokeOpsec = true;
+    } else if (
+      cfg.opsecAutoApply !== false &&
+      !hasOpsec &&
+      !inactive &&
+      user.level >= cfg.opsecMinLevel
+    ) {
+      // Auto-application can be turned off to grant OPSEC manually; inactivity
+      // revocation above still runs regardless of this toggle.
+      if (!rolesToAdd.includes(opsecRoleId)) {
+        rolesToAdd.push(opsecRoleId);
+      }
+    }
+  }
+
   const plan: MemberSyncPlan = {
     rolesToAdd,
     rolesToRemove,
     needsMuNotice: !muEntry,
     muEntry,
+    revokeOpsec,
   };
 
   if (cfg.syncNicknames !== false) {

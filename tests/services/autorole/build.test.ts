@@ -45,6 +45,16 @@ describe('analyzeUserBuild', () => {
     expect(build.totalPoints).toBe(0);
     expect(build.ecoPct).toBe(0);
     expect(build.warPct).toBe(0);
+    expect(build.companiesPoints).toBe(0);
+    expect(build.companiesPct).toBe(0);
+  });
+
+  it('isolates companies spend as a subset of eco', () => {
+    // companies 3 -> 6 pts, production 3 -> 6 pts (eco 12); attack 2 -> 3 war.
+    const build = analyzeUserBuild(skillLevels({ companies: 3, production: 3, attack: 2 }));
+    expect(build.companiesPoints).toBe(6);
+    expect(build.ecoPoints).toBe(12);
+    expect(build.companiesPct).toBeCloseTo((6 / 15) * 100);
   });
 });
 

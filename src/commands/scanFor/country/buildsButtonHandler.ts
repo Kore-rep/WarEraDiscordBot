@@ -4,8 +4,8 @@ import { ApiService } from '../../../services/api/ApiService';
 import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 
 type UserDTO = ScanUserLite;
-import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
-import { formatUserList, createBuildSummary } from './userStatusFormatter';
+import { groupPlayersByMode, sortUsersByLevel, type BuildMode } from './skillAnalyzer';
+import { formatUserList, createBuildSummary, buildDetailButtonRow, modeLabel } from './userStatusFormatter';
 import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
 
 /**
@@ -35,7 +35,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
     }
 
     // Validate mode
-    if (!['war', 'eco', 'hybrid'].includes(mode)) {
+    if (!['war', 'eco', 'softwar', 'hybrid'].includes(mode)) {
       await interaction.editReply({
         content: '❌ Invalid mode specified. Please run the command again.',
       });
@@ -110,9 +110,10 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
 
     // Format user list with pagination support
     const resetCooldownDays = await scan.getSkillResetCooldownDays();
+    const label = modeLabel(mode as BuildMode);
     const userListMessages = formatUserList(
       sortedUsers,
-      mode.charAt(0).toUpperCase() + mode.slice(1),
+      label,
       1800,
       resetCooldownDays
     );
@@ -179,7 +180,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
     // Add header with total count and page info
     let responseContent = currentMessage;
     if (userListMessages.length > 1) {
-      responseContent = `**${countryName} - ${mode.charAt(0).toUpperCase() + mode.slice(1)} Mode Players**\n` +
+      responseContent = `**${countryName} - ${label} Mode Players**\n` +
         `Showing ${currentPage + 1} of ${userListMessages.length} pages\n\n` +
         currentMessage;
     }
@@ -256,25 +257,12 @@ async function handleSummaryRequest(interaction: ButtonInteraction, apiService: 
       minLevel,
       groupedUsers.eco.length,
       groupedUsers.war.length,
-      groupedUsers.hybrid.length
+      groupedUsers.hybrid.length,
+      groupedUsers.softwar.length
     );
 
     // Create buttons for detailed views
-    const actionRow = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:war:0:${minLevel}`)
-          .setLabel(`War Details (${groupedUsers.war.length})`)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:hybrid:0:${minLevel}`)
-          .setLabel(`Hybrid Details (${groupedUsers.hybrid.length})`)
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:eco:0:${minLevel}`)
-          .setLabel(`Eco Details (${groupedUsers.eco.length})`)
-          .setStyle(ButtonStyle.Success)
-      );
+    const actionRow = buildDetailButtonRow(countryId, minLevel, groupedUsers);
 
     await interaction.editReply({
       content: summary,

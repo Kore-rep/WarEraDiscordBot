@@ -31,6 +31,7 @@ model Server {
   leaderboard        String?
   muDirectory        String?
   autorole           String?
+  militaryUnits      String?
   updatedAt          DateTime @updatedAt
 }
 
@@ -42,6 +43,7 @@ model LinkedUser {
   wareraUserId   String
   linkedAt       DateTime  @default(now())
   muNoticeSentAt DateTime?
+  opsecRevoked   Boolean   @default(false)
 
   @@id([serverId, discordUserId])
   @@unique([serverId, wareraUserId])

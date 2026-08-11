@@ -33,7 +33,7 @@ export const COMMAND_HELP: Record<string, string> = {
     '',
     'Watches active WarEra battles and posts an alert in a configured channel when a battle carries bounty rewards (money pools paying per 1k damage). Battles are polled on the bot-wide interval; each battle is announced once.',
     '',
-    '- `config set channel:<#channel> [role] [threshold] [min]` — where to post; `role` is mentioned when the total bounty reaches `threshold`; below `min` nothing is sent at all',
+    '- `config set channel:<#channel> [role] [threshold] [min] [minpool]` — where to post; `role` is mentioned when the total bounty reaches `threshold`; below `min` (gold per 1k) or `minpool` (total pool) nothing is sent at all',
     '- `config view` — current settings',
     '- `enable` / `disable` — turn notifications on or off',
   ].join('\n'),
@@ -43,7 +43,7 @@ export const COMMAND_HELP: Record<string, string> = {
     '',
     'Watches open mercenary contract auctions and posts alerts in a configured channel. Contracts are rated by gold per 1k damage; each auction is announced once.',
     '',
-    '- `config set channel:<#channel> [role] [threshold] [min]` — where to post; `role` is mentioned at or above `threshold` gold/1k; below `min` nothing is sent',
+    '- `config set channel:<#channel> [role] [threshold] [min] [minpayout]` — where to post; `role` is mentioned at or above `threshold` gold/1k; below `min` (gold per 1k) or `minpayout` (total payout) nothing is sent',
     '- `config view` — current settings',
     '- `enable` / `disable` — turn notifications on or off',
   ].join('\n'),
@@ -91,7 +91,7 @@ export const COMMAND_HELP: Record<string, string> = {
     '- `country nogovernment [group]` — countries with missing/partial governments approaching inactivity',
     '- `country lowpop [max_citizens] [group]` — countries with active population below a threshold',
     '- `country ethics ethic:<label>` — countries whose ruling party matches an ethic',
-    '- `country builds country:<name> [min_level]` — player build breakdown (war/eco/hybrid) with per-player detail buttons, pill/buff status, and skill-reset availability',
+    '- `country builds country:<name> [min_level]` — player build breakdown (war/soft war/hybrid/eco, where soft war is war + companies for income) with per-player detail buttons, pill/buff status, and skill-reset availability',
   ].join('\n'),
 
   countrygroup: [

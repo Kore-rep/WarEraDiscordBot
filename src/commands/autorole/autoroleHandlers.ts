@@ -7,7 +7,6 @@ import { AutoroleService } from '../../services/autorole';
 import { analyzeUserBuild, SkillLevels, ECO_SKILLS, WAR_SKILLS } from '../../services/autorole/build';
 import { buildLinkBlockComponents, LINK_BLOCK_CONTENT } from '../../services/autorole/reviewMessages';
 import { AUTOROLE_GUIDE, AUTOROLE_TOPIC_HELP } from './autoroleHelp';
-import { parseMuInput } from '../../services/muDirectory/muLink';
 import { splitMessage } from '../../services/discord/messageChunker';
 
 const ROLE_LIST_OPTIONS = ['role1', 'role2', 'role3', 'role4', 'role5'] as const;
@@ -184,63 +183,38 @@ async function replyBuildRoleView(interaction: ChatInputCommandInteraction, pref
   });
 }
 
-// --- murole ---
+// --- opsec ---
 
-export async function handleMuRole(
+export async function handleOpsec(
   interaction: ChatInputCommandInteraction,
   service: AutoroleService
 ): Promise<void> {
+  if (!hasManageRoles(interaction)) {
+    await replyUnauthorized(interaction, 'You need the Manage Roles permission to manage the OPSEC role.');
+    return;
+  }
   const serverId = interaction.guild!.id;
   const sub = interaction.options.getSubcommand();
   const cfg = getConfig(interaction);
 
-  if (sub === 'set') {
-    const role = interaction.options.getRole('role', true);
-    let muId: string;
-    try {
-      muId = parseMuInput(interaction.options.getString('mu', true)).id;
-    } catch (error) {
-      await interaction.reply({ content: (error as Error).message, ephemeral: true });
+  if (sub === 'purge-unlinked') {
+    if (!cfg?.opsecRoleId) {
+      await interaction.reply({ content: 'No OPSEC role is configured. Set one with `/autorole config set opsec_role:`.', ephemeral: true });
+      return;
+    }
+    if (!cfg.unlinkedRoleId) {
+      await interaction.reply({ content: 'No unlinked role is configured, so there is nothing to purge.', ephemeral: true });
       return;
     }
     await interaction.deferReply({ ephemeral: true });
-    const mu = await service.getApi().getMuById(muId);
-    if (!mu) {
-      await interaction.editReply({ content: `No military unit found for id \`${muId}\`.` });
-      return;
-    }
-    const muRoles = (cfg?.muRoles ?? []).filter(e => e.muId !== muId);
-    muRoles.push({ muId, muName: mu.name, roleId: role.id });
-    ServerConfigManager.updateAutoroleConfig(serverId, { muRoles });
-    await interaction.editReply({ content: `Members of **${mu.name}** (\`${muId}\`) now get <@&${role.id}>.` });
+    const { removed, scanned } = await service.purgeOpsecFromUnlinked(serverId);
+    await interaction.editReply({
+      content: `Removed the OPSEC role from ${removed} member(s) holding the unlinked role (scanned ${scanned}).`,
+    });
     return;
   }
 
-  if (sub === 'remove') {
-    let muId: string;
-    try {
-      muId = parseMuInput(interaction.options.getString('mu', true)).id;
-    } catch (error) {
-      await interaction.reply({ content: (error as Error).message, ephemeral: true });
-      return;
-    }
-    const muRoles = (cfg?.muRoles ?? []).filter(e => e.muId !== muId);
-    if (muRoles.length === (cfg?.muRoles.length ?? 0)) {
-      await interaction.reply({ content: `No mapping exists for MU \`${muId}\`.`, ephemeral: true });
-      return;
-    }
-    ServerConfigManager.updateAutoroleConfig(serverId, { muRoles });
-    await interaction.reply({ content: `Removed the mapping for MU \`${muId}\`.`, ephemeral: true });
-    return;
-  }
-
-  const entries = cfg?.muRoles ?? [];
-  await interaction.reply({
-    content: entries.length
-      ? '**MU roles**\n' + entries.map(e => `- **${e.muName}** (\`${e.muId}\`): <@&${e.roleId}>`).join('\n')
-      : 'No MU role mappings configured.',
-    ephemeral: true,
-  });
+  await interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
 }
 
 // --- country ---
@@ -413,6 +387,7 @@ export async function handleConfig(
       return;
     }
     const lastSync = cfg.lastSyncAt ? `<t:${Math.floor(new Date(cfg.lastSyncAt).getTime() / 1000)}:R>` : 'Never';
+    const muRoleCount = ServerConfigManager.getMilitaryUnits(serverId).filter(u => u.roleId).length;
     await replyChunked(
       interaction,
       '**Autorole configuration**\n' +
@@ -428,10 +403,11 @@ export async function handleConfig(
         `**Allowed countries:** ${cfg.allowedCountryIds.map(id => `\`${id}\``).join(', ') || 'None'}\n` +
         `**Level roles:** ${cfg.levelRoles.length}\n` +
         `**Timed roles:** ${cfg.timedRoles.length}\n` +
-        `**MU roles:** ${cfg.muRoles.length}\n` +
+        `**MU roles:** ${muRoleCount} (manage with \`/mu\`)\n` +
         `**Build roles:** eco ${cfg.ecoRoleId ? `<@&${cfg.ecoRoleId}>` : 'None'} (${cfg.ecoThreshold}%), war ${cfg.warRoleId ? `<@&${cfg.warRoleId}>` : 'None'} (${cfg.warThreshold}%), hybrid ${cfg.hybridRoleId ? `<@&${cfg.hybridRoleId}>` : 'None'}\n` +
         `**Linked role:** ${cfg.linkedRoleId ? `<@&${cfg.linkedRoleId}>` : 'None'}\n` +
         `**Unlinked role:** ${cfg.unlinkedRoleId ? `<@&${cfg.unlinkedRoleId}>` : 'None'}\n` +
+        `**OPSEC role:** ${cfg.opsecRoleId ? `<@&${cfg.opsecRoleId}>` : 'None'} (granted at level ${cfg.opsecMinLevel}, revoked after ${cfg.opsecInactivityDays}d inactive, auto-apply ${cfg.opsecAutoApply === false ? 'off' : 'on'})\n` +
         `**Link messages:** ${cfg.linkMessages.map(m => `<#${m.channelId}>`).join(', ') || 'None'}`
     );
     return;
@@ -454,6 +430,11 @@ export async function handleConfig(
     const clearUnlinkedRole = interaction.options.getBoolean('clear_unlinked_role');
     const linkedRole = interaction.options.getRole('linked_role');
     const clearLinkedRole = interaction.options.getBoolean('clear_linked_role');
+    const opsecRole = interaction.options.getRole('opsec_role');
+    const clearOpsecRole = interaction.options.getBoolean('clear_opsec_role');
+    const opsecMinLevel = interaction.options.getInteger('opsec_min_level');
+    const opsecInactivityDays = interaction.options.getNumber('opsec_inactivity_days');
+    const opsecAutoApply = interaction.options.getBoolean('opsec_auto_apply');
     if (reviewChannel) update.reviewChannelId = reviewChannel.id;
     if (skipVerification !== null) update.skipCompanyVerification = skipVerification;
     if (intervalSeconds !== null) update.checkIntervalSeconds = intervalSeconds;
@@ -471,6 +452,14 @@ export async function handleConfig(
     } else if (linkedRole) {
       update.linkedRoleId = linkedRole.id;
     }
+    if (clearOpsecRole) {
+      update.opsecRoleId = '';
+    } else if (opsecRole) {
+      update.opsecRoleId = opsecRole.id;
+    }
+    if (opsecMinLevel !== null) update.opsecMinLevel = opsecMinLevel;
+    if (opsecInactivityDays !== null) update.opsecInactivityDays = opsecInactivityDays;
+    if (opsecAutoApply !== null) update.opsecAutoApply = opsecAutoApply;
     if (Object.keys(update).length === 0) {
       await interaction.reply({ content: 'Pass at least one option to change.', ephemeral: true });
       return;
@@ -553,7 +542,7 @@ export async function handleSync(
       `**Pending reviews:** ${pending.length}\n` +
       `**Sync interval:** ${cfg?.checkIntervalSeconds ?? 3600}s\n` +
       `**Last sync:** ${lastSync}\n` +
-      `**Level roles:** ${cfg?.levelRoles.length ?? 0} · **Timed roles:** ${cfg?.timedRoles.length ?? 0} · **MU roles:** ${cfg?.muRoles.length ?? 0}`,
+      `**Level roles:** ${cfg?.levelRoles.length ?? 0} · **Timed roles:** ${cfg?.timedRoles.length ?? 0} · **MU roles:** ${ServerConfigManager.getMilitaryUnits(serverId).filter(u => u.roleId).length}`,
   });
 }
 

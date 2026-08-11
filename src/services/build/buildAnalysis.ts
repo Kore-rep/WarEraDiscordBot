@@ -7,6 +7,12 @@
 
 /** Economic skills (production, trade, management). */
 export const ECO_SKILLS = ['companies', 'entrepreneurship', 'production', 'management', 'energy'] as const;
+/**
+ * The company-management eco skill. War players commonly invest here (and nowhere
+ * else in eco) to earn money, which is what distinguishes a "soft war" build from
+ * a true hybrid — see the `/scanfor country builds` classification.
+ */
+export const COMPANIES_SKILL = 'companies';
 /** Combat skills. */
 export const WAR_SKILLS = [
   'attack',
@@ -28,10 +34,14 @@ export interface BuildAnalysis {
   ecoPoints: number;
   /** Skill points invested in war skills. */
   warPoints: number;
+  /** Skill points invested in the `companies` skill alone (a subset of ecoPoints). */
+  companiesPoints: number;
   /** ecoPoints + warPoints (every categorized skill counts). */
   totalPoints: number;
   ecoPct: number;
   warPct: number;
+  /** `companies` points as a percentage of the whole eco+war build (0 when nothing spent). */
+  companiesPct: number;
 }
 
 /**
@@ -57,12 +67,15 @@ export function analyzeUserBuild(skills: SkillLevels): BuildAnalysis {
     keys.reduce((acc, key) => acc + skillPointCost(skills[key]?.level ?? 0), 0);
   const ecoPoints = sum(ECO_SKILLS);
   const warPoints = sum(WAR_SKILLS);
+  const companiesPoints = skillPointCost(skills[COMPANIES_SKILL]?.level ?? 0);
   const totalPoints = ecoPoints + warPoints;
   return {
     ecoPoints,
     warPoints,
+    companiesPoints,
     totalPoints,
     ecoPct: totalPoints > 0 ? (ecoPoints / totalPoints) * 100 : 0,
     warPct: totalPoints > 0 ? (warPoints / totalPoints) * 100 : 0,
+    companiesPct: totalPoints > 0 ? (companiesPoints / totalPoints) * 100 : 0,
   };
 }

@@ -1,0 +1,1 @@
+export { militaryUnitsCommand } from './militaryUnits';

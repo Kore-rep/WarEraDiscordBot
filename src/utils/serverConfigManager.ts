@@ -11,6 +11,7 @@ import {
   LeaderboardConfig,
   MuDirectoryConfig,
   AutoroleConfig,
+  MilitaryUnitEntry,
 } from '../config/config';
 import { logger } from './logger';
 import { prisma } from '../persistence/prisma';
@@ -54,6 +55,7 @@ export class ServerConfigManager {
           leaderboard: decode(row.leaderboard),
           muDirectory: decode(row.muDirectory),
           autorole: decode(row.autorole),
+          militaryUnits: decode(row.militaryUnits),
         };
         serversMap.set(row.id, this.normalizeServerConfig(row.id, raw));
       }
@@ -116,6 +118,7 @@ export class ServerConfigManager {
         enabled: serverConfig.bountyBattles.enabled,
         bountyThreshold: serverConfig.bountyBattles.bountyThreshold,
         minBountyToSend: serverConfig.bountyBattles.minBountyToSend,
+        minPool: serverConfig.bountyBattles.minPool,
       } : undefined,
       mercenaryContracts: serverConfig.mercenaryContracts ? {
         channelId: serverConfig.mercenaryContracts.channelId,
@@ -123,6 +126,7 @@ export class ServerConfigManager {
         enabled: serverConfig.mercenaryContracts.enabled,
         contractThreshold: serverConfig.mercenaryContracts.contractThreshold,
         minContractToSend: serverConfig.mercenaryContracts.minContractToSend,
+        minPayout: serverConfig.mercenaryContracts.minPayout,
       } : undefined,
       reports: serverConfig.reports,
       userTracking: serverConfig.userTracking ? {
@@ -159,7 +163,6 @@ export class ServerConfigManager {
         messageId: serverConfig.leaderboard.messageId,
         countryIds: serverConfig.leaderboard.countryIds || [],
         countryNames: serverConfig.leaderboard.countryNames || [],
-        militaryUnitIds: serverConfig.leaderboard.militaryUnitIds || [],
         topCount: serverConfig.leaderboard.topCount ?? 10,
         levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
         lastSnapshot: serverConfig.leaderboard.lastSnapshot,
@@ -169,7 +172,6 @@ export class ServerConfigManager {
         enabled: serverConfig.muDirectory.enabled,
         channelId: serverConfig.muDirectory.channelId || '',
         messageIds: (serverConfig.muDirectory.messageIds || []).filter(id => id && id.trim().length > 0),
-        militaryUnitIds: (serverConfig.muDirectory.militaryUnitIds || []).filter(id => id && id.trim().length > 0),
         manageRoleIds: (serverConfig.muDirectory.manageRoleIds || []).filter(id => id && id.trim().length > 0),
         lastUpdated: serverConfig.muDirectory.lastUpdated,
       } : undefined,
@@ -179,7 +181,6 @@ export class ServerConfigManager {
         lastSyncAt: serverConfig.autorole.lastSyncAt,
         levelRoles: (serverConfig.autorole.levelRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
         timedRoles: (serverConfig.autorole.timedRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
-        muRoles: (serverConfig.autorole.muRoles || []).filter(e => e.roleId?.trim() && e.muId?.trim()),
         ecoRoleId: serverConfig.autorole.ecoRoleId,
         warRoleId: serverConfig.autorole.warRoleId,
         hybridRoleId: serverConfig.autorole.hybridRoleId,
@@ -188,6 +189,10 @@ export class ServerConfigManager {
         linkedRoleId: serverConfig.autorole.linkedRoleId,
         unlinkedRoleId: serverConfig.autorole.unlinkedRoleId,
         unlinkedBackfillAt: serverConfig.autorole.unlinkedBackfillAt,
+        opsecRoleId: serverConfig.autorole.opsecRoleId,
+        opsecMinLevel: serverConfig.autorole.opsecMinLevel ?? 15,
+        opsecInactivityDays: serverConfig.autorole.opsecInactivityDays ?? 2,
+        opsecAutoApply: serverConfig.autorole.opsecAutoApply,
         manageRoleIds: (serverConfig.autorole.manageRoleIds || []).filter(id => id && id.trim().length > 0),
         manageUserIds: (serverConfig.autorole.manageUserIds || []).filter(id => id && id.trim().length > 0),
         proxyRoleIds: (serverConfig.autorole.proxyRoleIds || []).filter(id => id && id.trim().length > 0),
@@ -198,6 +203,15 @@ export class ServerConfigManager {
         linkMessages: (serverConfig.autorole.linkMessages || []).filter(m => m.channelId?.trim() && m.messageId?.trim()),
         syncNicknames: serverConfig.autorole.syncNicknames,
       } : undefined,
+      militaryUnits: serverConfig.militaryUnits
+        ? serverConfig.militaryUnits
+            .filter(u => u.muId?.trim())
+            .map(u => ({
+              muId: u.muId.trim(),
+              muName: u.muName?.trim() || `MU ${u.muId.trim()}`,
+              ...(u.roleId?.trim() ? { roleId: u.roleId.trim() } : {}),
+            }))
+        : undefined,
     };
   }
 
@@ -238,6 +252,7 @@ export class ServerConfigManager {
         enabled: config.enabled !== undefined ? config.enabled : existingBountyConfig.enabled,
         bountyThreshold: config.bountyThreshold !== undefined ? config.bountyThreshold : existingBountyConfig.bountyThreshold,
         minBountyToSend: config.minBountyToSend !== undefined ? config.minBountyToSend : existingBountyConfig.minBountyToSend,
+        minPool: config.minPool !== undefined ? config.minPool : existingBountyConfig.minPool,
       };
 
       // Update in-memory cache
@@ -282,6 +297,7 @@ export class ServerConfigManager {
         enabled: config.enabled !== undefined ? config.enabled : existingMercenaryConfig.enabled,
         contractThreshold: config.contractThreshold !== undefined ? config.contractThreshold : existingMercenaryConfig.contractThreshold,
         minContractToSend: config.minContractToSend !== undefined ? config.minContractToSend : existingMercenaryConfig.minContractToSend,
+        minPayout: config.minPayout !== undefined ? config.minPayout : existingMercenaryConfig.minPayout,
       };
 
       // Update in-memory cache
@@ -360,6 +376,7 @@ export class ServerConfigManager {
           leaderboard: encode(cfg.leaderboard),
           muDirectory: encode(cfg.muDirectory),
           autorole: encode(cfg.autorole),
+          militaryUnits: encode(cfg.militaryUnits),
         };
         return prisma.server.upsert({ where: { id }, create: { id, ...data }, update: data });
       }),
@@ -411,7 +428,6 @@ export class ServerConfigManager {
         ...config.leaderboard,
         countryIds: [...config.leaderboard.countryIds],
         countryNames: [...config.leaderboard.countryNames],
-        militaryUnitIds: [...config.leaderboard.militaryUnitIds],
         levelBrackets: config.leaderboard.levelBrackets.map(b => ({ ...b })),
         lastSnapshot: config.leaderboard.lastSnapshot ? {
           ...config.leaderboard.lastSnapshot,
@@ -428,14 +444,12 @@ export class ServerConfigManager {
       muDirectory: config.muDirectory ? {
         ...config.muDirectory,
         messageIds: [...config.muDirectory.messageIds],
-        militaryUnitIds: [...config.muDirectory.militaryUnitIds],
         manageRoleIds: [...config.muDirectory.manageRoleIds],
       } : undefined,
       autorole: config.autorole ? {
         ...config.autorole,
         levelRoles: config.autorole.levelRoles.map(e => ({ ...e })),
         timedRoles: config.autorole.timedRoles.map(e => ({ ...e })),
-        muRoles: config.autorole.muRoles.map(e => ({ ...e })),
         manageRoleIds: [...config.autorole.manageRoleIds],
         manageUserIds: [...config.autorole.manageUserIds],
         proxyRoleIds: [...config.autorole.proxyRoleIds],
@@ -443,6 +457,7 @@ export class ServerConfigManager {
         allowedCountryIds: [...config.autorole.allowedCountryIds],
         linkMessages: config.autorole.linkMessages.map(m => ({ ...m })),
       } : undefined,
+      militaryUnits: config.militaryUnits ? config.militaryUnits.map(u => ({ ...u })) : undefined,
     };
   }
 
@@ -1251,7 +1266,6 @@ export class ServerConfigManager {
         channelId: '',
         countryIds: [],
         countryNames: [],
-        militaryUnitIds: [],
         topCount: 10,
         levelBrackets: [],
         enabled: true,
@@ -1261,7 +1275,6 @@ export class ServerConfigManager {
         channelId: config.channelId !== undefined ? config.channelId : existingLeaderboard.channelId,
         countryIds: config.countryIds !== undefined ? config.countryIds : existingLeaderboard.countryIds,
         countryNames: config.countryNames !== undefined ? config.countryNames : existingLeaderboard.countryNames,
-        militaryUnitIds: config.militaryUnitIds !== undefined ? config.militaryUnitIds : existingLeaderboard.militaryUnitIds,
         topCount: config.topCount !== undefined ? config.topCount : existingLeaderboard.topCount,
         levelBrackets: config.levelBrackets !== undefined ? config.levelBrackets : existingLeaderboard.levelBrackets,
         enabled: config.enabled !== undefined ? config.enabled : existingLeaderboard.enabled,
@@ -1293,7 +1306,6 @@ export class ServerConfigManager {
       enabled: true,
       channelId: '',
       messageIds: [],
-      militaryUnitIds: [],
       manageRoleIds: [],
     };
   }
@@ -1313,7 +1325,6 @@ export class ServerConfigManager {
         enabled: config.enabled !== undefined ? config.enabled : existing.enabled,
         channelId: config.channelId !== undefined ? config.channelId : existing.channelId,
         messageIds: config.messageIds !== undefined ? config.messageIds : existing.messageIds,
-        militaryUnitIds: config.militaryUnitIds !== undefined ? config.militaryUnitIds : existing.militaryUnitIds,
         manageRoleIds: config.manageRoleIds !== undefined ? config.manageRoleIds : existing.manageRoleIds,
         lastUpdated: config.lastUpdated !== undefined ? config.lastUpdated : existing.lastUpdated,
       };
@@ -1342,9 +1353,10 @@ export class ServerConfigManager {
       checkIntervalSeconds: 3600,
       levelRoles: [],
       timedRoles: [],
-      muRoles: [],
       ecoThreshold: 60,
       warThreshold: 60,
+      opsecMinLevel: 15,
+      opsecInactivityDays: 2,
       manageRoleIds: [],
       manageUserIds: [],
       proxyRoleIds: [],
@@ -1372,7 +1384,6 @@ export class ServerConfigManager {
         lastSyncAt: config.lastSyncAt !== undefined ? config.lastSyncAt : existing.lastSyncAt,
         levelRoles: config.levelRoles !== undefined ? config.levelRoles : existing.levelRoles,
         timedRoles: config.timedRoles !== undefined ? config.timedRoles : existing.timedRoles,
-        muRoles: config.muRoles !== undefined ? config.muRoles : existing.muRoles,
         ecoRoleId: config.ecoRoleId !== undefined ? config.ecoRoleId : existing.ecoRoleId,
         warRoleId: config.warRoleId !== undefined ? config.warRoleId : existing.warRoleId,
         hybridRoleId: config.hybridRoleId !== undefined ? config.hybridRoleId : existing.hybridRoleId,
@@ -1381,6 +1392,10 @@ export class ServerConfigManager {
         linkedRoleId: config.linkedRoleId !== undefined ? config.linkedRoleId : existing.linkedRoleId,
         unlinkedRoleId: config.unlinkedRoleId !== undefined ? config.unlinkedRoleId : existing.unlinkedRoleId,
         unlinkedBackfillAt: config.unlinkedBackfillAt !== undefined ? config.unlinkedBackfillAt : existing.unlinkedBackfillAt,
+        opsecRoleId: config.opsecRoleId !== undefined ? config.opsecRoleId : existing.opsecRoleId,
+        opsecMinLevel: config.opsecMinLevel !== undefined ? config.opsecMinLevel : (existing.opsecMinLevel ?? 15),
+        opsecInactivityDays: config.opsecInactivityDays !== undefined ? config.opsecInactivityDays : (existing.opsecInactivityDays ?? 2),
+        opsecAutoApply: config.opsecAutoApply !== undefined ? config.opsecAutoApply : existing.opsecAutoApply,
         manageRoleIds: config.manageRoleIds !== undefined ? config.manageRoleIds : existing.manageRoleIds,
         manageUserIds: config.manageUserIds !== undefined ? config.manageUserIds : existing.manageUserIds,
         proxyRoleIds: config.proxyRoleIds !== undefined ? config.proxyRoleIds : existing.proxyRoleIds,
@@ -1401,6 +1416,33 @@ export class ServerConfigManager {
       logger.info(`Updated autorole config for server ${serverId}`);
     } catch (error) {
       logger.error('Failed to update autorole config', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Read a server's shared military-unit list (deep copy). This is the single
+   * source of MUs consumed by the leaderboard, the MU directory, and autorole.
+   */
+  static getMilitaryUnits(serverId: string): MilitaryUnitEntry[] {
+    return this.getServerConfig(serverId)?.militaryUnits ?? [];
+  }
+
+  /** Replace a server's shared military-unit list. */
+  static updateMilitaryUnits(serverId: string, units: MilitaryUnitEntry[]): void {
+    try {
+      this.ensureCacheInitialized();
+
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      this.configCache!.set(serverId, {
+        ...existingServerConfig,
+        militaryUnits: units.map(u => ({ ...u })),
+      });
+
+      this.writeConfigsToDisk();
+      logger.info(`Updated military units for server ${serverId} (${units.length} MUs)`);
+    } catch (error) {
+      logger.error('Failed to update military units', error);
       throw error;
     }
   }

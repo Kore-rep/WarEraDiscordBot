@@ -17,7 +17,8 @@ export const AUTOROLE_GUIDE = [
   '**What sync does** (per linked member, every `interval_seconds`)',
   '- Grants the highest level role they qualify for (`levelrole`)',
   '- Grants an eco/war/hybrid build role from their skill spread (`buildrole`)',
-  '- Grants the role mapped to their military unit (`murole`)',
+  '- Grants the role mapped to their military unit (map MUs to roles with `/mu role`)',
+  '- Grants the OPSEC (restricted-access) role once they reach its level, and removes it on inactivity (`opsec`)',
   '- Removes roles from members inactive too long (`timedrole`)',
   '- Sets their nickname to `<WarEra name> (<MU>)` — or `(TBD)` plus a DM nudge if their MU is not mapped',
   '- Never touches roles listed as protected (`config protectedroles`)',
@@ -25,11 +26,11 @@ export const AUTOROLE_GUIDE = [
   '**Quick setup**',
   '1. `/autorole country add id:<countryId>` — who may link without review',
   '2. `/autorole config set review_channel:#channel` — where review requests go',
-  '3. `/autorole levelrole add`, `/autorole buildrole set`, `/autorole murole set` — the roles to manage',
+  '3. `/autorole levelrole add`, `/autorole buildrole set`, `/mu role` — the roles to manage',
   '4. `/autorole linkmessage post` — a permanent Link button for members',
   '5. `/autorole sync now` — first sync; `/autorole sync status` to check on it',
   '',
-  '**Topics:** run `/autorole help topic:<name>` for details on: levelrole, timedrole, buildrole, murole, country, links, config, sync, linkmessage.',
+  '**Topics:** run `/autorole help topic:<name>` for details on: levelrole, timedrole, buildrole, opsec, country, links, config, sync, linkmessage.',
 ].join('\n');
 
 export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
@@ -69,16 +70,21 @@ export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
     '- `view` — show current configuration',
   ].join('\n'),
 
-  murole: [
-    '## /autorole murole — military unit roles',
+  opsec: [
+    '## /autorole opsec — the OPSEC (restricted-access) role',
     '',
-    "Maps a WarEra military unit to a Discord role. On sync a member gets the role mapped to their current MU; other mapped MU roles are removed. The MU's name also appears in their nickname: `<WarEra name> (<MU name>)`.",
+    'A single role that grants access to restricted channels. On sync a linked member is **granted it once** when they reach `opsec_min_level` (default 15), and it is **removed when they go inactive** (`opsec_inactivity_days`, default 2). Once removed for inactivity it is **never re-added automatically** — re-granting is manual (just add the role back in Discord; sync then leaves it alone).',
     '',
-    'Members whose MU is **not** mapped (or who have none) are nicknamed `(TBD)` and receive a DM nudge to join an official MU (at most once per 24h).',
+    'It is also removed automatically when a member unlinks.',
     '',
-    '- `set role:<role> mu:<id or app.warera.io/mu/... link>` — the MU name is fetched and stored automatically',
-    '- `remove mu:<id>` — delete a mapping',
-    '- `list` — show all mappings',
+    'Set `opsec_auto_apply:False` to stop sync from granting OPSEC automatically (you then add it manually); inactivity revocation still applies while it is off.',
+    '',
+    '- Configure via `/autorole config set opsec_role:<role> [opsec_min_level:<n>] [opsec_inactivity_days:<d>] [opsec_auto_apply:<bool>]` (or `clear_opsec_role:True`)',
+    '- `purge-unlinked` — one-shot: strip the OPSEC role from everyone currently holding the unlinked role',
+    '',
+    '**Migrating from the old setup:** if OPSEC was a level-15 level role kept via `protectedroles`, remove it from both `levelrole` and `protectedroles`, then set it with `config set opsec_role:`.',
+    '',
+    'Map military units to roles with `/mu role`; MUs live in the shared list managed by `/mu`.',
   ].join('\n'),
 
   country: [

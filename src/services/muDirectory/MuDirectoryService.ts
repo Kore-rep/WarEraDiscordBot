@@ -90,7 +90,8 @@ export class MuDirectoryService implements ScheduledTask {
   private async refreshDirectory(serverId: string, config: MuDirectoryConfig): Promise<void> {
     logger.info(`Refreshing MU directory for server ${serverId}`);
 
-    const mus = await this.fetchMilitaryUnits(config.militaryUnitIds);
+    const militaryUnitIds = ServerConfigManager.getMilitaryUnits(serverId).map(u => u.muId);
+    const mus = await this.fetchMilitaryUnits(militaryUnitIds);
     const musById = new Map(mus.map(m => [m._id, m]));
 
     const userIds = new Set<string>();
@@ -104,7 +105,7 @@ export class MuDirectoryService implements ScheduledTask {
     }
     const users = await this.fetchUsers([...userIds]);
 
-    const entries: MuDirectoryEntry[] = config.militaryUnitIds.map(muId => {
+    const entries: MuDirectoryEntry[] = militaryUnitIds.map(muId => {
       const mu = musById.get(muId);
       if (!mu) {
         // API fetch failed for this MU: render a placeholder rather than dropping it.

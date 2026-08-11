@@ -88,6 +88,12 @@ export class BattleService {
             continue;
           }
 
+          // Skip bounties whose total pool is below this server's minimum pool
+          const minPool = serverConfig.bountyBattles.minPool;
+          if (minPool != null && minPool > 0 && newBounty.moneyPool < minPool) {
+            continue;
+          }
+
           const alertMessage = SimpleBattleFormatter.formatBountyAlert(newBounty, countries, regions);
 
           // Only mention roles when the bounty clears the mention threshold

@@ -1,6 +1,5 @@
 import { TimedRoleEntry } from '../../config/config';
-
-const MS_PER_DAY = 86_400_000;
+import { isInactive } from '../userTracking/inactivity';
 
 /**
  * Roles to strip from a member who has been inactive too long. Removal-only:
@@ -16,8 +15,9 @@ export function timedRolesToRemove(
   if (!lastConnectionAt) {
     return [];
   }
-  const daysSince = (now.getTime() - lastConnectionAt.getTime()) / MS_PER_DAY;
   return entries
-    .filter(e => e.timeoutDays > 0 && daysSince >= e.timeoutDays && memberRoleIds.includes(e.roleId))
+    .filter(
+      e => e.timeoutDays > 0 && isInactive(lastConnectionAt, e.timeoutDays, now) && memberRoleIds.includes(e.roleId)
+    )
     .map(e => e.roleId);
 }

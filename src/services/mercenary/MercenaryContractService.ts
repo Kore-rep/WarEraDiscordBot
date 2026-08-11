@@ -98,6 +98,12 @@ export class MercenaryContractService {
             continue;
           }
 
+          const minPayout = contractConfig.minPayout;
+          if (minPayout !== undefined && minPayout !== null && newContract.budget < minPayout) {
+            logger.debug(`Skipping contract alert for server ${serverId}: budget (${newContract.budget}) below minPayout (${minPayout})`);
+            continue;
+          }
+
           const alertMessage = MercenaryContractFormatter.formatContractAlert(newContract, countries);
 
           const contractThreshold = contractConfig.contractThreshold ?? 0;

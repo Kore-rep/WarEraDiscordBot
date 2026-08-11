@@ -27,12 +27,6 @@ export const leaderboardCommand: Command = {
           subcommand
             .setName('set')
             .setDescription('Set leaderboard configuration')
-            .addStringOption(option =>
-              option
-                .setName('mus')
-                .setDescription('Comma-separated military unit IDs (required on first setup)')
-                .setRequired(false)
-            )
             .addIntegerOption(option =>
               option
                 .setName('topcount')
@@ -160,20 +154,11 @@ async function handleConfigSet(
   discordService: DiscordService
 ): Promise<void> {
   const serverId = interaction.guild!.id;
-  const musInput = interaction.options.getString('mus');
   const topCountOpt = interaction.options.getInteger('topcount');
   const bracketsInput = interaction.options.getString('brackets');
   const channel = interaction.options.getChannel('channel');
 
   const existing = ServerConfigManager.getServerConfig(serverId)?.leaderboard;
-
-  if (!existing && !musInput) {
-    await interaction.reply({
-      content: 'No configuration exists yet. Please specify **mus** (military unit IDs) on first setup.\n\nExample: `/leaderboard config set mus:abc123,def456`',
-      ephemeral: true,
-    });
-    return;
-  }
 
   if (channel && channel.type !== ChannelType.GuildText) {
     await interaction.reply({
@@ -198,18 +183,7 @@ async function handleConfigSet(
 
   await interaction.deferReply({ ephemeral: true });
 
-  let militaryUnitIds = existing?.militaryUnitIds ?? [];
-  if (musInput) {
-    militaryUnitIds = musInput
-      .split(',')
-      .map(id => id.trim())
-      .filter(Boolean);
-
-    if (militaryUnitIds.length === 0) {
-      await interaction.editReply({ content: 'Please provide at least one military unit ID.' });
-      return;
-    }
-  }
+  const militaryUnitCount = ServerConfigManager.getMilitaryUnits(serverId).length;
 
   let levelBrackets = existing?.levelBrackets ?? DEFAULT_LEVEL_BRACKETS;
   if (bracketsInput) {
@@ -228,7 +202,6 @@ async function handleConfigSet(
 
   ServerConfigManager.updateLeaderboardConfig(serverId, {
     channelId: newChannelId,
-    militaryUnitIds,
     topCount,
     levelBrackets,
     enabled: existing?.enabled ?? true,
@@ -242,7 +215,7 @@ async function handleConfigSet(
 
   let message = '**Leaderboard configured**\n\n';
   message += `**Channel:** <#${newChannelId}>\n`;
-  message += `**Military units:** ${militaryUnitIds.length} configured\n`;
+  message += `**Military units:** ${militaryUnitCount} configured (manage with \`/mu\`)\n`;
   message += `**Top count:** ${topCount}\n`;
   message += `**Level brackets:** ${bracketLabels}\n`;
   message += `**Status:** ${existing?.enabled === false ? 'Disabled (use /leaderboard enable)' : 'Enabled'}`;
@@ -271,12 +244,14 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
   const lastUpdated = config.lastUpdated
     ? `<t:${Math.floor(new Date(config.lastUpdated).getTime() / 1000)}:R>`
     : 'Never';
+  const units = ServerConfigManager.getMilitaryUnits(serverId);
+  const muList = units.length ? units.map(u => u.muName).join(', ') : 'None (add with /mu add)';
 
   await interaction.reply({
     content:
       '**Leaderboard Settings**\n\n' +
       `**Channel:** <#${config.channelId}>\n` +
-      `**Military unit IDs:** ${config.militaryUnitIds.join(', ') || 'None'}\n` +
+      `**Military units:** ${muList}\n` +
       `**Top count:** ${config.topCount}\n` +
       `**Level brackets:** ${bracketLabels}\n` +
       `**Status:** ${status}\n` +

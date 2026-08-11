@@ -49,6 +49,13 @@ export const contractsCommand: Command = {
                 .setRequired(false)
                 .setMinValue(0)
             )
+            .addNumberOption(option =>
+              option
+                .setName('minpayout')
+                .setDescription('Min contract payout to send any message; below this no message sent (empty=keep, 0=all)')
+                .setRequired(false)
+                .setMinValue(0)
+            )
         )
         .addSubcommand(subcommand =>
           subcommand
@@ -116,6 +123,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
   const role = interaction.options.getRole('role', false);
   const threshold = interaction.options.getNumber('threshold', false);
   const minContractToSend = interaction.options.getNumber('min', false);
+  const minPayout = interaction.options.getNumber('minpayout', false);
 
   // Get current configuration or create new one
   const currentConfig = ServerConfigManager.getServerConfig(serverId);
@@ -161,6 +169,8 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
   const contractThreshold = threshold !== null ? threshold : (existingMercenaryConfig?.contractThreshold ?? 0);
   // minContractToSend: undefined = not set (send all), 0 = send all, >0 = only send if currentPerK >= value
   const resolvedMinContractToSend = minContractToSend !== null ? minContractToSend : existingMercenaryConfig?.minContractToSend;
+  // minPayout: undefined = not set (send all), 0 = send all, >0 = only send if budget >= value
+  const resolvedMinPayout = minPayout !== null ? minPayout : existingMercenaryConfig?.minPayout;
 
   // Update configuration
   ServerConfigManager.updateMercenaryContractsConfig(serverId, {
@@ -169,6 +179,7 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     enabled: existingMercenaryConfig?.enabled ?? true, // Default to enabled
     contractThreshold: contractThreshold,
     minContractToSend: resolvedMinContractToSend,
+    minPayout: resolvedMinPayout,
   });
 
   // Initialize Discord channel
@@ -183,8 +194,13 @@ async function handleConfigSet(interaction: ChatInputCommandInteraction, discord
     ? (resolvedMinContractToSend === 0 ? '0 (send all)' : `${resolvedMinContractToSend} gold per 1k damage`)
     : 'None (send all)';
   confirmationMessage += `📊 **Min contract to send:** ${minDisplay}\n`;
-  
-  const roleMentions = newRoleIds.length > 0 
+
+  const minPayoutDisplay = resolvedMinPayout !== undefined && resolvedMinPayout !== null
+    ? (resolvedMinPayout === 0 ? '0 (send all)' : `${resolvedMinPayout} gold`)
+    : 'None (send all)';
+  confirmationMessage += `💼 **Min payout to send:** ${minPayoutDisplay}\n`;
+
+  const roleMentions = newRoleIds.length > 0
     ? newRoleIds.map(id => `<@&${id}>`).join(', ')
     : 'None';
   confirmationMessage += `🏷️ **Roles:** ${roleMentions}\n`;
@@ -224,12 +240,17 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
     ? (mercenaryConfig.minContractToSend === 0 ? '0 (send all)' : `${mercenaryConfig.minContractToSend} gold per 1k damage`)
     : 'None (send all)';
 
+  const minPayoutDisplay = mercenaryConfig.minPayout !== undefined && mercenaryConfig.minPayout !== null
+    ? (mercenaryConfig.minPayout === 0 ? '0 (send all)' : `${mercenaryConfig.minPayout} gold`)
+    : 'None (send all)';
+
   await interaction.reply({
     content: `📋 **Mercenary Contract Notification Settings:**\n\n` +
              `📢 **Channel:** ${channelMention}\n` +
              `🏷️ **Roles:** ${roleMentions}\n` +
              `💰 **Contract Threshold:** ${contractThreshold} gold per 1k damage\n` +
              `📊 **Min contract to send:** ${minDisplay}\n` +
+             `💼 **Min payout to send:** ${minPayoutDisplay}\n` +
              `📊 **Status:** ${status}`,
     ephemeral: true
   });

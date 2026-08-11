@@ -1,11 +1,11 @@
-import { ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
 import { ApiService } from '../../../services/api/ApiService';
 import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
 
 type UserDTO = ScanUserLite;
 import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
-import { createBuildSummary } from './userStatusFormatter';
+import { createBuildSummary, buildDetailButtonRow } from './userStatusFormatter';
 import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
 
 /**
@@ -203,6 +203,7 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
     // Sort each group by level
     groupedUsers.eco = sortUsersByLevel(groupedUsers.eco);
     groupedUsers.war = sortUsersByLevel(groupedUsers.war);
+    groupedUsers.softwar = sortUsersByLevel(groupedUsers.softwar);
     groupedUsers.hybrid = sortUsersByLevel(groupedUsers.hybrid);
 
     // Step 7: Create summary and buttons
@@ -213,32 +214,19 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
       minLevel,
       groupedUsers.eco.length,
       groupedUsers.war.length,
-      groupedUsers.hybrid.length
+      groupedUsers.hybrid.length,
+      groupedUsers.softwar.length
     );
 
     // Create buttons for detailed views (include minLevel in customId)
-    const actionRow = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:war:0:${minLevel}`)
-          .setLabel(`War Details (${groupedUsers.war.length})`)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:hybrid:0:${minLevel}`)
-          .setLabel(`Hybrid Details (${groupedUsers.hybrid.length})`)
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`builds:${countryId}:eco:0:${minLevel}`)
-          .setLabel(`Eco Details (${groupedUsers.eco.length})`)
-          .setStyle(ButtonStyle.Success)
-      );
+    const actionRow = buildDetailButtonRow(countryId, minLevel, groupedUsers);
 
     await interaction.editReply({
       content: summary,
       components: [actionRow],
     });
 
-    logger.info(`Build analysis complete for ${countryName}: ${groupedUsers.war.length} war, ${groupedUsers.hybrid.length} hybrid, ${groupedUsers.eco.length} eco`);
+    logger.info(`Build analysis complete for ${countryName}: ${groupedUsers.war.length} war, ${groupedUsers.softwar.length} soft war, ${groupedUsers.hybrid.length} hybrid, ${groupedUsers.eco.length} eco`);
 
   } catch (error) {
     logger.error('Error executing builds command:', error);

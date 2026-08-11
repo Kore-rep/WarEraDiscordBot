@@ -189,5 +189,13 @@ describe('ServerConfigManager', () => {
       expect(config?.bountyBattles?.roleIds).toEqual(['role-1', 'role-2']);
       expect(config?.bountyBattles?.bountyThreshold).toBe(25);
     });
+
+    it('should store and preserve minPool across partial updates', () => {
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { minPool: 50000 });
+      expect(ServerConfigManager.getServerConfig('test-server-1')?.bountyBattles?.minPool).toBe(50000);
+
+      ServerConfigManager.updateBountyBattlesConfig('test-server-1', { bountyThreshold: 5 });
+      expect(ServerConfigManager.getServerConfig('test-server-1')?.bountyBattles?.minPool).toBe(50000);
+    });
   });
 });

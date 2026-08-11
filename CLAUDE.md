@@ -4,6 +4,9 @@ This is the **canonical** guidance file for AI assistants working in this repo. 
 
 New here? Read [`docs/ONBOARDING.md`](docs/ONBOARDING.md) for the structure and how to add a command.
 
+Codex also maintains a deeper, non-canonical repository map and change checklist in
+[`.codex/REPOSITORY_MEMORY.md`](.codex/REPOSITORY_MEMORY.md); use it as working context after reading this file.
+
 ## What this is
 
 A TypeScript / discord.js v14 bot that wraps the `warera-sdk` package to serve WarEra game data. The SDK is a public git dependency fetched from GitHub (`git+https://github.com/Kore-rep/WarEraSDK.git`, pinned to a commit in `package.json`) — no local checkout is required. It responds to slash commands and runs background tasks on timers.

@@ -49,6 +49,17 @@ export class LinkStore {
     });
   }
 
+  /**
+   * Record the one-way OPSEC revocation. Once set, sync neither re-grants nor
+   * re-strips OPSEC — re-granting is manual.
+   */
+  async setOpsecRevoked(serverId: string, discordUserId: string, value: boolean): Promise<void> {
+    await prisma.linkedUser.updateMany({
+      where: { serverId, discordUserId },
+      data: { opsecRevoked: value },
+    });
+  }
+
   // --- Pending links (staff review) ---
 
   async getPendingLink(serverId: string, discordUserId: string): Promise<PendingLink | null> {
