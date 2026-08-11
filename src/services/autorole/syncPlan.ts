@@ -46,9 +46,9 @@ export interface MemberSyncPlan {
  * removed by another.
  *
  * OPSEC is handled outside the generic managed/target sets: it is granted once
- * at `opsecMinLevel`, removed on inactivity, and — once revoked — left entirely
- * to manual control (`opsecRevoked`), so it is neither auto re-added nor
- * auto-stripped again.
+ * at `opsecMinLevel` unless the member holds `opsecExceptionRoleId`, removed on
+ * inactivity, and — once revoked — left entirely to manual control
+ * (`opsecRevoked`), so it is neither auto re-added nor auto-stripped again.
  */
 export function computeMemberSyncPlan(
   user: SyncUserView,
@@ -108,6 +108,7 @@ export function computeMemberSyncPlan(
   const opsecRoleId = cfg.opsecRoleId;
   if (opsecRoleId && !opsecRevoked) {
     const hasOpsec = memberSet.has(opsecRoleId);
+    const hasOpsecException = !!cfg.opsecExceptionRoleId && memberSet.has(cfg.opsecExceptionRoleId);
     const inactive = isInactive(user.lastConnectionAt, cfg.opsecInactivityDays, now);
     if (hasOpsec && inactive) {
       if (!rolesToRemove.includes(opsecRoleId)) {
@@ -116,12 +117,13 @@ export function computeMemberSyncPlan(
       revokeOpsec = true;
     } else if (
       cfg.opsecAutoApply !== false &&
+      !hasOpsecException &&
       !hasOpsec &&
       !inactive &&
       user.level >= cfg.opsecMinLevel
     ) {
-      // Auto-application can be turned off to grant OPSEC manually; inactivity
-      // revocation above still runs regardless of this toggle.
+      // Auto-application can be disabled globally or skipped for members holding
+      // the exception role; inactivity revocation above remains unaffected.
       if (!rolesToAdd.includes(opsecRoleId)) {
         rolesToAdd.push(opsecRoleId);
       }

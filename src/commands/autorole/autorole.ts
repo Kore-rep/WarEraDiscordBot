@@ -222,6 +222,18 @@ export const autoroleCommand: Command = {
                 .setDescription('Stop managing an OPSEC role (leaves existing holders untouched)')
                 .setRequired(false)
             )
+            .addRoleOption(opt =>
+              opt
+                .setName('opsec_exception_role')
+                .setDescription('Members with this role are not granted OPSEC automatically')
+                .setRequired(false)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('clear_opsec_exception_role')
+                .setDescription('Remove the OPSEC automatic-grant exception role')
+                .setRequired(false)
+            )
             .addIntegerOption(opt =>
               opt
                 .setName('opsec_min_level')

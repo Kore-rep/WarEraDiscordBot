@@ -277,6 +277,7 @@ export interface AutoroleConfig {
   // OPSEC role: granted once at opsecMinLevel, removed on inactivity during sync,
   // and never auto re-added (see LinkedUser.opsecRevoked). Re-granting is manual.
   opsecRoleId?: string;
+  opsecExceptionRoleId?: string; // members holding this role are excluded from automatic OPSEC grants
   opsecMinLevel: number; // WarEra level at which OPSEC is first granted (default 15)
   opsecInactivityDays: number; // days of inactivity before OPSEC is revoked (default 2)
   opsecAutoApply?: boolean; // whether sync auto-grants OPSEC at opsecMinLevel (default true); revocation on inactivity is unaffected
@@ -369,4 +370,3 @@ export async function loadConfig(): Promise<BotConfig> {
     },
   };
 }
-

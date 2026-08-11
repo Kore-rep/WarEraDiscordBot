@@ -209,6 +209,25 @@ describe('computeMemberSyncPlan', () => {
       expect(plan.rolesToAdd).not.toContain('opsec');
     });
 
+    it('does not auto-grant OPSEC to a member holding the exception role', () => {
+      const cfg = opsecCfg({ opsecExceptionRoleId: 'opsec-exempt' });
+      const plan = computeMemberSyncPlan(baseUser({ level: 30 }), ['opsec-exempt'], null, ctx(cfg));
+      expect(plan.rolesToAdd).not.toContain('opsec');
+      expect(plan.revokeOpsec).toBe(false);
+    });
+
+    it('still revokes OPSEC on inactivity when the member holds the exception role', () => {
+      const cfg = opsecCfg({ opsecExceptionRoleId: 'opsec-exempt' });
+      const plan = computeMemberSyncPlan(
+        baseUser({ level: 30, lastConnectionAt: new Date(now.getTime() - 5 * DAY) }),
+        ['opsec', 'opsec-exempt'],
+        null,
+        ctx(cfg)
+      );
+      expect(plan.rolesToRemove).toContain('opsec');
+      expect(plan.revokeOpsec).toBe(true);
+    });
+
     it('still revokes OPSEC on inactivity even when auto-apply is off', () => {
       const cfg = opsecCfg({ opsecAutoApply: false });
       const plan = computeMemberSyncPlan(

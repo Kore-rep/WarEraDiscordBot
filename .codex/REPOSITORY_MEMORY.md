@@ -250,7 +250,8 @@ describe this state as durable.
   eco/war/hybrid role, one MU role, linked/unlinked inverse roles, timed removals,
   protected roles, nickname, and no-MU notice. OPSEC in the scanned worktree is a
   one-way auto-revocation: once marked revoked it is manual-only and never re-added
-  or re-stripped by sync.
+  or re-stripped by sync. A configured OPSEC exception role suppresses automatic
+  grants for its holders without disabling inactivity revocation of existing OPSEC.
 - Link verification codes are six digits with a 15-minute TTL. Company lookup is
   uncached and has a 30-second timeout. Review/link/verification rows are all
   server-scoped and component IDs are restart-safe.

@@ -408,6 +408,7 @@ export async function handleConfig(
         `**Linked role:** ${cfg.linkedRoleId ? `<@&${cfg.linkedRoleId}>` : 'None'}\n` +
         `**Unlinked role:** ${cfg.unlinkedRoleId ? `<@&${cfg.unlinkedRoleId}>` : 'None'}\n` +
         `**OPSEC role:** ${cfg.opsecRoleId ? `<@&${cfg.opsecRoleId}>` : 'None'} (granted at level ${cfg.opsecMinLevel}, revoked after ${cfg.opsecInactivityDays}d inactive, auto-apply ${cfg.opsecAutoApply === false ? 'off' : 'on'})\n` +
+        `**OPSEC exception role:** ${cfg.opsecExceptionRoleId ? `<@&${cfg.opsecExceptionRoleId}>` : 'None'}\n` +
         `**Link messages:** ${cfg.linkMessages.map(m => `<#${m.channelId}>`).join(', ') || 'None'}`
     );
     return;
@@ -432,6 +433,8 @@ export async function handleConfig(
     const clearLinkedRole = interaction.options.getBoolean('clear_linked_role');
     const opsecRole = interaction.options.getRole('opsec_role');
     const clearOpsecRole = interaction.options.getBoolean('clear_opsec_role');
+    const opsecExceptionRole = interaction.options.getRole('opsec_exception_role');
+    const clearOpsecExceptionRole = interaction.options.getBoolean('clear_opsec_exception_role');
     const opsecMinLevel = interaction.options.getInteger('opsec_min_level');
     const opsecInactivityDays = interaction.options.getNumber('opsec_inactivity_days');
     const opsecAutoApply = interaction.options.getBoolean('opsec_auto_apply');
@@ -456,6 +459,11 @@ export async function handleConfig(
       update.opsecRoleId = '';
     } else if (opsecRole) {
       update.opsecRoleId = opsecRole.id;
+    }
+    if (clearOpsecExceptionRole) {
+      update.opsecExceptionRoleId = '';
+    } else if (opsecExceptionRole) {
+      update.opsecExceptionRoleId = opsecExceptionRole.id;
     }
     if (opsecMinLevel !== null) update.opsecMinLevel = opsecMinLevel;
     if (opsecInactivityDays !== null) update.opsecInactivityDays = opsecInactivityDays;
