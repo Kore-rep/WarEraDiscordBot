@@ -201,6 +201,7 @@ export class ServerConfigManager {
         allowedCountryIds: (serverConfig.autorole.allowedCountryIds || []).filter(id => id && id.trim().length > 0),
         reviewChannelId: serverConfig.autorole.reviewChannelId,
         skipCompanyVerification: serverConfig.autorole.skipCompanyVerification ?? false,
+        welcomeMessage: serverConfig.autorole.welcomeMessage,
         linkMessages: (serverConfig.autorole.linkMessages || []).filter(m => m.channelId?.trim() && m.messageId?.trim()),
         syncNicknames: serverConfig.autorole.syncNicknames,
       } : undefined,
@@ -1405,6 +1406,7 @@ export class ServerConfigManager {
         allowedCountryIds: config.allowedCountryIds !== undefined ? config.allowedCountryIds : existing.allowedCountryIds,
         reviewChannelId: config.reviewChannelId !== undefined ? config.reviewChannelId : existing.reviewChannelId,
         skipCompanyVerification: config.skipCompanyVerification !== undefined ? config.skipCompanyVerification : existing.skipCompanyVerification,
+        welcomeMessage: config.welcomeMessage !== undefined ? config.welcomeMessage : existing.welcomeMessage,
         linkMessages: config.linkMessages !== undefined ? config.linkMessages : existing.linkMessages,
         syncNicknames: config.syncNicknames !== undefined ? config.syncNicknames : existing.syncNicknames,
       };

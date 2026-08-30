@@ -37,6 +37,15 @@ export type ReviewResult =
   | { status: 'denied'; username: string; discordUserId: string }
   | { status: 'not-found'; username: string; discordUserId: string, reason: string };
 
+export type ManualLinkResult =
+  | { status: 'invalid-input' }
+  | { status: 'not-found' }
+  | { status: 'already-linked-other'; discordUserId: string }
+  | { status: 'already-pending-other'; discordUserId: string }
+  | { status: 'target-linked-other' }
+  | { status: 'already-linked'; username: string; wareraUserId: string }
+  | { status: 'linked'; username: string; wareraUserId: string };
+
 export interface UnlinkResult {
   removedLink: boolean;
   removedPending: boolean;
@@ -194,6 +203,53 @@ export class LinkFlow {
     return this.store.deleteVerification(serverId, discordUserId);
   }
 
+  /** Link a member directly on behalf of staff, bypassing review and company verification. */
+  async manualLink(params: {
+    serverId: string;
+    discordUserId: string;
+    rawInput: string;
+    reviewerLabel: string;
+  }): Promise<ManualLinkResult> {
+    const { serverId, discordUserId, rawInput, reviewerLabel } = params;
+    const parsed = parseUserInput(rawInput);
+    if (!parsed) {
+      return { status: 'invalid-input' };
+    }
+
+    const user: AutoroleUser | null =
+      parsed.kind === 'id'
+        ? await this.api.getUserLite(parsed.value)
+        : await this.api.resolveUserByUsername(parsed.value);
+    if (!user) {
+      return { status: 'not-found' };
+    }
+
+    const [targetLink, accountLink, accountPending, targetPending] = await Promise.all([
+      this.store.getLink(serverId, discordUserId),
+      this.store.findLinkByWareraId(serverId, user._id),
+      this.store.findPendingLinkByWareraId(serverId, user._id),
+      this.store.getPendingLink(serverId, discordUserId),
+    ]);
+    if (accountLink && accountLink.discordUserId !== discordUserId) {
+      return { status: 'already-linked-other', discordUserId: accountLink.discordUserId };
+    }
+    if (accountPending && accountPending.discordUserId !== discordUserId) {
+      return { status: 'already-pending-other', discordUserId: accountPending.discordUserId };
+    }
+    if (targetLink && targetLink.wareraUserId !== user._id) {
+      return { status: 'target-linked-other' };
+    }
+    if (targetLink) {
+      return { status: 'already-linked', username: user.username, wareraUserId: user._id };
+    }
+
+    if (targetPending) {
+      await this.resolveReviewMessage(targetPending, `Linked manually ✅ — by ${reviewerLabel}`);
+    }
+    await this.finalizeLink(serverId, discordUserId, user._id);
+    return { status: 'linked', username: user.username, wareraUserId: user._id };
+  }
+
   /** Approve a review-pending link (staff button or /autorole links approve). */
   async approvePendingLink(serverId: string, discordUserId: string, reviewerLabel: string): Promise<ReviewResult> {
     const pending = await this.store.getPendingLink(serverId, discordUserId);
@@ -269,6 +325,14 @@ export class LinkFlow {
       await this.onLinked(serverId, discordUserId);
     } catch (error) {
       logger.warn(`Autorole: post-link sync failed for ${discordUserId} in ${serverId}`, error);
+    }
+
+    const welcomeMessage = ServerConfigManager.getAutoroleConfig(serverId)?.welcomeMessage;
+    if (welcomeMessage) {
+      const delivered = await this.discordService.sendDirectMessage(discordUserId, welcomeMessage);
+      if (!delivered) {
+        logger.warn(`Autorole: welcome DM could not be delivered to ${discordUserId} in ${serverId}`);
+      }
     }
   }
 

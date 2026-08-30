@@ -254,7 +254,9 @@ describe this state as durable.
   grants for its holders without disabling inactivity revocation of existing OPSEC.
 - Link verification codes are six digits with a 15-minute TTL. Company lookup is
   uncached and has a 30-second timeout. Review/link/verification rows are all
-  server-scoped and component IDs are restart-safe.
+  server-scoped and component IDs are restart-safe. Successful link finalization
+  sends the server's optional configured welcome DM after the immediate sync;
+  delivery failure is logged but never rolls back the completed link.
 - Leaderboards refresh living embeds, preserve prior ranks for deltas, and store
   user/MU weekly CSV snapshots. Week keys are Sunday dates; cutover is Sunday 23:02
   in the process's local timezone.

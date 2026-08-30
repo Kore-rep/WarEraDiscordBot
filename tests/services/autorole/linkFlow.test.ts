@@ -107,6 +107,29 @@ describe('LinkFlow', () => {
     expect(result).toEqual({ status: 'linked', username: 'Player' });
     expect((await store.getLink(SERVER, 'discord-1'))?.wareraUserId).toBe('warera-1');
     expect(onLinked).toHaveBeenCalledWith(SERVER, 'discord-1');
+    expect(discord.sendDirectMessage).not.toHaveBeenCalled();
+  });
+
+  it('sends the configured welcome DM after an immediate link', async () => {
+    ServerConfigManager.updateAutoroleConfig(SERVER, {
+      skipCompanyVerification: true,
+      welcomeMessage: 'Welcome to the server!',
+    });
+
+    expect((await begin()).status).toBe('linked');
+    expect(discord.sendDirectMessage).toHaveBeenCalledWith('discord-1', 'Welcome to the server!');
+  });
+
+  it('keeps a completed link when the welcome DM cannot be delivered', async () => {
+    ServerConfigManager.updateAutoroleConfig(SERVER, {
+      skipCompanyVerification: true,
+      welcomeMessage: 'Welcome to the server!',
+    });
+    discord.sendDirectMessage.mockResolvedValue(false);
+
+    expect((await begin()).status).toBe('linked');
+    expect((await store.getLink(SERVER, 'discord-1'))?.wareraUserId).toBe('warera-1');
+    expect(onLinked).toHaveBeenCalledWith(SERVER, 'discord-1');
   });
 
   it('rolls back the verification when the DM fails', async () => {
@@ -146,6 +169,67 @@ describe('LinkFlow', () => {
     expect((await begin()).status).toBe('already-pending-other');
   });
 
+  describe('manualLink', () => {
+    const manualLink = (overrides: Partial<Parameters<LinkFlow['manualLink']>[0]> = {}) =>
+      flow.manualLink({
+        serverId: SERVER,
+        discordUserId: 'discord-1',
+        rawInput: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+        reviewerLabel: 'Staffer',
+        ...overrides,
+      });
+
+    it('links directly without country review or company verification', async () => {
+      api.getUserLite.mockResolvedValue(wareraUser({ country: 'country-other' }));
+
+      expect(await manualLink()).toEqual({
+        status: 'linked',
+        username: 'Player',
+        wareraUserId: 'warera-1',
+      });
+      expect((await store.getLink(SERVER, 'discord-1'))?.wareraUserId).toBe('warera-1');
+      expect(await store.getPendingLink(SERVER, 'discord-1')).toBeNull();
+      expect(await store.getVerification(SERVER, 'discord-1')).toBeNull();
+      expect(onLinked).toHaveBeenCalledWith(SERVER, 'discord-1');
+      expect(discord.sendDirectMessage).not.toHaveBeenCalled();
+    });
+
+    it('clears pending state and resolves its review message', async () => {
+      api.getUserLite.mockResolvedValue(wareraUser({ country: 'country-other' }));
+      await begin();
+
+      expect((await manualLink()).status).toBe('linked');
+      expect(await store.getPendingLink(SERVER, 'discord-1')).toBeNull();
+      expect(discord.editMessage).toHaveBeenLastCalledWith(
+        'review-chan',
+        'review-msg-1',
+        expect.objectContaining({
+          content: expect.stringContaining('Linked manually'),
+          components: [],
+        })
+      );
+    });
+
+    it('refuses a WarEra account linked to another Discord member', async () => {
+      await store.upsertLink(SERVER, 'discord-2', 'warera-1');
+      expect(await manualLink()).toEqual({
+        status: 'already-linked-other',
+        discordUserId: 'discord-2',
+      });
+    });
+
+    it('requires an existing different link to be removed first', async () => {
+      await store.upsertLink(SERVER, 'discord-1', 'warera-old');
+      expect((await manualLink()).status).toBe('target-linked-other');
+      expect((await store.getLink(SERVER, 'discord-1'))?.wareraUserId).toBe('warera-old');
+    });
+
+    it('is scoped to the current server', async () => {
+      await store.upsertLink('other-server', 'discord-2', 'warera-1');
+      expect((await manualLink()).status).toBe('linked');
+    });
+  });
+
   describe('runVerification', () => {
     beforeEach(async () => {
       await begin();
@@ -156,6 +240,7 @@ describe('LinkFlow', () => {
     });
 
     it('links when a company carries the code', async () => {
+      ServerConfigManager.updateAutoroleConfig(SERVER, { welcomeMessage: 'Verification complete—welcome!' });
       const verification = await store.getVerification(SERVER, 'discord-1');
       api.getCompanyNamesForUser.mockResolvedValue(['Some Co', verification!.code]);
 
@@ -164,6 +249,10 @@ describe('LinkFlow', () => {
       expect((await store.getLink(SERVER, 'discord-1'))?.wareraUserId).toBe('warera-1');
       expect(await store.getVerification(SERVER, 'discord-1')).toBeNull();
       expect(onLinked).toHaveBeenCalled();
+      expect(discord.sendDirectMessage).toHaveBeenLastCalledWith(
+        'discord-1',
+        'Verification complete—welcome!'
+      );
     });
 
     it('keeps the verification when the code is not found', async () => {

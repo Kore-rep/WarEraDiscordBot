@@ -140,6 +140,18 @@ export const autoroleCommand: Command = {
         .addSubcommand(sub => sub.setName('pending').setDescription('List link requests awaiting review'))
         .addSubcommand(sub =>
           sub
+            .setName('link')
+            .setDescription('Link a member to a WarEra account without verification')
+            .addUserOption(opt => opt.setName('user').setDescription('Discord member to link').setRequired(true))
+            .addStringOption(opt =>
+              opt
+                .setName('account')
+                .setDescription('WarEra username, user id, or profile URL')
+                .setRequired(true)
+            )
+        )
+        .addSubcommand(sub =>
+          sub
             .setName('unlink')
             .setDescription("Remove a member's link")
             .addUserOption(opt => opt.setName('user').setDescription('Member to unlink').setRequired(true))
@@ -176,6 +188,19 @@ export const autoroleCommand: Command = {
             )
             .addBooleanOption(opt =>
               opt.setName('skip_verification').setDescription('Link without company-rename verification').setRequired(false)
+            )
+            .addStringOption(opt =>
+              opt
+                .setName('welcome_message')
+                .setDescription('DM sent after a member successfully links (maximum 2000 characters)')
+                .setRequired(false)
+                .setMaxLength(2000)
+            )
+            .addBooleanOption(opt =>
+              opt
+                .setName('clear_welcome_message')
+                .setDescription('Stop sending a welcome DM after linking')
+                .setRequired(false)
             )
             .addIntegerOption(opt =>
               opt.setName('interval_seconds').setDescription('Seconds between role syncs (min 60)').setRequired(false).setMinValue(60)

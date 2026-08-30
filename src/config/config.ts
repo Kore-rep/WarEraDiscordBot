@@ -288,6 +288,7 @@ export interface AutoroleConfig {
   allowedCountryIds: string[];
   reviewChannelId?: string;
   skipCompanyVerification: boolean;
+  welcomeMessage?: string; // optional DM sent after a member finishes linking
   linkMessages: LinkMessageEntry[];
   syncNicknames?: boolean; // default true
 }

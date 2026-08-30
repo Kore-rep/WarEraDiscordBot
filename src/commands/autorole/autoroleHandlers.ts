@@ -4,6 +4,7 @@ import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { hasManageRoles, replyUnauthorized } from '../../utils/commandAuth';
 import { DiscordService } from '../../services/discord/DiscordService';
 import { AutoroleService } from '../../services/autorole';
+import { ManualLinkResult } from '../../services/autorole/linkFlow';
 import { analyzeUserBuild, SkillLevels, ECO_SKILLS, WAR_SKILLS } from '../../services/autorole/build';
 import { buildLinkBlockComponents, LINK_BLOCK_CONTENT } from '../../services/autorole/reviewMessages';
 import { AUTOROLE_GUIDE, AUTOROLE_TOPIC_HELP } from './autoroleHelp';
@@ -320,6 +321,25 @@ export async function handleLinks(
 
   const target = interaction.options.getUser('user', true);
 
+  if (sub === 'link') {
+    if (!hasManageRoles(interaction)) {
+      await replyUnauthorized(
+        interaction,
+        'You need the Manage Roles permission to manually link an account.'
+      );
+      return;
+    }
+    await interaction.deferReply({ ephemeral: true });
+    const result = await service.getLinkFlow().manualLink({
+      serverId,
+      discordUserId: target.id,
+      rawInput: interaction.options.getString('account', true),
+      reviewerLabel: interaction.user.tag,
+    });
+    await interaction.editReply({ content: describeManualLinkOutcome(result, target.id) });
+    return;
+  }
+
   if (sub === 'unlink') {
     await interaction.deferReply({ ephemeral: true });
     const result = await service.getLinkFlow().unlink(serverId, target.id);
@@ -348,6 +368,28 @@ export async function handleLinks(
     const result = await service.getLinkFlow().denyPendingLink(serverId, target.id, interaction.user.tag, reason);
     await interaction.editReply({ content: describeReviewOutcome(result.status, target.id) });
     return;
+  }
+}
+
+function describeManualLinkOutcome(
+  result: ManualLinkResult,
+  discordUserId: string
+): string {
+  switch (result.status) {
+    case 'invalid-input':
+      return 'That does not look like a WarEra username, id, or profile URL.';
+    case 'not-found':
+      return 'No WarEra account matched that input.';
+    case 'already-linked-other':
+      return `That WarEra account is already linked to <@${result.discordUserId}>.`;
+    case 'already-pending-other':
+      return `That WarEra account already has a pending link request from <@${result.discordUserId}>.`;
+    case 'target-linked-other':
+      return `<@${discordUserId}> is already linked to a different WarEra account. Unlink them first with \`/autorole links unlink\`.`;
+    case 'already-linked':
+      return `<@${discordUserId}> is already linked to **${result.username}**.`;
+    case 'linked':
+      return `Linked <@${discordUserId}> to **${result.username}** — <https://app.warera.io/user/${result.wareraUserId}>. Verification was skipped.`;
   }
 }
 
@@ -395,6 +437,7 @@ export async function handleConfig(
         `**Sync interval:** ${cfg.checkIntervalSeconds}s (last sync: ${lastSync})\n` +
         `**Review channel:** ${cfg.reviewChannelId ? `<#${cfg.reviewChannelId}>` : 'None'}\n` +
         `**Skip company verification:** ${cfg.skipCompanyVerification ? 'Yes' : 'No'}\n` +
+        `**Welcome message:** ${cfg.welcomeMessage ? `Configured (${cfg.welcomeMessage.length} characters)` : 'None'}\n` +
         `**Sync nicknames:** ${cfg.syncNicknames !== false ? 'Yes' : 'No'}\n` +
         `**Staff roles:** ${formatRoles(cfg.manageRoleIds)}\n` +
         `**Staff users:** ${cfg.manageUserIds.length ? cfg.manageUserIds.map(id => `<@${id}>`).join(', ') : 'None'}\n` +
@@ -424,6 +467,8 @@ export async function handleConfig(
     const update: Partial<AutoroleConfig> = {};
     const reviewChannel = interaction.options.getChannel('review_channel');
     const skipVerification = interaction.options.getBoolean('skip_verification');
+    const welcomeMessage = interaction.options.getString('welcome_message');
+    const clearWelcomeMessage = interaction.options.getBoolean('clear_welcome_message');
     const intervalSeconds = interaction.options.getInteger('interval_seconds');
     const enabled = interaction.options.getBoolean('enabled');
     const syncNicknames = interaction.options.getBoolean('sync_nicknames');
@@ -440,6 +485,11 @@ export async function handleConfig(
     const opsecAutoApply = interaction.options.getBoolean('opsec_auto_apply');
     if (reviewChannel) update.reviewChannelId = reviewChannel.id;
     if (skipVerification !== null) update.skipCompanyVerification = skipVerification;
+    if (clearWelcomeMessage) {
+      update.welcomeMessage = '';
+    } else if (welcomeMessage !== null) {
+      update.welcomeMessage = welcomeMessage;
+    }
     if (intervalSeconds !== null) update.checkIntervalSeconds = intervalSeconds;
     if (enabled !== null) update.enabled = enabled;
     if (syncNicknames !== null) update.syncNicknames = syncNicknames;

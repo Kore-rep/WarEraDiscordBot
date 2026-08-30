@@ -122,6 +122,7 @@ describe('ServerConfigManager autorole config', () => {
       allowedCountryIds: ['c1'],
       reviewChannelId: 'review-chan',
       skipCompanyVerification: true,
+      welcomeMessage: 'Welcome to the server!',
       linkMessages: [{ channelId: 'chan-1', messageId: 'msg-1' }],
       syncNicknames: false,
     });
@@ -151,6 +152,7 @@ describe('ServerConfigManager autorole config', () => {
       allowedCountryIds: ['c1'],
       reviewChannelId: 'review-chan',
       skipCompanyVerification: true,
+      welcomeMessage: 'Welcome to the server!',
       linkMessages: [{ channelId: 'chan-1', messageId: 'msg-1' }],
       syncNicknames: false,
     });
