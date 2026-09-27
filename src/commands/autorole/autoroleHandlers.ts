@@ -83,6 +83,43 @@ export async function handleLevelRole(interaction: ChatInputCommandInteraction):
   });
 }
 
+export async function handlePrestigeRole(interaction: ChatInputCommandInteraction): Promise<void> {
+  const serverId = interaction.guild!.id;
+  const sub = interaction.options.getSubcommand();
+  const cfg = getConfig(interaction);
+
+  if (sub === 'add') {
+    const role = interaction.options.getRole('role', true);
+    const minLevel = interaction.options.getInteger('min_prestige', true);
+    const prestigeRoles = (cfg?.prestigeRoles ?? []).filter(e => e.roleId !== role.id);
+    prestigeRoles.push({ roleId: role.id, minLevel });
+    prestigeRoles.sort((a, b) => a.minLevel - b.minLevel);
+    ServerConfigManager.updateAutoroleConfig(serverId, { prestigeRoles });
+    await interaction.reply({ content: `<@&${role.id}> is now granted at Prestige ${minLevel}+.`, ephemeral: true });
+    return;
+  }
+
+  if (sub === 'remove') {
+    const role = interaction.options.getRole('role', true);
+    const prestigeRoles = (cfg?.prestigeRoles ?? []).filter(e => e.roleId !== role.id);
+    if (prestigeRoles.length === (cfg?.prestigeRoles.length ?? 0)) {
+      await interaction.reply({ content: 'That role is not a configured prestige role.', ephemeral: true });
+      return;
+    }
+    ServerConfigManager.updateAutoroleConfig(serverId, { prestigeRoles });
+    await interaction.reply({ content: `Removed <@&${role.id}> from the prestige roles.`, ephemeral: true });
+    return;
+  }
+
+  const entries = cfg?.prestigeRoles ?? [];
+  await interaction.reply({
+    content: entries.length
+      ? '**Prestige roles**\n' + entries.map(e => `- Prestige ${e.minLevel}+: <@&${e.roleId}>`).join('\n')
+      : 'No prestige roles configured. Add one with `/autorole prestigerole add`.',
+    ephemeral: true,
+  });
+}
+
 // --- timedrole ---
 
 export async function handleTimedRole(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -445,6 +482,7 @@ export async function handleConfig(
         `**Protected roles:** ${formatRoles(cfg.protectedRoleIds)}\n` +
         `**Allowed countries:** ${cfg.allowedCountryIds.map(id => `\`${id}\``).join(', ') || 'None'}\n` +
         `**Level roles:** ${cfg.levelRoles.length}\n` +
+        `**Prestige roles:** ${cfg.prestigeRoles.length} (view with \`/autorole prestigerole list\`)\n` +
         `**Timed roles:** ${cfg.timedRoles.length}\n` +
         `**MU roles:** ${muRoleCount} (manage with \`/mu\`)\n` +
         `**Build roles:** eco ${cfg.ecoRoleId ? `<@&${cfg.ecoRoleId}>` : 'None'} (${cfg.ecoThreshold}%), war ${cfg.warRoleId ? `<@&${cfg.warRoleId}>` : 'None'} (${cfg.warThreshold}%), hybrid ${cfg.hybridRoleId ? `<@&${cfg.hybridRoleId}>` : 'None'}\n` +

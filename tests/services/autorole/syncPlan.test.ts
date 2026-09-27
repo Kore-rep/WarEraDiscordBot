@@ -11,6 +11,7 @@ const baseConfig = (overrides: Partial<AutoroleConfig> = {}): AutoroleConfig => 
     { roleId: 'lvl10', minLevel: 10 },
     { roleId: 'lvl30', minLevel: 30 },
   ],
+  prestigeRoles: [],
   timedRoles: [{ roleId: 'active', timeoutDays: 7 }],
   ecoRoleId: 'eco',
   warRoleId: 'war',
@@ -47,6 +48,56 @@ const ctx = (
 ): MemberSyncContext => ({ cfg, militaryUnits, opsecRevoked, now });
 
 describe('computeMemberSyncPlan', () => {
+  const tiers = [
+    { roleId: 'prestige1', minLevel: 1 },
+    { roleId: 'prestige2', minLevel: 2 },
+  ];
+
+  it('adds the highest Prestige tier alongside the ordinary level role', () => {
+    const plan = computeMemberSyncPlan(
+      baseUser({ level: 35, prestigeLevel: 2 }),
+      ['lvl30', 'prestige1'],
+      null,
+      ctx(baseConfig({ prestigeRoles: tiers }))
+    );
+    expect(plan.rolesToAdd).toContain('prestige2');
+    expect(plan.rolesToRemove).toContain('prestige1');
+    expect(plan.rolesToRemove).not.toContain('lvl30');
+  });
+
+  it('downgrades to P1 and removes P2 while keeping the normal level role', () => {
+    const plan = computeMemberSyncPlan(
+      baseUser({ level: 35, prestigeLevel: 1 }),
+      ['lvl30', 'prestige2'],
+      null,
+      ctx(baseConfig({ prestigeRoles: tiers }))
+    );
+    expect(plan.rolesToAdd).toContain('prestige1');
+    expect(plan.rolesToRemove).toContain('prestige2');
+    expect(plan.rolesToRemove).not.toContain('lvl30');
+  });
+
+  it('removes Prestige roles at P0 while keeping the normal level role', () => {
+    const plan = computeMemberSyncPlan(
+      baseUser({ level: 35, prestigeLevel: 0 }),
+      ['lvl30', 'prestige2'],
+      null,
+      ctx(baseConfig({ prestigeRoles: tiers }))
+    );
+    expect(plan.rolesToRemove).toContain('prestige2');
+    expect(plan.rolesToRemove).not.toContain('lvl30');
+  });
+
+  it('does not revoke Prestige if the API omits prestige level', () => {
+    const plan = computeMemberSyncPlan(
+      baseUser({ level: 35 }),
+      ['lvl30', 'prestige2'],
+      null,
+      ctx(baseConfig({ prestigeRoles: tiers }))
+    );
+    expect(plan.rolesToRemove).not.toContain('prestige2');
+  });
+
   it('adds the level, build and MU roles the member qualifies for', () => {
     const plan = computeMemberSyncPlan(baseUser(), [], null, ctx(baseConfig()));
     expect(plan.rolesToAdd.sort()).toEqual(['lvl10', 'mu-role-1', 'war']);

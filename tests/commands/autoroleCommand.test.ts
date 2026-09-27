@@ -1,9 +1,46 @@
 import { PermissionFlagsBits } from 'discord.js';
 import { autoroleCommand } from '../../src/commands/autorole/autorole';
-import { handleLinks } from '../../src/commands/autorole/autoroleHandlers';
+import { handleLinks, handlePrestigeRole } from '../../src/commands/autorole/autoroleHandlers';
 import { AutoroleService } from '../../src/services/autorole';
+import { ServerConfigManager } from '../../src/utils/serverConfigManager';
 
 describe('/autorole links link', () => {
+  it('registers a separate Prestige ladder without expanding config set options', () => {
+    const command = autoroleCommand.data.toJSON();
+    const group = command.options?.find(option => option.name === 'prestigerole');
+    expect(group && 'options' in group ? group.options?.map(option => option.name) : []).toEqual([
+      'add', 'remove', 'list',
+    ]);
+    const config = command.options?.find(option => option.name === 'config');
+    const set = config && 'options' in config ? config.options?.find(option => option.name === 'set') : undefined;
+    const options = set && 'options' in set ? set.options?.map(option => option.name) ?? [] : [];
+    expect(options.length).toBeLessThanOrEqual(25);
+    expect(options).not.toContain('prestige_role');
+  });
+
+  it('saves a Prestige tier without changing the normal level-role ladder', async () => {
+    const update = jest.spyOn(ServerConfigManager, 'updateAutoroleConfig').mockImplementation(() => undefined);
+    const read = jest.spyOn(ServerConfigManager, 'getAutoroleConfig').mockReturnValue(undefined);
+    const interaction = {
+      guild: { id: 'server-1' },
+      options: {
+        getSubcommand: () => 'add',
+        getRole: () => ({ id: 'prestige2' }),
+        getInteger: () => 2,
+      },
+      reply: jest.fn().mockResolvedValue(undefined),
+    };
+    try {
+      await handlePrestigeRole(interaction as never);
+      expect(update).toHaveBeenCalledWith('server-1', {
+        prestigeRoles: [{ roleId: 'prestige2', minLevel: 2 }],
+      });
+    } finally {
+      update.mockRestore();
+      read.mockRestore();
+    }
+  });
+
   it('is registered under the Manage Roles-gated autorole command', () => {
     const command = autoroleCommand.data.toJSON();
     expect(command.default_member_permissions).toBe(PermissionFlagsBits.ManageRoles.toString());

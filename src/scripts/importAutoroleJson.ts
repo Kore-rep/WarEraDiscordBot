@@ -84,6 +84,7 @@ function buildAutoroleConfig(guild: LegacyGuildData): AutoroleConfig {
       .map(e => ({ roleId: asId(e.role_id) ?? '', minLevel: e.min_level }))
       .filter(e => e.roleId)
       .sort((a, b) => a.minLevel - b.minLevel),
+    prestigeRoles: [],
     timedRoles: (guild.timed_roles ?? [])
       .map(e => ({ roleId: asId(e.role_id) ?? '', timeoutDays: e.timeout_days }))
       .filter(e => e.roleId),

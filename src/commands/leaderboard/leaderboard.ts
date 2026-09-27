@@ -38,7 +38,7 @@ export const leaderboardCommand: Command = {
             .addStringOption(option =>
               option
                 .setName('brackets')
-                .setDescription('Level brackets, e.g. 20-29,30-39,40+ (default: 20-29,30-39,40+)')
+                .setDescription('Level brackets (default: 0-19,20-29,30-39,40-44,45+)')
                 .setRequired(false)
             )
             .addChannelOption(option =>
@@ -217,7 +217,8 @@ async function handleConfigSet(
   message += `**Channel:** <#${newChannelId}>\n`;
   message += `**Military units:** ${militaryUnitCount} configured (manage with \`/mu\`)\n`;
   message += `**Top count:** ${topCount}\n`;
-  message += `**Level brackets:** ${bracketLabels}\n`;
+  message += `**Level brackets:** ${bracketLabels} (non-prestiged)\n`;
+  message += '**Prestige:** Separate weekly board for P1+\n';
   message += `**Status:** ${existing?.enabled === false ? 'Disabled (use /leaderboard enable)' : 'Enabled'}`;
 
   if (channelChanged) {
@@ -253,7 +254,8 @@ async function handleConfigView(interaction: ChatInputCommandInteraction): Promi
       `**Channel:** <#${config.channelId}>\n` +
       `**Military units:** ${muList}\n` +
       `**Top count:** ${config.topCount}\n` +
-      `**Level brackets:** ${bracketLabels}\n` +
+      `**Level brackets:** ${bracketLabels} (non-prestiged)\n` +
+      '**Prestige:** Separate weekly board for P1+\n' +
       `**Status:** ${status}\n` +
       `**Last updated:** ${lastUpdated}`,
     ephemeral: true,

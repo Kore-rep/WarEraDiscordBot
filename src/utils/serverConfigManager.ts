@@ -1,4 +1,5 @@
 import {
+  DEFAULT_LEVEL_BRACKETS,
   ServerConfig,
   BountyBattlesConfig,
   TrackedUser,
@@ -9,6 +10,7 @@ import {
   ProxyUser,
   TrackedProxyCountry,
   LeaderboardConfig,
+  LevelBracket,
   MuDirectoryConfig,
   AutoroleConfig,
   MilitaryUnitEntry,
@@ -22,6 +24,20 @@ function encode(value: unknown): string | null {
 
 function decode<T>(value: string | null): T | undefined {
   return value == null ? undefined : (JSON.parse(value) as T);
+}
+
+function normalizeLegacyLevelBrackets(brackets: LevelBracket[]): LevelBracket[] {
+  if (brackets.length === 3 && brackets[0].minLevel === 20 && brackets[0].maxLevel === 29 &&
+      brackets[1].minLevel === 30 && brackets[1].maxLevel === 39 &&
+      brackets[2].minLevel === 40 && brackets[2].maxLevel === undefined) {
+    return DEFAULT_LEVEL_BRACKETS.map(b => ({ ...b }));
+  }
+  const has45Plus = brackets.some(b => b.minLevel === 45 && b.maxLevel === undefined);
+  return brackets.map(b =>
+    has45Plus && b.minLevel === 40 && b.maxLevel === 45
+      ? { minLevel: 40, maxLevel: 44, label: '40-44' }
+      : { ...b }
+  );
 }
 
 /**
@@ -111,6 +127,10 @@ export class ServerConfigManager {
     validateSpectreMonitors(serverConfig.spectre?.buildingMonitors, 'buildingMonitors');
     validateSpectreMonitors(serverConfig.spectre?.resistanceMonitors, 'resistanceMonitors');
 
+    const autorole = serverConfig.autorole as (AutoroleConfig & { prestigeRoleId?: string }) | undefined;
+    const prestigeRoles = autorole?.prestigeRoles ??
+      (autorole?.prestigeRoleId ? [{ roleId: autorole.prestigeRoleId, minLevel: 1 }] : []);
+
     return {
       bountyBattles: serverConfig.bountyBattles ? {
         channelId: serverConfig.bountyBattles.channelId,
@@ -164,7 +184,7 @@ export class ServerConfigManager {
         countryIds: serverConfig.leaderboard.countryIds || [],
         countryNames: serverConfig.leaderboard.countryNames || [],
         topCount: serverConfig.leaderboard.topCount ?? 10,
-        levelBrackets: (serverConfig.leaderboard.levelBrackets || []).map(b => ({ ...b })),
+        levelBrackets: normalizeLegacyLevelBrackets(serverConfig.leaderboard.levelBrackets || []),
         lastSnapshot: serverConfig.leaderboard.lastSnapshot,
         lastUpdated: serverConfig.leaderboard.lastUpdated,
       } : undefined,
@@ -180,6 +200,7 @@ export class ServerConfigManager {
         checkIntervalSeconds: Math.max(60, serverConfig.autorole.checkIntervalSeconds ?? 3600),
         lastSyncAt: serverConfig.autorole.lastSyncAt,
         levelRoles: (serverConfig.autorole.levelRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
+        prestigeRoles: prestigeRoles.filter(e => e.roleId && e.roleId.trim().length > 0),
         timedRoles: (serverConfig.autorole.timedRoles || []).filter(e => e.roleId && e.roleId.trim().length > 0),
         ecoRoleId: serverConfig.autorole.ecoRoleId,
         warRoleId: serverConfig.autorole.warRoleId,
@@ -451,6 +472,7 @@ export class ServerConfigManager {
       autorole: config.autorole ? {
         ...config.autorole,
         levelRoles: config.autorole.levelRoles.map(e => ({ ...e })),
+        prestigeRoles: config.autorole.prestigeRoles.map(e => ({ ...e })),
         timedRoles: config.autorole.timedRoles.map(e => ({ ...e })),
         manageRoleIds: [...config.autorole.manageRoleIds],
         manageUserIds: [...config.autorole.manageUserIds],
@@ -1278,7 +1300,7 @@ export class ServerConfigManager {
         countryIds: config.countryIds !== undefined ? config.countryIds : existingLeaderboard.countryIds,
         countryNames: config.countryNames !== undefined ? config.countryNames : existingLeaderboard.countryNames,
         topCount: config.topCount !== undefined ? config.topCount : existingLeaderboard.topCount,
-        levelBrackets: config.levelBrackets !== undefined ? config.levelBrackets : existingLeaderboard.levelBrackets,
+        levelBrackets: normalizeLegacyLevelBrackets(config.levelBrackets !== undefined ? config.levelBrackets : existingLeaderboard.levelBrackets),
         enabled: config.enabled !== undefined ? config.enabled : existingLeaderboard.enabled,
         messageId: config.messageId !== undefined ? config.messageId : existingLeaderboard.messageId,
         lastSnapshot: config.lastSnapshot !== undefined ? config.lastSnapshot : existingLeaderboard.lastSnapshot,
@@ -1354,6 +1376,7 @@ export class ServerConfigManager {
       enabled: true,
       checkIntervalSeconds: 3600,
       levelRoles: [],
+      prestigeRoles: [],
       timedRoles: [],
       ecoThreshold: 60,
       warThreshold: 60,
@@ -1385,6 +1408,7 @@ export class ServerConfigManager {
         checkIntervalSeconds: Math.max(60, config.checkIntervalSeconds !== undefined ? config.checkIntervalSeconds : existing.checkIntervalSeconds),
         lastSyncAt: config.lastSyncAt !== undefined ? config.lastSyncAt : existing.lastSyncAt,
         levelRoles: config.levelRoles !== undefined ? config.levelRoles : existing.levelRoles,
+        prestigeRoles: config.prestigeRoles !== undefined ? config.prestigeRoles : existing.prestigeRoles,
         timedRoles: config.timedRoles !== undefined ? config.timedRoles : existing.timedRoles,
         ecoRoleId: config.ecoRoleId !== undefined ? config.ecoRoleId : existing.ecoRoleId,
         warRoleId: config.warRoleId !== undefined ? config.warRoleId : existing.warRoleId,

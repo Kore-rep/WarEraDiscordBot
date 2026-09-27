@@ -12,6 +12,7 @@ import {
   handleLinkMessage,
   handleLinks,
   handleOpsec,
+  handlePrestigeRole,
   handleSync,
   handleTimedRole,
 } from './autoroleHandlers';
@@ -42,6 +43,27 @@ export const autoroleCommand: Command = {
             .addRoleOption(opt => opt.setName('role').setDescription('Role to remove').setRequired(true))
         )
         .addSubcommand(sub => sub.setName('list').setDescription('List configured level roles'))
+    )
+    .addSubcommandGroup(group =>
+      group
+        .setName('prestigerole')
+        .setDescription('Roles granted by WarEra prestige level')
+        .addSubcommand(sub =>
+          sub
+            .setName('add')
+            .setDescription('Add or update a prestige role')
+            .addRoleOption(opt => opt.setName('role').setDescription('Role to grant').setRequired(true))
+            .addIntegerOption(opt =>
+              opt.setName('min_prestige').setDescription('Minimum prestige level').setRequired(true).setMinValue(1)
+            )
+        )
+        .addSubcommand(sub =>
+          sub
+            .setName('remove')
+            .setDescription('Remove a prestige role')
+            .addRoleOption(opt => opt.setName('role').setDescription('Role to remove').setRequired(true))
+        )
+        .addSubcommand(sub => sub.setName('list').setDescription('List configured prestige roles'))
     )
     .addSubcommandGroup(group =>
       group
@@ -330,6 +352,7 @@ export const autoroleCommand: Command = {
             .setRequired(false)
             .addChoices(
               { name: 'levelrole', value: 'levelrole' },
+              { name: 'prestigerole', value: 'prestigerole' },
               { name: 'timedrole', value: 'timedrole' },
               { name: 'buildrole', value: 'buildrole' },
               { name: 'opsec', value: 'opsec' },
@@ -395,6 +418,9 @@ export const autoroleCommand: Command = {
       switch (group) {
         case 'levelrole':
           await handleLevelRole(interaction);
+          return;
+        case 'prestigerole':
+          await handlePrestigeRole(interaction);
           return;
         case 'timedrole':
           await handleTimedRole(interaction);

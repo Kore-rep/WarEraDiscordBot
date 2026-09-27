@@ -50,15 +50,15 @@ describe('weeklyDamageSnapshotStore', () => {
   describe('buildUserWeeklyDamageCsv', () => {
     it('sorts entries by rank and escapes usernames', () => {
       const csv = buildUserWeeklyDamageCsv([
-        { id: 'u1', name: 'Alpha', value: 100, level: 25, countryCode: 'US' },
-        { id: 'u2', name: 'Beta, Jr.', value: 50, level: 30, countryCode: 'CA' },
+        { id: 'u1', name: 'Alpha', value: 100, level: 25, prestigeLevel: 0, countryCode: 'US' },
+        { id: 'u2', name: 'Beta, Jr.', value: 50, level: 30, prestigeLevel: 1, countryCode: 'CA' },
       ]);
 
       expect(csv).toBe(
         [
-          'rank,user_id,username,level,country_code,weekly_damage',
-          '1,u1,Alpha,25,US,100',
-          '2,u2,"Beta, Jr.",30,CA,50',
+          'rank,user_id,username,level,country_code,weekly_damage,prestige_level',
+          '1,u1,Alpha,25,US,100,0',
+          '2,u2,"Beta, Jr.",30,CA,50,1',
         ].join('\n')
       );
     });

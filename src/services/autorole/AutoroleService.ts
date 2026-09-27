@@ -148,7 +148,7 @@ export class AutoroleService implements ScheduledTask {
    */
   async onUnlinked(serverId: string, discordUserId: string): Promise<void> {
     const cfg = ServerConfigManager.getAutoroleConfig(serverId);
-    if (!cfg || (!cfg.unlinkedRoleId && !cfg.linkedRoleId && !cfg.opsecRoleId)) {
+    if (!cfg || (!cfg.unlinkedRoleId && !cfg.linkedRoleId && !cfg.opsecRoleId && !cfg.prestigeRoles.length)) {
       return;
     }
     const guild = await this.fetchGuild(serverId);
@@ -165,6 +165,9 @@ export class AutoroleService implements ScheduledTask {
     // An unlinked member has lost linked status, so OPSEC (restricted access) goes too.
     if (cfg.opsecRoleId) {
       await this.removeRole(member, cfg.opsecRoleId, 'opsec (unlink)');
+    }
+    for (const entry of cfg.prestigeRoles) {
+      await this.removeRole(member, entry.roleId, 'prestige (unlink)');
     }
   }
 
@@ -361,6 +364,7 @@ export function toSyncUserView(user: AutoroleUser): SyncUserView {
   return {
     username: user.username,
     level: user.leveling?.level ?? 0,
+    prestigeLevel: user.leveling?.prestigeLevel,
     muId: user.mu || undefined,
     skills: (user.skills ?? {}) as SkillLevels,
     lastConnectionAt: lastConnection && !isNaN(lastConnection.getTime()) ? lastConnection : undefined,

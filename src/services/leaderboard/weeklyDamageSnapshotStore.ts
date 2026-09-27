@@ -67,7 +67,7 @@ function escapeCsvField(value: string): string {
 }
 
 export function buildUserWeeklyDamageCsv(entries: LeaderboardRankEntry[]): string {
-  const lines = ['rank,user_id,username,level,country_code,weekly_damage'];
+  const lines = ['rank,user_id,username,level,country_code,weekly_damage,prestige_level'];
 
   entries.forEach((entry, index) => {
     const rank = index + 1;
@@ -81,6 +81,7 @@ export function buildUserWeeklyDamageCsv(entries: LeaderboardRankEntry[]): strin
         level,
         escapeCsvField(countryCode),
         entry.value,
+        entry.prestigeLevel ?? 0,
       ].join(',')
     );
   });

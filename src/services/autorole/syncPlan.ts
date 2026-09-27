@@ -9,6 +9,7 @@ import { isInactive } from '../userTracking/inactivity';
 export interface SyncUserView {
   username: string;
   level: number;
+  prestigeLevel?: number;
   muId?: string;
   skills: SkillLevels;
   lastConnectionAt?: Date;
@@ -64,6 +65,11 @@ export function computeMemberSyncPlan(
     managed.add(entry.roleId);
   }
   targets.push(getBestRoleForLevel(cfg.levelRoles, user.level));
+
+  if (user.prestigeLevel !== undefined) {
+    for (const entry of cfg.prestigeRoles) managed.add(entry.roleId);
+    targets.push(getBestRoleForLevel(cfg.prestigeRoles, user.prestigeLevel));
+  }
 
   for (const roleId of [cfg.ecoRoleId, cfg.warRoleId, cfg.hybridRoleId]) {
     if (roleId) {

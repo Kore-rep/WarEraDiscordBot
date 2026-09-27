@@ -163,7 +163,7 @@ export interface SpectreConfig {
  */
 export interface LevelBracket {
   minLevel: number;
-  maxLevel?: number; // omit = no upper bound (40+)
+  maxLevel?: number; // omit = no upper bound (45+)
   label: string;
 }
 
@@ -176,6 +176,7 @@ export interface LeaderboardRankEntry {
   value: number;
   countryCode?: string;
   level?: number;
+  prestigeLevel?: number;
 }
 
 /**
@@ -205,9 +206,11 @@ export interface LeaderboardConfig {
 }
 
 export const DEFAULT_LEVEL_BRACKETS: LevelBracket[] = [
+  { minLevel: 0, maxLevel: 19, label: '0-19' },
   { minLevel: 20, maxLevel: 29, label: '20-29' },
   { minLevel: 30, maxLevel: 39, label: '30-39' },
-  { minLevel: 40, label: '40+' },
+  { minLevel: 40, maxLevel: 44, label: '40-44' },
+  { minLevel: 45, label: '45+' },
 ];
 
 /**
@@ -266,6 +269,7 @@ export interface AutoroleConfig {
   checkIntervalSeconds: number; // per-server sync cadence (default 3600, floor 60)
   lastSyncAt?: string; // ISO timestamp of the last completed sync
   levelRoles: LevelRoleEntry[];
+  prestigeRoles: LevelRoleEntry[]; // separate ladder keyed by prestige level
   timedRoles: TimedRoleEntry[];
   ecoRoleId?: string;
   warRoleId?: string;

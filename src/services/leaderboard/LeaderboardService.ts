@@ -10,6 +10,7 @@ import {
 } from '../../config/config';
 import {
   buildLeaderboardPayload,
+  PRESTIGE_BRACKET_LABEL,
   userMatchesBracket,
 } from './leaderboardFormatter';
 import {
@@ -44,7 +45,8 @@ function rankEntries<T>(
   getName: (item: T) => string,
   limit?: number,
   getCountryCode?: (item: T) => string | undefined,
-  getLevel?: (item: T) => number | undefined
+  getLevel?: (item: T) => number | undefined,
+  getPrestigeLevel?: (item: T) => number
 ): LeaderboardRankEntry[] {
   const sorted = [...items].sort((a, b) => getValue(b) - getValue(a));
   const selected = limit !== undefined ? sorted.slice(0, limit) : sorted;
@@ -55,6 +57,7 @@ function rankEntries<T>(
     value: getValue(item),
     ...(getCountryCode ? { countryCode: getCountryCode(item) } : {}),
     ...(getLevel ? { level: getLevel(item) } : {}),
+    ...(getPrestigeLevel ? { prestigeLevel: getPrestigeLevel(item) } : {}),
   }));
 }
 
@@ -65,9 +68,10 @@ function topEntries<T>(
   getName: (item: T) => string,
   limit: number,
   getCountryCode?: (item: T) => string | undefined,
-  getLevel?: (item: T) => number | undefined
+  getLevel?: (item: T) => number | undefined,
+  getPrestigeLevel?: (item: T) => number
 ): LeaderboardRankEntry[] {
-  return rankEntries(items, getValue, getId, getName, limit, getCountryCode, getLevel);
+  return rankEntries(items, getValue, getId, getName, limit, getCountryCode, getLevel, getPrestigeLevel);
 }
 
 /**
@@ -132,11 +136,12 @@ export class LeaderboardService implements ScheduledTask {
       const getUserCountryCode = (user: UserDTO) => countryCodes.get(user.country);
 
       const getUserLevel = (user: UserDTO) => user.leveling?.level;
+      const getUserPrestigeLevel = (user: UserDTO) => user.leveling?.prestigeLevel ?? 0;
 
       const playerWeeklyByBracket: Record<string, LeaderboardRankEntry[]> = {};
       for (const bracket of config.levelBrackets) {
         const bracketUsers = users.filter(user =>
-          userMatchesBracket(user.leveling?.level ?? 0, bracket)
+          userMatchesBracket(user.leveling?.level ?? 0, bracket, getUserPrestigeLevel(user))
         );
         playerWeeklyByBracket[bracket.label] = topEntries(
           bracketUsers,
@@ -145,9 +150,21 @@ export class LeaderboardService implements ScheduledTask {
           user => user.username,
           config.topCount,
           getUserCountryCode,
-          getUserLevel
+          getUserLevel,
+          getUserPrestigeLevel
         );
       }
+
+      playerWeeklyByBracket[PRESTIGE_BRACKET_LABEL] = topEntries(
+        users.filter(user => getUserPrestigeLevel(user) > 0),
+        user => rankingValue(user.rankings?.weeklyUserDamages),
+        user => user._id,
+        user => user.username,
+        config.topCount,
+        getUserCountryCode,
+        getUserLevel,
+        getUserPrestigeLevel
+      );
 
       const playerTotal = topEntries(
         users,
@@ -156,7 +173,8 @@ export class LeaderboardService implements ScheduledTask {
         user => user.username,
         config.topCount,
         getUserCountryCode,
-        getUserLevel
+        getUserLevel,
+        getUserPrestigeLevel
       );
 
       const muWeekly = topEntries(
@@ -216,7 +234,8 @@ export class LeaderboardService implements ScheduledTask {
         user => user.username,
         undefined,
         getUserCountryCode,
-        getUserLevel
+        getUserLevel,
+        getUserPrestigeLevel
       );
       const weeklyMuEntries = rankEntries(
         muEntries,

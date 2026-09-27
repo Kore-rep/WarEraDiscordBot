@@ -9,6 +9,7 @@ import { countryCodeToFlagEmoji } from '../../utils/countryFlag';
 const COLOR_WEEKLY = 0x3498db;
 const COLOR_PLAYER_TOTAL = 0xf1c40f;
 const COLOR_MU = 0xe74c3c;
+export const PRESTIGE_BRACKET_LABEL = 'Prestige';
 
 export interface LeaderboardDisplayData {
   playerWeeklyByBracket: Record<string, LeaderboardRankEntry[]>;
@@ -74,24 +75,27 @@ function formatEntryLine(
   entry: LeaderboardRankEntry,
   rank: number,
   previousList: LeaderboardRankEntry[] | undefined,
-  options?: { showLevel?: boolean }
+  options?: { showLevel?: boolean; showPrestige?: boolean }
 ): string {
   const prefix = rankPrefix(rank);
   const delta = formatRankDelta(entry.id, rank, previousList);
+  const prestigePart = options?.showPrestige && entry.prestigeLevel
+    ? `P${entry.prestigeLevel} · `
+    : '';
   const levelPart = options?.showLevel ? `Lv ${entry.level ?? '?'} · ` : '';
   const name = options?.showLevel
     ? formatPlayerName(entry, rank)
     : rank === 1
       ? `**${entry.name}**`
       : entry.name;
-  return `${prefix} ${levelPart}${name} — ${formatDamage(entry.value)} dmg · ${delta}`;
+  return `${prefix} ${prestigePart}${levelPart}${name} — ${formatDamage(entry.value)} dmg · ${delta}`;
 }
 
 function buildRankedDescription(
   entries: LeaderboardRankEntry[],
   previousList: LeaderboardRankEntry[] | undefined,
   emptyMessage: string,
-  options?: { showLevel?: boolean }
+  options?: { showLevel?: boolean; showPrestige?: boolean }
 ): string {
   if (entries.length === 0) {
     return emptyMessage;
@@ -145,12 +149,26 @@ export function buildLeaderboardPayload(data: LeaderboardDisplayData): {
 
   embeds.push(
     createEmbed(
-      '👑 Player Total Damage',
+      '⚔️ Weekly Player Damage · Prestige',
+      buildRankedDescription(
+        data.playerWeeklyByBracket[PRESTIGE_BRACKET_LABEL] || [],
+        snapshot?.playerWeeklyByBracket[PRESTIGE_BRACKET_LABEL],
+        '_No prestiged players in the configured military units._',
+        { showLevel: true, showPrestige: true }
+      ),
+      COLOR_WEEKLY,
+      data.topCount
+    )
+  );
+
+  embeds.push(
+    createEmbed(
+      '👑 Overall Player Total Damage',
       buildRankedDescription(
         data.playerTotal,
         snapshot?.playerTotal,
         '_No player data available._',
-        { showLevel: true }
+        { showLevel: true, showPrestige: true }
       ),
       COLOR_PLAYER_TOTAL,
       data.topCount
@@ -197,7 +215,7 @@ export function parseLevelBrackets(input: string): LevelBracket[] {
   for (const part of parts) {
     if (part.endsWith('+')) {
       const minLevel = parseInt(part.slice(0, -1), 10);
-      if (isNaN(minLevel)) {
+      if (!/^\d+\+$/.test(part) || isNaN(minLevel)) {
         throw new Error(`Invalid bracket: ${part}`);
       }
       brackets.push({ minLevel, label: part });
@@ -218,10 +236,23 @@ export function parseLevelBrackets(input: string): LevelBracket[] {
     brackets.push({ minLevel, maxLevel, label: part.replace(/\s/g, '') });
   }
 
+  for (let i = 0; i < brackets.length; i++) {
+    for (let j = i + 1; j < brackets.length; j++) {
+      const a = brackets[i];
+      const b = brackets[j];
+      if (a.minLevel <= (b.maxLevel ?? Infinity) && b.minLevel <= (a.maxLevel ?? Infinity)) {
+        throw new Error(`Level brackets overlap: ${a.label} and ${b.label}.`);
+      }
+    }
+  }
+
   return brackets;
 }
 
-export function userMatchesBracket(level: number, bracket: LevelBracket): boolean {
+export function userMatchesBracket(level: number, bracket: LevelBracket, prestigeLevel = 0): boolean {
+  if (prestigeLevel > 0) {
+    return false;
+  }
   if (level < bracket.minLevel) {
     return false;
   }

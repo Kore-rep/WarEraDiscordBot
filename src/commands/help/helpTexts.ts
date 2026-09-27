@@ -73,9 +73,9 @@ export const COMMAND_HELP: Record<string, string> = {
   leaderboard: [
     '# /leaderboard — hourly damage leaderboards',
     '',
-    'Maintains a living leaderboard message (edited in place every hour) showing player and military-unit damage rankings for the configured countries/MUs: all-time and weekly, with players split into level brackets. Weekly standings are also snapshotted to CSV at the end of each week.',
+    'Maintains a living leaderboard message (edited in place every hour) showing player and military-unit damage rankings for the configured MUs: overall total damage and weekly damage. Weekly player boards split non-prestiged players into level brackets and rank P1+ players together on a separate Prestige board. Weekly standings are also snapshotted to CSV.',
     '',
-    '- `config set [mus] [topcount] [brackets] [channel]` — what to rank and where; `brackets` like `20-29,30-39,40+`',
+    '- `config set [mus] [topcount] [brackets] [channel]` — what to rank and where; `brackets` like `0-19,20-29,30-39,40-44,45+`',
     '- `config view` — current settings',
     '- `enable` / `disable` — pause or resume hourly updates',
     '- `refresh` — update the leaderboard now',

@@ -16,6 +16,7 @@ export const AUTOROLE_GUIDE = [
   '',
   '**What sync does** (per linked member, every `interval_seconds`)',
   '- Grants the highest level role they qualify for (`levelrole`)',
+  '- Grants the highest qualifying Prestige role alongside the normal level role (`prestigerole`)',
   '- Grants an eco/war/hybrid build role from their skill spread (`buildrole`)',
   '- Grants the role mapped to their military unit (map MUs to roles with `/mu role`)',
   '- Grants the OPSEC (restricted-access) role once they reach its level, and removes it on inactivity (`opsec`)',
@@ -26,11 +27,11 @@ export const AUTOROLE_GUIDE = [
   '**Quick setup**',
   '1. `/autorole country add id:<countryId>` — who may link without review',
   '2. `/autorole config set review_channel:#channel` — where review requests go',
-  '3. `/autorole levelrole add`, `/autorole buildrole set`, `/mu role` — the roles to manage',
+  '3. `/autorole levelrole add`, `/autorole prestigerole add`, `/autorole buildrole set`, `/mu role` — the roles to manage',
   '4. `/autorole linkmessage post` — a permanent Link button for members',
   '5. `/autorole sync now` — first sync; `/autorole sync status` to check on it',
   '',
-  '**Topics:** run `/autorole help topic:<name>` for details on: levelrole, timedrole, buildrole, opsec, country, links, config, sync, linkmessage.',
+  '**Topics:** run `/autorole help topic:<name>` for details on: levelrole, prestigerole, timedrole, buildrole, opsec, country, links, config, sync, linkmessage.',
 ].join('\n');
 
 export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
@@ -44,6 +45,18 @@ export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
     '- `list` — show all entries',
     '',
     'Example ladder: Private @ 2, Lieutenant @ 5, Captain @ 10 — a level 7 member gets Lieutenant only.',
+  ].join('\n'),
+
+  prestigerole: [
+    '## /autorole prestigerole — roles granted by WarEra prestige level',
+    '',
+    'A linked member keeps their normal level role and receives the Prestige role with the highest `min_prestige` they qualify for. Other configured Prestige roles are removed on sync (protected roles excepted). P0 gets no Prestige role. If the API omits the Prestige value, existing Prestige roles are left alone until it is known.',
+    '',
+    '- `add role:<role> min_prestige:<n>` — add or update a Prestige tier (minimum 1)',
+    '- `remove role:<role>` — delete a tier',
+    '- `list` — show the Prestige ladder',
+    '',
+    'Example: P1 and P2 tiers give a P2 member the P2 role plus their normal level role, but not the P1 role. The bot role must be above each Prestige role in Discord.',
   ].join('\n'),
 
   timedrole: [
