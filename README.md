@@ -21,12 +21,14 @@ A TypeScript Discord bot that performs periodic API requests using the WarEra SD
 
 ## Prerequisites
 
-- Node.js 18+ 
+- Node.js 24+
 - npm or yarn
 - Discord Bot Token (from [Discord Developer Portal](https://discord.com/developers/applications))
 - `git` on your PATH (npm needs it to fetch the WarEra SDK git dependency)
 
 ## Setup Instructions
+
+For optional encrypted SQLite backups to Cloudflare R2, see [Backup setup and recovery](docs/BACKUPS.md).
 
 ### 1. Install Dependencies
 
@@ -644,4 +646,3 @@ The bot includes error handling for:
 ## License
 
 MIT
-

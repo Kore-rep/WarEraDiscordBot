@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { ServerConfigManager } from '../utils/serverConfigManager';
+import { BackupConfig, loadBackupConfig } from '../services/backup/backupConfig';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -316,6 +317,7 @@ export interface ServerConfig {
  * Configuration interface for the bot
  */
 export interface BotConfig {
+  backup?: BackupConfig;
   discord: {
     token: string;
     servers: Map<string, ServerConfig>; // serverId -> ServerConfig
@@ -351,6 +353,8 @@ export async function loadConfig(): Promise<BotConfig> {
     throw new Error('POLLING_INTERVAL_MINUTES must be a positive number');
   }
 
+  const backup = loadBackupConfig();
+
   // Initialize ServerConfigManager cache from the database - the single source of truth
   await ServerConfigManager.loadConfigs();
 
@@ -358,6 +362,7 @@ export async function loadConfig(): Promise<BotConfig> {
   const servers = ServerConfigManager.readServerConfigs();
 
   return {
+    backup,
     discord: {
       token: discordToken,
       servers: servers,

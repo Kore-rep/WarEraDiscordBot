@@ -1,5 +1,5 @@
 # Use Node.js LTS version
-FROM node:18-alpine
+FROM node:24-alpine
 # openssl: required by Prisma. git: required by npm to fetch the warera-sdk git dependency.
 RUN apk add --no-cache openssl git
 # Set working directory
@@ -45,4 +45,3 @@ EXPOSE 3000
 
 # Apply pending migrations, then start the bot (see the "start" script)
 CMD ["npm", "start"]
-

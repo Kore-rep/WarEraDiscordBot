@@ -18,6 +18,9 @@ import { SpectreService } from '../services/spectre/SpectreService';
 import { CommandHandler } from '../commands';
 import { ServerConfigManager } from '../utils/serverConfigManager';
 import { prisma } from '../persistence/prisma';
+import { snapshotDatabase } from '../persistence/databaseBackup';
+import { BackupService } from '../services/backup/BackupService';
+import { R2BackupStore } from '../services/backup/R2BackupStore';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -37,6 +40,7 @@ export class Bot {
   private muDirectoryService: MuDirectoryService;
   private autoroleService: AutoroleService;
   private scheduler: SchedulerService;
+  private backupService?: BackupService;
   private commandHandler: CommandHandler;
   private isRunning = false;
 
@@ -67,6 +71,12 @@ export class Bot {
     this.leaderboardService = new LeaderboardService(this.discordService, this.apiService);
     this.muDirectoryService = new MuDirectoryService(this.discordService, this.apiService);
     this.autoroleService = new AutoroleService(this.client, this.discordService, this.apiService);
+    if (config.backup) {
+      this.backupService = new BackupService(config.backup, new R2BackupStore(config.backup), async (destination) => {
+        await ServerConfigManager.flush();
+        await snapshotDatabase(prisma, destination);
+      });
+    }
 
     // Set services on ApiService to avoid circular dependency
     this.apiService.setProxyTrackingService(this.proxyTrackingService);
@@ -91,6 +101,7 @@ export class Bot {
       this.leaderboardService,
       this.muDirectoryService,
       this.autoroleService,
+      ...(this.backupService ? [this.backupService] : []),
     ]);
 
 
@@ -188,6 +199,7 @@ export class Bot {
 
     // Stop all periodic tasks
     this.scheduler.stop();
+    await this.backupService?.stop();
 
     // Flush any pending config writes and close the database connection
     await ServerConfigManager.flush();
@@ -221,4 +233,3 @@ export class Bot {
     return this.discordService;
   }
 }
-

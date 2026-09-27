@@ -21,6 +21,9 @@ data/*.db
 data/*.db-journal
 data/*.db-shm
 data/*.db-wal
+data/*.db.gz.enc
+backups/
+secrets/
 
 # Legacy JSON/CSV persistence (migrated into SQLite; kept out of git)
 battles.json
@@ -45,4 +48,3 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
-

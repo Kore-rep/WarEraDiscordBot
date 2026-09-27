@@ -2,6 +2,9 @@ node_modules
 dist
 .env
 .env.local
+secrets
+backups
+data
 .git
 .gitignore
 README.md

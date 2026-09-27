@@ -16,7 +16,9 @@
     "db:migrate": "prisma migrate deploy",
     "db:import": "ts-node src/scripts/importJsonToSqlite.ts",
     "db:import-autorole": "ts-node src/scripts/importAutoroleJson.ts",
-    "db:merge-mu": "ts-node src/scripts/mergeMilitaryUnits.ts"
+    "db:merge-mu": "ts-node src/scripts/mergeMilitaryUnits.ts",
+    "backup": "node dist/scripts/backup.js",
+    "backup:keygen": "node -e \"console.log(require('node:crypto').randomBytes(32).toString('base64'))\""
   },
   "keywords": [
     "discord",
@@ -27,9 +29,10 @@
   "author": "",
   "license": "MIT",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
     "@prisma/client": "^5.22.0",
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.1",
