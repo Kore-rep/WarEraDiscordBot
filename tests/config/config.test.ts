@@ -17,6 +17,8 @@ describe('Config', () => {
 
   beforeEach(async () => {
     process.env = { ...originalEnv };
+    // Config tests must not depend on local backup credentials or mounted secrets.
+    process.env.BACKUP_ENABLED = 'false';
     ServerConfigManager.clearCache();
     await clearTables();
   });
@@ -82,6 +84,34 @@ describe('Config', () => {
       process.env.POLLING_INTERVAL_MINUTES = 'invalid';
 
       await expect(loadConfig()).rejects.toThrow('POLLING_INTERVAL_MINUTES must be a positive number');
+    });
+
+    it('loads the optional Kuma push URL', async () => {
+      process.env.DISCORD_TOKEN = 'test-token';
+      process.env.POLLING_INTERVAL_MINUTES = '5';
+      process.env.KUMA_PUSH_URL = 'http://kuma.test:3001/api/push/test-token?status=up&msg=OK&ping=';
+
+      expect((await loadConfig()).kumaPushUrl).toBe(process.env.KUMA_PUSH_URL);
+    });
+
+    it.each([undefined, '', '   '])('disables Kuma when its URL is absent or blank (%s)', async (value) => {
+      process.env.DISCORD_TOKEN = 'test-token';
+      process.env.POLLING_INTERVAL_MINUTES = '5';
+      if (value === undefined) {
+        delete process.env.KUMA_PUSH_URL;
+      } else {
+        process.env.KUMA_PUSH_URL = value;
+      }
+
+      expect((await loadConfig()).kumaPushUrl).toBeUndefined();
+    });
+
+    it.each(['invalid', 'ftp://kuma.test/api/push/test-token'])('rejects invalid Kuma URLs (%s)', async (url) => {
+      process.env.DISCORD_TOKEN = 'test-token';
+      process.env.POLLING_INTERVAL_MINUTES = '5';
+      process.env.KUMA_PUSH_URL = url;
+
+      await expect(loadConfig()).rejects.toThrow('KUMA_PUSH_URL must be a valid HTTP or HTTPS URL');
     });
 
     it('should handle servers with no role IDs', async () => {

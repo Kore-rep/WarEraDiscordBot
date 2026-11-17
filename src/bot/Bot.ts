@@ -21,6 +21,7 @@ import { prisma } from '../persistence/prisma';
 import { snapshotDatabase } from '../persistence/databaseBackup';
 import { BackupService } from '../services/backup/BackupService';
 import { R2BackupStore } from '../services/backup/R2BackupStore';
+import { KumaPushTask } from '../services/scheduler/tasks/KumaPushTask';
 
 /**
  * Main bot class that handles Discord connection and basic setup
@@ -101,6 +102,7 @@ export class Bot {
       this.leaderboardService,
       this.muDirectoryService,
       this.autoroleService,
+      ...(config.kumaPushUrl ? [new KumaPushTask(config.kumaPushUrl, () => this.client.isReady())] : []),
       ...(this.backupService ? [this.backupService] : []),
     ]);
 

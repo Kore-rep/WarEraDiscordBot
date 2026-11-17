@@ -322,6 +322,7 @@ export interface ServerConfig {
  */
 export interface BotConfig {
   backup?: BackupConfig;
+  kumaPushUrl?: string;
   discord: {
     token: string;
     servers: Map<string, ServerConfig>; // serverId -> ServerConfig
@@ -358,6 +359,17 @@ export async function loadConfig(): Promise<BotConfig> {
   }
 
   const backup = loadBackupConfig();
+  const kumaPushUrl = process.env.KUMA_PUSH_URL?.trim() || undefined;
+  if (kumaPushUrl) {
+    try {
+      const url = new URL(kumaPushUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('Unsupported protocol');
+      }
+    } catch {
+      throw new Error('KUMA_PUSH_URL must be a valid HTTP or HTTPS URL');
+    }
+  }
 
   // Initialize ServerConfigManager cache from the database - the single source of truth
   await ServerConfigManager.loadConfigs();
@@ -367,6 +379,7 @@ export async function loadConfig(): Promise<BotConfig> {
 
   return {
     backup,
+    kumaPushUrl,
     discord: {
       token: discordToken,
       servers: servers,

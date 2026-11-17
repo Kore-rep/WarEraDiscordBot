@@ -163,6 +163,18 @@ Edit `config/serverConfig.json`:
     - `channelId` - Channel for inactivity notifications
     - `inactivityDays` - Days of inactivity before notification (default: 2)
 
+### Uptime Kuma push monitor (optional)
+
+Set `KUMA_PUSH_URL` in `.env` to your monitor's complete push URL, and set that
+Push monitor's heartbeat interval to **30 seconds** in Kuma. The bot sends
+`status=up&msg=OK` as soon as startup finishes, then every 30 seconds while
+Discord is connected. Pushes stop during shutdown or a Discord disconnection,
+allowing Kuma to detect the missing heartbeat. Requests time out after 10 seconds;
+failures are logged and retried on the next scheduled cycle.
+
+This is one monitor for the whole bot process, shared across all Discord servers.
+Leave `KUMA_PUSH_URL` empty to disable it. Restart the bot after changing `.env`.
+
 ### 5. Build the Project
 
 ```bash
