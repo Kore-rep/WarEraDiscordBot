@@ -94,7 +94,7 @@ export interface ProxyUser {
   proxyCountryId: string; // Country they moved to
   proxyCountryName: string;
   detectedAt: string; // ISO timestamp when movement detected
-  lastCitizenshipChangeAt: string; // From API for cooldown calculation
+  lastCitizenshipChangeAt?: string; // From API for cooldown calculation; absent if the user never changed citizenship
   manuallyAdded?: boolean; // True if added via command, not auto-detected
 }
 

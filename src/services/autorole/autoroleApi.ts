@@ -1,10 +1,11 @@
 import type { GetCompaniesResponse, GetCompanyByIdResponse, GetUserLiteResponse, MuDTO, UserDTO } from 'warera-sdk';
-import { ApiService } from '../api/ApiService';
+import { ApiService, UserWithSkills } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 
 // Domain types re-exported so autorole code outside this gateway never
 // imports the SDK directly.
 export type AutoroleUser = UserDTO;
+export type AutoroleUserWithSkills = UserWithSkills;
 export type AutoroleMu = MuDTO;
 
 const BATCH_SIZE = 100;
@@ -33,22 +34,17 @@ export class AutoroleApi {
 
   /** Lite user records for a set of ids, batched (≤100 per request). */
   async getUsersLiteByIds(ids: string[]): Promise<Map<string, AutoroleUser>> {
-    const out = new Map<string, AutoroleUser>();
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const chunk = ids.slice(i, i + BATCH_SIZE);
-      const batch = this.apiService.createCommandBatchClient();
-      const promises = chunk.map(id =>
-        batch.user.getUserLite(id).catch(() => null)
-      );
-      await batch.runBatch();
-      for (const r of await Promise.all(promises)) {
-        const user = (r as GetUserLiteResponse | null)?.result?.data;
-        if (user) {
-          out.set(user._id, user);
-        }
-      }
-    }
-    return out;
+    return this.apiService.fetchUsersLite(ids);
+  }
+
+  /** Lite user records with their skills (needed for build roles), batched. */
+  async getUsersWithSkillsByIds(ids: string[]): Promise<Map<string, AutoroleUserWithSkills>> {
+    return this.apiService.fetchUsersWithSkills(ids);
+  }
+
+  /** A single user record with skills, or null if either half could not be fetched. */
+  async getUserWithSkills(id: string): Promise<AutoroleUserWithSkills | null> {
+    return (await this.getUsersWithSkillsByIds([id])).get(id) ?? null;
   }
 
   /** MU details by id (cached 6h — MU names change rarely), or null. */

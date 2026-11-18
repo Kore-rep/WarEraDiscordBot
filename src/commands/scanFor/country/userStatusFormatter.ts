@@ -1,8 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import type { ScanUserLite } from '../../../services/scan/ScanService';
+import type { ScanUserLite, ScanUserWithSkills } from '../../../services/scan/ScanService';
 import { analyzePlayerBuild, type BuildMode, type GroupedUsers } from './skillAnalyzer';
 
-type UserDTO = ScanUserLite;
+type UserDTO = ScanUserWithSkills;
 
 /** Human-readable label for a build mode (customId keys are lowercase/no-space). */
 export function modeLabel(mode: BuildMode): string {
@@ -66,7 +66,7 @@ const MS_PER_DAY = 86_400_000;
  * since `dates.lastSkillsResetAt` (never having reset also counts).
  */
 export function isSkillResetAvailable(
-  user: UserDTO,
+  user: ScanUserLite,
   resetCooldownDays: number = DEFAULT_RESET_COOLDOWN_DAYS,
   now: Date = new Date()
 ): boolean {

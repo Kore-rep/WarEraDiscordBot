@@ -1,11 +1,11 @@
 import { analyzePlayerBuild, groupPlayersByMode } from '../../../../src/commands/scanFor/country/skillAnalyzer';
-import type { ScanUserLite } from '../../../../src/services/scan/ScanService';
+import type { ScanUserWithSkills } from '../../../../src/services/scan/ScanService';
 
-const user = (levels: Record<string, number>, level = 30): ScanUserLite =>
+const user = (levels: Record<string, number>, level = 30): ScanUserWithSkills =>
   ({
     skills: Object.fromEntries(Object.entries(levels).map(([k, l]) => [k, { level: l }])),
     leveling: { level },
-  }) as unknown as ScanUserLite;
+  }) as unknown as ScanUserWithSkills;
 
 describe('analyzePlayerBuild mode classification', () => {
   it('classifies a near-pure war build as war', () => {

@@ -73,7 +73,7 @@ export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
     '## /autorole buildrole — eco/war/hybrid build roles',
     '',
     'Classifies each linked member by where their skill points sit and grants one build role:',
-    '- **Eco skills:** companies, entrepreneurship, production, management',
+    '- **Eco skills:** companies, production, management, energy',
     '- **War skills:** attack, armor, precision, dodge, criticalChance, criticalDamages, lootChance',
     '',
     'If eco% ≥ eco threshold → eco role; else war% ≥ war threshold → war role; else → hybrid role. Members with no spent points get no build role.',

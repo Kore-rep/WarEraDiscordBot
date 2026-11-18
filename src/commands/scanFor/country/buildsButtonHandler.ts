@@ -1,9 +1,9 @@
 import { ButtonInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { logger } from '../../../utils/logger';
 import { ApiService } from '../../../services/api/ApiService';
-import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
+import { ScanService, ScanUserWithSkills } from '../../../services/scan/ScanService';
 
-type UserDTO = ScanUserLite;
+type UserDTO = ScanUserWithSkills;
 import { groupPlayersByMode, sortUsersByLevel, type BuildMode } from './skillAnalyzer';
 import { formatUserList, createBuildSummary, buildDetailButtonRow, modeLabel } from './userStatusFormatter';
 import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
@@ -80,7 +80,7 @@ export async function handleBuildsButtonInteraction(interaction: ButtonInteracti
       return;
     }
 
-    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
+    const users: UserDTO[] = Array.from((await scan.getUsersWithSkillsByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
 
     if (users.length === 0) {
       await interaction.editReply({
@@ -241,7 +241,7 @@ async function handleSummaryRequest(interaction: ButtonInteraction, apiService: 
       return;
     }
 
-    const users: UserDTO[] = Array.from((await scan.getUsersLiteByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
+    const users: UserDTO[] = Array.from((await scan.getUsersWithSkillsByIds(allUserIds, undefined, BUILDS_SWEEP_CACHE_TTL_MS)).values());
 
     // Use minimum level from the original command
     const filteredUsers = users.filter(user => 

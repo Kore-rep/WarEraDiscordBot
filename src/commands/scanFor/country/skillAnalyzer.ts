@@ -1,7 +1,7 @@
-import type { ScanUserLite } from '../../../services/scan/ScanService';
+import type { ScanUserWithSkills } from '../../../services/scan/ScanService';
 import { analyzeUserBuild, SkillLevels } from '../../../services/build/buildAnalysis';
 
-type UserDTO = ScanUserLite;
+type UserDTO = ScanUserWithSkills;
 
 export type BuildMode = 'eco' | 'war' | 'softwar' | 'hybrid';
 

@@ -201,8 +201,8 @@ export class ProxyTrackingService implements ScheduledTask {
   /**
    * Calculate remaining cooldown days for citizenship change
    */
-  private calculateCooldownRemaining(lastCitizenshipChangeAt: string): number {
-    const lastChange = new Date(lastCitizenshipChangeAt);
+  private calculateCooldownRemaining(lastCitizenshipChangeAt: string | undefined): number {
+    const lastChange = new Date(lastCitizenshipChangeAt ?? 0);
     const cooldownEnd = new Date(lastChange.getTime() + (30 * 24 * 60 * 60 * 1000));
     const now = new Date();
     return Math.max(0, Math.ceil((cooldownEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));

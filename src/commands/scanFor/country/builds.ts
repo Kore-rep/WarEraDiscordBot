@@ -1,9 +1,9 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { logger } from '../../../utils/logger';
 import { ApiService } from '../../../services/api/ApiService';
-import { ScanService, ScanUserLite } from '../../../services/scan/ScanService';
+import { ScanService, ScanUserWithSkills } from '../../../services/scan/ScanService';
 
-type UserDTO = ScanUserLite;
+type UserDTO = ScanUserWithSkills;
 import { groupPlayersByMode, sortUsersByLevel } from './skillAnalyzer';
 import { createBuildSummary, buildDetailButtonRow } from './userStatusFormatter';
 import { BUILDS_SWEEP_CACHE_TTL_MS } from './buildsCache';
@@ -152,7 +152,7 @@ export async function handleCountryBuilds(interaction: ChatInputCommandInteracti
     });
 
     // Step 4: Batch fetch user details (batched inside ScanService)
-    const usersById = await scan.getUsersLiteByIds(allUserIds, (loaded, batchesDone) => {
+    const usersById = await scan.getUsersWithSkillsByIds(allUserIds, (loaded, batchesDone) => {
       if (batchesDone % 3 === 0 || batchesDone === userBatches) {
         void interaction.editReply({
           content: `**Country Build Analysis**\n\n` +

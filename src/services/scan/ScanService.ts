@@ -7,11 +7,10 @@ import type {
   GetAllCountriesResponse,
   GetPartyByIdResponse,
   GetGovernmentByCountryIdResponse,
-  GetUserLiteResponse,
   GetUsersByCountryParams,
   RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
 } from 'warera-sdk';
-import { ApiService } from '../api/ApiService';
+import { ApiService, UserWithSkills } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 
 // Domain types re-exported so command handlers never import the SDK directly.
@@ -19,6 +18,7 @@ export type ScanCountry = CountryDTO;
 export type ScanParty = PartyDTO;
 export type ScanGovernment = GovernmentDTO;
 export type ScanUserLite = UserDTO;
+export type ScanUserWithSkills = UserWithSkills;
 export type ScanRegion = RegionDTO;
 
 const BATCH_SIZE = 100;
@@ -135,30 +135,16 @@ export class ScanService {
     onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void,
     cacheTtlMs?: number
   ): Promise<Map<string, ScanUserLite>> {
-    const options = cacheTtlMs !== undefined ? { cache: { ttl: cacheTtlMs } } : undefined;
-    const map = new Map<string, ScanUserLite>();
-    const totalBatches = Math.ceil(ids.length / BATCH_SIZE);
-    let batchesDone = 0;
-    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-      const chunk = ids.slice(i, i + BATCH_SIZE);
-      const batch = this.apiService.createCommandBatchClient();
-      const promises = chunk.map(id => batch.user.getUserLite(id, options));
-      try {
-        await batch.runBatch();
-        const results = await Promise.all(promises);
-        for (let j = 0; j < chunk.length; j++) {
-          const data = (results[j] as GetUserLiteResponse | undefined)?.result?.data;
-          if (data) {
-            map.set(chunk[j], data);
-          }
-        }
-      } catch (error) {
-        logger.error(`ScanService: failed user-lite batch ${batchesDone + 1}`, error);
-      }
-      batchesDone++;
-      onBatch?.(map.size, batchesDone, totalBatches);
-    }
-    return map;
+    return this.apiService.fetchUsersLite(ids, { onBatch, cacheTtlMs });
+  }
+
+  /** Like {@link getUsersLiteByIds}, but each user also carries its `skills` (from `user.getUserSkills`). */
+  async getUsersWithSkillsByIds(
+    ids: string[],
+    onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void,
+    cacheTtlMs?: number
+  ): Promise<Map<string, ScanUserWithSkills>> {
+    return this.apiService.fetchUsersWithSkills(ids, { onBatch, cacheTtlMs });
   }
 
   /**

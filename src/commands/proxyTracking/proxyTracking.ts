@@ -259,7 +259,7 @@ async function handleTrackingList(interaction: ChatInputCommandInteraction, apiS
     // Calculate cooldowns and group by proxy country
     const now = new Date();
     const proxiesWithCooldown = proxies.map(proxy => {
-      const lastChange = new Date(proxy.lastCitizenshipChangeAt);
+      const lastChange = new Date(proxy.lastCitizenshipChangeAt ?? 0);
       const cooldownEnd = new Date(lastChange.getTime() + (30 * 24 * 60 * 60 * 1000));
       const cooldownDays = Math.max(0, Math.ceil((cooldownEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
       
@@ -404,7 +404,7 @@ async function handleTrackingAdd(interaction: ChatInputCommandInteraction, apiSe
     ServerConfigManager.addProxyUser(serverId, proxyUser);
 
     // Calculate cooldown
-    const lastChange = new Date(proxyUser.lastCitizenshipChangeAt);
+    const lastChange = new Date(proxyUser.lastCitizenshipChangeAt ?? 0);
     const cooldownEnd = new Date(lastChange.getTime() + (30 * 24 * 60 * 60 * 1000));
     const now = new Date();
     const cooldownDays = Math.max(0, Math.ceil((cooldownEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));

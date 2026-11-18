@@ -9,6 +9,8 @@ import type {
   GetPaginatedAuctionsParams,
   GetPaginatedAuctionsResponse,
   RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
+  UserDTO,
+  UserSkillsDTO,
 } from 'warera-sdk';
 import { logger } from '../../utils/logger';
 import { BotConfig } from '../../config/config';
@@ -21,6 +23,19 @@ const BATTLES_PAGE_SIZE = 100;
 
 /** Page size for `mercenaryContractAuction.getPaginatedAuctions` cursor pagination. */
 const MERCENARY_CONTRACT_PAGE_SIZE = 50;
+
+/** Max sub-requests in one batch (counts as a single rate-limited request). */
+const MAX_BATCH_SIZE = 100;
+
+/** A lite user profile merged with its skills from `user.getUserSkills`. */
+export type UserWithSkills = UserDTO & Pick<UserSkillsDTO, 'skills' | 'skillsExpiration'>;
+
+export interface UserFetchOptions {
+  /** Cache TTL in milliseconds (defaults to the SDK's 30s). */
+  cacheTtlMs?: number;
+  /** Progress callback fired after each batch. */
+  onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void;
+}
 
 export interface BattlePollData {
   battles: BattleDTO[];
@@ -506,6 +521,66 @@ export class ApiService {
       rateLimiter: this.sharedRateLimiter, // Shared rate limiter (shared tracking across all clients)
       cache: this.cacheProvider, // Shared cache (shared data across all clients)
     });
+  }
+
+  /**
+   * Lite user profiles by id, batched (≤100 per request). Users whose request
+   * fails are omitted from the returned map (keyed by user id).
+   */
+  async fetchUsersLite(ids: string[], opts: UserFetchOptions = {}): Promise<Map<string, UserDTO>> {
+    return this.fetchUsersInBatches(ids, false, opts);
+  }
+
+  /**
+   * Lite user profiles merged with their skills. `user.getUserLite` no longer
+   * returns skills, so each user costs two sub-requests (lite + skills) queued
+   * in the same batch. Users missing either half are omitted.
+   */
+  async fetchUsersWithSkills(ids: string[], opts: UserFetchOptions = {}): Promise<Map<string, UserWithSkills>> {
+    return this.fetchUsersInBatches(ids, true, opts) as Promise<Map<string, UserWithSkills>>;
+  }
+
+  private async fetchUsersInBatches(
+    ids: string[],
+    withSkills: boolean,
+    { cacheTtlMs, onBatch }: UserFetchOptions
+  ): Promise<Map<string, UserDTO | UserWithSkills>> {
+    const options = cacheTtlMs !== undefined ? { cache: { ttl: cacheTtlMs } } : undefined;
+    const usersPerBatch = withSkills ? MAX_BATCH_SIZE / 2 : MAX_BATCH_SIZE;
+    const totalBatches = Math.ceil(ids.length / usersPerBatch);
+    const users = new Map<string, UserDTO | UserWithSkills>();
+    let batchesDone = 0;
+    for (let i = 0; i < ids.length; i += usersPerBatch) {
+      const chunk = ids.slice(i, i + usersPerBatch);
+      const batch = this.createCommandBatchClient();
+      const litePromises = chunk.map(id => batch.user.getUserLite(id, options).catch(() => null));
+      const skillPromises = withSkills
+        ? chunk.map(id => batch.user.getUserSkills(id, options).catch(() => null))
+        : [];
+      try {
+        await batch.runBatch();
+      } catch (error) {
+        logger.error(`ApiService: user batch ${batchesDone + 1}/${totalBatches} failed`, error);
+      }
+      const [lites, skills] = await Promise.all([Promise.all(litePromises), Promise.all(skillPromises)]);
+      chunk.forEach((id, j) => {
+        const user = lites[j]?.result?.data;
+        if (!user) {
+          return;
+        }
+        if (!withSkills) {
+          users.set(id, user);
+          return;
+        }
+        const userSkills = skills[j]?.result?.data;
+        if (userSkills) {
+          users.set(id, { ...user, skills: userSkills.skills, skillsExpiration: userSkills.skillsExpiration });
+        }
+      });
+      batchesDone++;
+      onBatch?.(users.size, batchesDone, totalBatches);
+    }
+    return users;
   }
 
   /**

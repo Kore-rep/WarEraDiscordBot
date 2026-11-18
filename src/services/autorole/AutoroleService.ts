@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import { ApiService } from '../api/ApiService';
 import { DiscordService } from '../discord/DiscordService';
 import { ScheduledTask } from '../scheduler/ScheduledTask';
-import { AutoroleApi, AutoroleUser } from './autoroleApi';
+import { AutoroleApi, AutoroleUserWithSkills } from './autoroleApi';
 import { LinkStore, LinkedUser } from './linkStore';
 import { LinkFlow } from './linkFlow';
 import { computeMemberSyncPlan, SyncUserView } from './syncPlan';
@@ -97,7 +97,7 @@ export class AutoroleService implements ScheduledTask {
       return { synced: 0, skipped: links.length };
     }
 
-    const users = await this.api.getUsersLiteByIds(links.map(l => l.wareraUserId));
+    const users = await this.api.getUsersWithSkillsByIds(links.map(l => l.wareraUserId));
     let synced = 0;
     let skipped = 0;
     for (const link of links) {
@@ -276,7 +276,7 @@ export class AutoroleService implements ScheduledTask {
     if (!member) {
       return { synced: false, reason: 'member-left' };
     }
-    const user = await this.api.getUserLite(link.wareraUserId);
+    const user = await this.api.getUserWithSkills(link.wareraUserId);
     if (!user) {
       return { synced: false, reason: 'user-not-found' };
     }
@@ -288,7 +288,7 @@ export class AutoroleService implements ScheduledTask {
     serverId: string,
     cfg: AutoroleConfig,
     member: GuildMember,
-    user: AutoroleUser,
+    user: AutoroleUserWithSkills,
     link: LinkedUser
   ): Promise<void> {
     const view = toSyncUserView(user);
@@ -359,14 +359,14 @@ export class AutoroleService implements ScheduledTask {
 }
 
 /** Project a full user profile onto the slice the sync plan needs. */
-export function toSyncUserView(user: AutoroleUser): SyncUserView {
+export function toSyncUserView(user: AutoroleUserWithSkills): SyncUserView {
   const lastConnection = user.dates?.lastConnectionAt ? new Date(user.dates.lastConnectionAt) : undefined;
   return {
     username: user.username,
     level: user.leveling?.level ?? 0,
     prestigeLevel: user.leveling?.prestigeLevel,
     muId: user.mu || undefined,
-    skills: (user.skills ?? {}) as SkillLevels,
+    skills: user.skills as SkillLevels,
     lastConnectionAt: lastConnection && !isNaN(lastConnection.getTime()) ? lastConnection : undefined,
   };
 }

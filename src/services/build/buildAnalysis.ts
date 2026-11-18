@@ -6,7 +6,7 @@
  */
 
 /** Economic skills (production, trade, management). */
-export const ECO_SKILLS = ['companies', 'entrepreneurship', 'production', 'management', 'energy'] as const;
+export const ECO_SKILLS = ['companies', 'production', 'management', 'energy'] as const;
 /**
  * The company-management eco skill. War players commonly invest here (and nowhere
  * else in eco) to earn money, which is what distinguishes a "soft war" build from

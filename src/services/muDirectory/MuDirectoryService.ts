@@ -1,7 +1,7 @@
-import { GetUserLiteResponse, MuDTO } from 'warera-sdk';
+import { MuDTO } from 'warera-sdk';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
 import { DiscordService } from '../discord/DiscordService';
-import { ApiService } from '../api/ApiService';
+import { ApiService, UserWithSkills } from '../api/ApiService';
 import { logger } from '../../utils/logger';
 import { ScheduledTask } from '../scheduler/ScheduledTask';
 import { MuDirectoryConfig } from '../../config/config';
@@ -11,9 +11,8 @@ import { renderDirectory, MuDirectoryEntry } from './render';
 import { buildMuUrl } from './muLink';
 
 // Domain types re-exported so command handlers never import the SDK directly.
-type UserDTO = NonNullable<GetUserLiteResponse['result']['data']>;
 export type MuDirectoryMu = MuDTO;
-export type MuDirectoryUser = UserDTO;
+export type MuDirectoryUser = UserWithSkills;
 
 const BATCH_SIZE = 100;
 
@@ -177,25 +176,7 @@ export class MuDirectoryService implements ScheduledTask {
     return mus;
   }
 
-  private async fetchUsers(userIds: string[]): Promise<Map<string, UserDTO>> {
-    const users = new Map<string, UserDTO>();
-
-    for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
-      const chunk = userIds.slice(i, i + BATCH_SIZE);
-      const batchClient = this.apiService.createCommandBatchClient();
-      const promises = chunk.map(id => batchClient.user.getUserLite(id));
-
-      await batchClient.runBatch();
-      const results = await Promise.all(promises);
-
-      for (const result of results) {
-        const data = result?.result?.data;
-        if (data) {
-          users.set(data._id, data);
-        }
-      }
-    }
-
-    return users;
+  private async fetchUsers(userIds: string[]): Promise<Map<string, MuDirectoryUser>> {
+    return this.apiService.fetchUsersWithSkills(userIds);
   }
 }

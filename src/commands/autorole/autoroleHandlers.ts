@@ -324,13 +324,13 @@ export async function handleLinks(
       await interaction.editReply({ content: 'No members are linked on this server.' });
       return;
     }
-    const users = await service.getApi().getUsersLiteByIds(links.map(l => l.wareraUserId));
+    const users = await service.getApi().getUsersWithSkillsByIds(links.map(l => l.wareraUserId));
     const lines = links.map(l => {
       const user = users.get(l.wareraUserId);
       if (!user) {
         return `- <@${l.discordUserId}> → \`${l.wareraUserId}\` (profile unavailable)`;
       }
-      const build = analyzeUserBuild((user.skills ?? {}) as SkillLevels);
+      const build = analyzeUserBuild(user.skills as SkillLevels);
       return (
         `- <@${l.discordUserId}> → **${user.username}** — level ${user.leveling?.level ?? '?'}, ` +
         `country \`${user.country ?? '?'}\`, eco ${build.ecoPct.toFixed(0)}% / war ${build.warPct.toFixed(0)}% — ` +
