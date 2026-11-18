@@ -15,6 +15,8 @@ import { LeaderboardService } from '../services/leaderboard/LeaderboardService';
 import { MuDirectoryService } from '../services/muDirectory/MuDirectoryService';
 import { AutoroleService } from '../services/autorole';
 import { SpectreService } from '../services/spectre/SpectreService';
+import { BattleOrdersService } from '../services/battleOrders/BattleOrdersService';
+import { BuffReminderService } from '../services/buffReminders/BuffReminderService';
 import { CommandHandler } from '../commands';
 import { ServerConfigManager } from '../utils/serverConfigManager';
 import { prisma } from '../persistence/prisma';
@@ -102,6 +104,8 @@ export class Bot {
       this.leaderboardService,
       this.muDirectoryService,
       this.autoroleService,
+      new BattleOrdersService(config.polling.intervalMinutes, this.apiService, this.discordService),
+      new BuffReminderService(this.apiService, this.discordService),
       ...(config.kumaPushUrl ? [new KumaPushTask(config.kumaPushUrl, () => this.client.isReady())] : []),
       ...(this.backupService ? [this.backupService] : []),
     ]);

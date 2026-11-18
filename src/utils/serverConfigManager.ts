@@ -13,6 +13,9 @@ import {
   LevelBracket,
   MuDirectoryConfig,
   AutoroleConfig,
+  BattleOrdersConfig,
+  BuffRemindersConfig,
+  BATTLE_ORDER_PRIORITIES,
   MilitaryUnitEntry,
 } from '../config/config';
 import { logger } from './logger';
@@ -72,6 +75,8 @@ export class ServerConfigManager {
           muDirectory: decode(row.muDirectory),
           autorole: decode(row.autorole),
           militaryUnits: decode(row.militaryUnits),
+          battleOrders: decode(row.battleOrders),
+          buffReminders: decode(row.buffReminders),
         };
         serversMap.set(row.id, this.normalizeServerConfig(row.id, raw));
       }
@@ -235,6 +240,28 @@ export class ServerConfigManager {
               ...(u.roleId?.trim() ? { roleId: u.roleId.trim() } : {}),
             }))
         : undefined,
+      battleOrders: serverConfig.battleOrders ? this.normalizeBattleOrders(serverConfig.battleOrders) : undefined,
+      buffReminders: serverConfig.buffReminders ? this.normalizeBuffReminders(serverConfig.buffReminders) : undefined,
+    };
+  }
+
+  private static normalizeBattleOrders(raw: Partial<BattleOrdersConfig>): BattleOrdersConfig {
+    const defaults = this.defaultBattleOrders();
+    return {
+      enabled: raw.enabled ?? defaults.enabled,
+      channelId: raw.channelId?.trim() ?? defaults.channelId,
+      roleIds: (raw.roleIds ?? []).filter(id => id?.trim()),
+      priorities: (raw.priorities ?? defaults.priorities).filter(p => BATTLE_ORDER_PRIORITIES.includes(p)),
+      countries: (raw.countries ?? []).filter(c => c.countryId?.trim()),
+      mus: (raw.mus ?? []).filter(m => m.muId?.trim()),
+    };
+  }
+
+  private static normalizeBuffReminders(raw: Partial<BuffRemindersConfig>): BuffRemindersConfig {
+    return {
+      enabled: raw.enabled ?? true,
+      channelId: raw.channelId?.trim() ?? '',
+      optedInDiscordUserIds: [...new Set((raw.optedInDiscordUserIds ?? []).filter(id => id?.trim()))],
     };
   }
 
@@ -400,6 +427,8 @@ export class ServerConfigManager {
           muDirectory: encode(cfg.muDirectory),
           autorole: encode(cfg.autorole),
           militaryUnits: encode(cfg.militaryUnits),
+          battleOrders: encode(cfg.battleOrders),
+          buffReminders: encode(cfg.buffReminders),
         };
         return prisma.server.upsert({ where: { id }, create: { id, ...data }, update: data });
       }),
@@ -482,6 +511,17 @@ export class ServerConfigManager {
         linkMessages: config.autorole.linkMessages.map(m => ({ ...m })),
       } : undefined,
       militaryUnits: config.militaryUnits ? config.militaryUnits.map(u => ({ ...u })) : undefined,
+      battleOrders: config.battleOrders ? {
+        ...config.battleOrders,
+        roleIds: [...config.battleOrders.roleIds],
+        priorities: [...config.battleOrders.priorities],
+        countries: config.battleOrders.countries.map(c => ({ ...c })),
+        mus: config.battleOrders.mus.map(m => ({ ...m })),
+      } : undefined,
+      buffReminders: config.buffReminders ? {
+        ...config.buffReminders,
+        optedInDiscordUserIds: [...config.buffReminders.optedInDiscordUserIds],
+      } : undefined,
     };
   }
 
@@ -1474,4 +1514,54 @@ export class ServerConfigManager {
       throw error;
     }
   }
+
+  /** Read a server's battle orders feed config (deep copy), or undefined if unset. */
+  static getBattleOrdersConfig(serverId: string): BattleOrdersConfig | undefined {
+    return this.getServerConfig(serverId)?.battleOrders;
+  }
+
+  private static defaultBattleOrders(): BattleOrdersConfig {
+    return { enabled: true, channelId: '', roleIds: [], priorities: [...BATTLE_ORDER_PRIORITIES], countries: [], mus: [] };
+  }
+
+  /** Merge fields over a server's battle orders config (or a default one). */
+  static updateBattleOrdersConfig(serverId: string, config: Partial<BattleOrdersConfig>): void {
+    this.updateFeatureBlock(serverId, 'battleOrders', existing =>
+      this.normalizeBattleOrders({ ...(existing ?? this.defaultBattleOrders()), ...definedOnly(config) })
+    );
+  }
+
+  /** Read a server's buff reminder config (deep copy), or undefined if unset. */
+  static getBuffRemindersConfig(serverId: string): BuffRemindersConfig | undefined {
+    return this.getServerConfig(serverId)?.buffReminders;
+  }
+
+  /** Merge fields over a server's buff reminder config (or a default one). */
+  static updateBuffRemindersConfig(serverId: string, config: Partial<BuffRemindersConfig>): void {
+    this.updateFeatureBlock(serverId, 'buffReminders', existing =>
+      this.normalizeBuffReminders({ ...(existing ?? {}), ...definedOnly(config) })
+    );
+  }
+
+  private static updateFeatureBlock<K extends 'battleOrders' | 'buffReminders'>(
+    serverId: string,
+    key: K,
+    build: (existing: ServerConfig[K] | undefined) => ServerConfig[K]
+  ): void {
+    try {
+      this.ensureCacheInitialized();
+      const existingServerConfig = this.configCache!.get(serverId) || {};
+      this.configCache!.set(serverId, { ...existingServerConfig, [key]: build(existingServerConfig[key]) });
+      this.writeConfigsToDisk();
+      logger.info(`Updated ${key} config for server ${serverId}`);
+    } catch (error) {
+      logger.error(`Failed to update ${key} config`, error);
+      throw error;
+    }
+  }
+}
+
+/** Drop keys whose value is undefined so a partial update never clears a field by omission. */
+function definedOnly<T extends object>(partial: Partial<T>): Partial<T> {
+  return Object.fromEntries(Object.entries(partial).filter(([, v]) => v !== undefined)) as Partial<T>;
 }

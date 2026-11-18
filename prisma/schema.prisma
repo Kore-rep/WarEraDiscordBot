@@ -32,6 +32,8 @@ model Server {
   muDirectory        String?
   autorole           String?
   militaryUnits      String?
+  battleOrders       String?
+  buffReminders      String?
   updatedAt          DateTime @updatedAt
 }
 

@@ -11,6 +11,8 @@ export const COMMAND_SUMMARIES: [name: string, summary: string][] = [
   ['mudirectory', 'Military-unit directory channel'],
   ['leaderboard', 'Hourly damage leaderboards'],
   ['bountybattles', 'Bounty battle alerts'],
+  ['battleorders', 'Battle order feed'],
+  ['buffreminders', 'Buff / debuff expiry pings'],
   ['contracts', 'Mercenary contract alerts'],
   ['scanfor', 'Bulk country/player scans'],
   ['countrygroup', 'Country groups for scans'],
@@ -28,6 +30,30 @@ export const HELP_OVERVIEW = [
 ].join('\n');
 
 export const COMMAND_HELP: Record<string, string> = {
+  battleorders: [
+    '# /battleorders — battle order feed',
+    '',
+    'Posts the battle orders placed by chosen countries and MUs to a channel: new orders, priority changes, and orders that end. Only orders at the chosen priority levels are posted. Checked on the bot-wide poll interval. Order text is only shown when the game reveals it to the bot.',
+    '',
+    '- `setup channel:<#channel> [role]` — where to post and who to ping; enables the feed',
+    '- `levels [high] [medium] [low]` — turn each priority level on or off (all on by default)',
+    '- `add-country country:<name>` / `remove-country country:<name>` — track a country\'s orders',
+    '- `add-mu mu:<id or link>` / `remove-mu mu:<id or link>` — track an MU\'s orders',
+    '- `status` — current settings',
+    '- `disable` — stop posting (settings are kept)',
+  ].join('\n'),
+
+  buffreminders: [
+    '# /buffreminders — buff / debuff pings',
+    '',
+    'Pings you in the reminder channel when your buff (pill) wears off and again when the debuff after it ends, so you know when you can take another pill. Requires a linked WarEra account (`/link`). Checked every 5 minutes.',
+    '',
+    '- `on` / `off` — sign up or stop',
+    '- `status` — whether reminders are active and whether you are signed up',
+    '- `setup channel:<#channel>` — (Manage Roles) where reminders are posted; enables them',
+    '- `disable` — (Manage Roles) stop reminders for everyone (sign-ups are kept)',
+  ].join('\n'),
+
   bountybattles: [
     '# /bountybattles — bounty battle alerts',
     '',

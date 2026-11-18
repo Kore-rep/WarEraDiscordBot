@@ -11,6 +11,8 @@ import type {
   RegionGetRegionsObjectResponse as GetRegionsObjectResponse,
   UserDTO,
   UserSkillsDTO,
+  BattleOrderDTO,
+  BattleOrderSide,
 } from 'warera-sdk';
 import { logger } from '../../utils/logger';
 import { BotConfig } from '../../config/config';
@@ -36,6 +38,14 @@ export interface UserFetchOptions {
   /** Progress callback fired after each batch. */
   onBatch?: (loaded: number, batchesDone: number, totalBatches: number) => void;
 }
+
+/** One side of one battle, the unit `battleOrder.getByBattle` is queried by. */
+export interface BattleSideRef {
+  battleId: string;
+  side: BattleOrderSide;
+}
+
+export const battleSideKey = (ref: BattleSideRef): string => `${ref.battleId}:${ref.side}`;
 
 export interface BattlePollData {
   battles: BattleDTO[];
@@ -538,6 +548,28 @@ export class ApiService {
    */
   async fetchUsersWithSkills(ids: string[], opts: UserFetchOptions = {}): Promise<Map<string, UserWithSkills>> {
     return this.fetchUsersInBatches(ids, true, opts) as Promise<Map<string, UserWithSkills>>;
+  }
+
+  /**
+   * Active orders for each battle side, batched (≤100 sides per request). Keyed by
+   * {@link battleSideKey}; a side whose request failed maps to null so callers can
+   * tell "no orders" from "unknown".
+   */
+  async fetchBattleOrders(sides: BattleSideRef[]): Promise<Map<string, BattleOrderDTO[] | null>> {
+    const out = new Map<string, BattleOrderDTO[] | null>();
+    for (let i = 0; i < sides.length; i += MAX_BATCH_SIZE) {
+      const chunk = sides.slice(i, i + MAX_BATCH_SIZE);
+      const batch = this.createCommandBatchClient();
+      const promises = chunk.map(ref => batch.battleOrder.getByBattle(ref.battleId, ref.side).catch(() => null));
+      try {
+        await batch.runBatch();
+      } catch (error) {
+        logger.error('ApiService: battle order batch failed', error);
+      }
+      const results = await Promise.all(promises);
+      chunk.forEach((ref, j) => out.set(battleSideKey(ref), results[j]?.result?.data ?? null));
+    }
+    return out;
   }
 
   private async fetchUsersInBatches(

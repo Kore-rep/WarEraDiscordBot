@@ -158,6 +158,20 @@ jest.mock('../../src/commands/militaryUnits', () => ({
   },
 }));
 
+jest.mock('../../src/commands/battleOrders', () => ({
+  battleOrdersCommand: {
+    data: { name: 'battleorders', description: 'Battle order feed', toJSON: jest.fn().mockReturnValue({ name: 'battleorders' }) },
+    execute: jest.fn(),
+  },
+}));
+
+jest.mock('../../src/commands/buffReminders', () => ({
+  buffRemindersCommand: {
+    data: { name: 'buffreminders', description: 'Buff reminders', toJSON: jest.fn().mockReturnValue({ name: 'buffreminders' }) },
+    execute: jest.fn(),
+  },
+}));
+
 jest.mock('../../src/commands/link', () => ({
   linkCommand: {
     data: { name: 'link', description: 'Link your WarEra account', toJSON: jest.fn().mockReturnValue({ name: 'link' }) },
@@ -219,8 +233,8 @@ describe('CommandHandler', () => {
       expect(commandHandler.getCommandCount()).toBeGreaterThan(0);
     });
 
-    it('should load all thirteen top-level commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(13);
+    it('should load all fifteen top-level commands', () => {
+      expect(commandHandler.getCommandCount()).toBe(15);
     });
   });
 
@@ -401,7 +415,7 @@ describe('CommandHandler', () => {
 
   describe('getCommandCount', () => {
     it('should return the correct number of loaded commands', () => {
-      expect(commandHandler.getCommandCount()).toBe(13);
+      expect(commandHandler.getCommandCount()).toBe(15);
     });
   });
 });

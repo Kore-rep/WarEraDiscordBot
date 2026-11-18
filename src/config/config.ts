@@ -298,6 +298,37 @@ export interface AutoroleConfig {
   syncNicknames?: boolean; // default true
 }
 
+/** Battle order priority levels, lowest first (mirrors the WarEra API values). */
+export const BATTLE_ORDER_PRIORITIES = ['low', 'medium', 'high'] as const;
+export type BattleOrderPriority = (typeof BATTLE_ORDER_PRIORITIES)[number];
+
+export interface BattleOrderCountryEntry {
+  countryId: string;
+  countryName: string;
+}
+
+export interface BattleOrderMuEntry {
+  muId: string;
+  muName: string;
+}
+
+/** Battle orders feed: posts orders placed by tracked countries / MUs. */
+export interface BattleOrdersConfig {
+  enabled: boolean;
+  channelId: string;
+  roleIds: string[]; // pinged on each post
+  priorities: BattleOrderPriority[]; // only orders at these levels are posted
+  countries: BattleOrderCountryEntry[];
+  mus: BattleOrderMuEntry[];
+}
+
+/** Pill buff / debuff expiry reminders for opted-in linked members. */
+export interface BuffRemindersConfig {
+  enabled: boolean;
+  channelId: string;
+  optedInDiscordUserIds: string[];
+}
+
 /**
  * Configuration for a single Discord server
  * Contains feature-specific configurations
@@ -315,6 +346,8 @@ export interface ServerConfig {
   muDirectory?: MuDirectoryConfig;
   autorole?: AutoroleConfig;
   militaryUnits?: MilitaryUnitEntry[]; // shared MU directory used by leaderboard, MU directory, and autorole
+  battleOrders?: BattleOrdersConfig;
+  buffReminders?: BuffRemindersConfig;
 }
 
 /**

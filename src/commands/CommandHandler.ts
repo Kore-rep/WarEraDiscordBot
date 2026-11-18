@@ -15,6 +15,8 @@ import { countryGroupCommand, handleCountryGroupModal } from './countryGroup';
 import { spectreCommand } from './spectre/spectre';
 import { muDirectoryCommand } from './muDirectory';
 import { militaryUnitsCommand } from './militaryUnits';
+import { battleOrdersCommand } from './battleOrders';
+import { buffRemindersCommand } from './buffReminders';
 import { linkCommand } from './link';
 import { autoroleCommand } from './autorole';
 import { helpCommand } from './help';
@@ -52,6 +54,8 @@ export class CommandHandler {
       spectreCommand,
       muDirectoryCommand,
       militaryUnitsCommand,
+      battleOrdersCommand,
+      buffRemindersCommand,
       linkCommand,
       autoroleCommand,
       helpCommand,
