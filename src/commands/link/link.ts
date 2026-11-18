@@ -6,7 +6,6 @@ import { DiscordService } from '../../services/discord/DiscordService';
 import { ApiService } from '../../services/api/ApiService';
 import { AutoroleService } from '../../services/autorole';
 import { LinkResult, VerifyResult } from '../../services/autorole/linkFlow';
-import { parseUserInput } from '../../services/autorole/parseUserInput';
 import { LINK_HELP } from '../autorole/autoroleHelp';
 
 export const linkCommand: Command = {
@@ -232,20 +231,17 @@ async function handleWhois(interaction: ChatInputCommandInteraction, service: Au
   }
 
   // WarEra account -> Discord member
-  const parsed = parseUserInput(account!);
-  if (!parsed) {
+  const resolved = await service.getLinkFlow().resolveAccount(account!);
+  if (resolved.status === 'invalid-input') {
     await interaction.editReply({ content: 'That does not look like a WarEra username, id, or profile URL.' });
     return;
   }
-  const user =
-    parsed.kind === 'id' ? await api.getUserLite(parsed.value) : await api.resolveUserByUsername(parsed.value);
-  // An id can still be looked up in the store even if the profile fetch failed.
-  const wareraUserId = user?._id ?? (parsed.kind === 'id' ? parsed.value : undefined);
-  if (!wareraUserId) {
+  if (resolved.status === 'not-found') {
     await interaction.editReply({ content: `No WarEra account matched \`${account}\`.` });
     return;
   }
-  const label = user ? `**${user.username}**` : `\`${wareraUserId}\``;
+  const { wareraUserId, username } = resolved;
+  const label = username ? `**${username}**` : `\`${wareraUserId}\``;
 
   const link = await store.findLinkByWareraId(serverId, wareraUserId);
   if (link) {

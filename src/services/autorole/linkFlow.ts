@@ -46,6 +46,12 @@ export type ManualLinkResult =
   | { status: 'already-linked'; username: string; wareraUserId: string }
   | { status: 'linked'; username: string; wareraUserId: string };
 
+export type ResolveAccountResult =
+  | { status: 'invalid-input' }
+  | { status: 'not-found' }
+  /** `username` is absent when an id was given but its profile could not be fetched. */
+  | { status: 'resolved'; wareraUserId: string; username?: string };
+
 export interface UnlinkResult {
   removedLink: boolean;
   removedPending: boolean;
@@ -301,6 +307,26 @@ export class LinkFlow {
       `Your WarEra link request for **${pending.wareraUsername}** was denied.${reason ? ` Reason: ${reason}` : ''}`
     );
     return { status: 'denied', username: pending.wareraUsername, discordUserId };
+  }
+
+  /**
+   * Resolve a WarEra username / id / profile URL to an account id for store
+   * lookups. An id still resolves when its profile fetch fails, so stale or
+   * unreachable accounts can be looked up and unlinked.
+   */
+  async resolveAccount(rawInput: string): Promise<ResolveAccountResult> {
+    const parsed = parseUserInput(rawInput);
+    if (!parsed) {
+      return { status: 'invalid-input' };
+    }
+    const user: AutoroleUser | null =
+      parsed.kind === 'id'
+        ? await this.api.getUserLite(parsed.value)
+        : await this.api.resolveUserByUsername(parsed.value);
+    if (user) {
+      return { status: 'resolved', wareraUserId: user._id, username: user.username };
+    }
+    return parsed.kind === 'id' ? { status: 'resolved', wareraUserId: parsed.value } : { status: 'not-found' };
   }
 
   /** Remove a member's link and any pending state. */

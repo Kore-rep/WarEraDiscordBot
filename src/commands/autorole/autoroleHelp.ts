@@ -121,7 +121,7 @@ export const AUTOROLE_TOPIC_HELP: Record<string, string> = {
     '- `link user:<member> account:<name/id/url>` — link a member directly without country review or company-rename verification (requires Manage Roles)',
     '- `approve user:<member>` — approve a pending request; the member is then DMed a verification code and must still rename a company to finish',
     '- `deny user:<member> [reason]` — reject a request (reason is DMed to them)',
-    '- `unlink user:<member>` — remove a link or pending request',
+    '- `unlink user:<member>` or `unlink account:<name/id/url>` — remove a link or pending request (pass exactly one)',
     '',
     'Approve/Deny also exist as buttons on each review-channel message; they require the Administrator permission, a configured staff role/user, or the guild owner.',
   ].join('\n'),

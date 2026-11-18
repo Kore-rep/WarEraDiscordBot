@@ -356,6 +356,11 @@ export async function handleLinks(
     return;
   }
 
+  if (sub === 'unlink') {
+    await handleLinksUnlink(interaction, service);
+    return;
+  }
+
   const target = interaction.options.getUser('user', true);
 
   if (sub === 'link') {
@@ -377,21 +382,6 @@ export async function handleLinks(
     return;
   }
 
-  if (sub === 'unlink') {
-    await interaction.deferReply({ ephemeral: true });
-    const result = await service.getLinkFlow().unlink(serverId, target.id);
-    if (result.removedLink) {
-      await service.onUnlinked(serverId, target.id);
-    }
-    await interaction.editReply({
-      content:
-        result.removedLink || result.removedPending || result.removedVerification
-          ? `Removed link state for <@${target.id}>.`
-          : `<@${target.id}> has nothing linked or pending.`,
-    });
-    return;
-  }
-
   if (sub === 'approve') {
     await interaction.deferReply({ ephemeral: true });
     const result = await service.getLinkFlow().approvePendingLink(serverId, target.id, interaction.user.tag);
@@ -406,6 +396,61 @@ export async function handleLinks(
     await interaction.editReply({ content: describeReviewOutcome(result.status, target.id) });
     return;
   }
+}
+
+/** `/autorole links unlink` — target by Discord member or by WarEra account. */
+async function handleLinksUnlink(
+  interaction: ChatInputCommandInteraction,
+  service: AutoroleService
+): Promise<void> {
+  const target = interaction.options.getUser('user');
+  const account = interaction.options.getString('account');
+  if ((target && account) || (!target && !account)) {
+    await interaction.reply({
+      content: 'Pass exactly one of **user** (a Discord member) or **account** (a WarEra username/id/URL).',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+  const serverId = interaction.guild!.id;
+
+  let discordUserId: string;
+  if (target) {
+    discordUserId = target.id;
+  } else {
+    const resolved = await service.getLinkFlow().resolveAccount(account!);
+    if (resolved.status === 'invalid-input') {
+      await interaction.editReply({ content: 'That does not look like a WarEra username, id, or profile URL.' });
+      return;
+    }
+    if (resolved.status === 'not-found') {
+      await interaction.editReply({ content: `No WarEra account matched \`${account}\`.` });
+      return;
+    }
+    const label = resolved.username ? `**${resolved.username}**` : `\`${resolved.wareraUserId}\``;
+    const store = service.getStore();
+    const owner =
+      (await store.findLinkByWareraId(serverId, resolved.wareraUserId)) ??
+      (await store.findPendingLinkByWareraId(serverId, resolved.wareraUserId));
+    if (!owner) {
+      await interaction.editReply({ content: `${label} is not linked to anyone on this server.` });
+      return;
+    }
+    discordUserId = owner.discordUserId;
+  }
+
+  const result = await service.getLinkFlow().unlink(serverId, discordUserId);
+  if (result.removedLink) {
+    await service.onUnlinked(serverId, discordUserId);
+  }
+  await interaction.editReply({
+    content:
+      result.removedLink || result.removedPending || result.removedVerification
+        ? `Removed link state for <@${discordUserId}>.`
+        : `<@${discordUserId}> has nothing linked or pending.`,
+  });
 }
 
 function describeManualLinkOutcome(

@@ -175,8 +175,14 @@ export const autoroleCommand: Command = {
         .addSubcommand(sub =>
           sub
             .setName('unlink')
-            .setDescription("Remove a member's link")
-            .addUserOption(opt => opt.setName('user').setDescription('Member to unlink').setRequired(true))
+            .setDescription("Remove a member's link, by Discord member or WarEra account")
+            .addUserOption(opt => opt.setName('user').setDescription('Member to unlink').setRequired(false))
+            .addStringOption(opt =>
+              opt
+                .setName('account')
+                .setDescription('WarEra username, user id, or profile URL to unlink')
+                .setRequired(false)
+            )
         )
         .addSubcommand(sub =>
           sub
