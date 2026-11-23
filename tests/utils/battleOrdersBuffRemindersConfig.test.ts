@@ -54,14 +54,20 @@ describe('ServerConfigManager battle orders + buff reminders blocks', () => {
     expect(cfg.countries).toEqual([{ countryId: 'c1', countryName: 'Ukraine' }]);
   });
 
-  it('round-trips both blocks through the database and drops bad levels', async () => {
+  it('round-trips both blocks through the database, drops bad levels and dedupes members', async () => {
     ServerConfigManager.updateBattleOrdersConfig(SERVER, {
       channelId: 'chan',
       roleIds: ['r1'],
       priorities: ['high', 'bogus' as never],
       mus: [{ muId: 'mu1', muName: 'Impi' }],
     });
-    ServerConfigManager.updateBuffRemindersConfig(SERVER, { channelId: 'buffs', optedInDiscordUserIds: ['u1', 'u1', 'u2'] });
+    ServerConfigManager.updateBuffRemindersConfig(SERVER, {
+      subscribers: [
+        { discordUserId: 'u1', preWarning: true, debuffEnd: true },
+        { discordUserId: 'u2', preWarning: false, debuffEnd: true },
+        { discordUserId: 'u1', preWarning: true, debuffEnd: false },
+      ],
+    });
     await ServerConfigManager.flush();
     ServerConfigManager.clearCache();
     await ServerConfigManager.loadConfigs();
@@ -74,14 +80,16 @@ describe('ServerConfigManager battle orders + buff reminders blocks', () => {
     });
     expect(ServerConfigManager.getBuffRemindersConfig(SERVER)).toEqual({
       enabled: true,
-      channelId: 'buffs',
-      optedInDiscordUserIds: ['u1', 'u2'],
+      subscribers: [
+        { discordUserId: 'u1', preWarning: true, debuffEnd: false },
+        { discordUserId: 'u2', preWarning: false, debuffEnd: true },
+      ],
     });
   });
 
   it('returns copies that cannot mutate the cache', () => {
-    ServerConfigManager.updateBuffRemindersConfig(SERVER, { channelId: 'buffs', optedInDiscordUserIds: ['u1'] });
-    ServerConfigManager.getBuffRemindersConfig(SERVER)!.optedInDiscordUserIds.push('intruder');
-    expect(ServerConfigManager.getBuffRemindersConfig(SERVER)!.optedInDiscordUserIds).toEqual(['u1']);
+    ServerConfigManager.updateBuffRemindersConfig(SERVER, { subscribers: [{ discordUserId: 'u1', preWarning: true, debuffEnd: true }] });
+    ServerConfigManager.getBuffRemindersConfig(SERVER)!.subscribers[0].preWarning = false;
+    expect(ServerConfigManager.getBuffRemindersConfig(SERVER)!.subscribers[0].preWarning).toBe(true);
   });
 });

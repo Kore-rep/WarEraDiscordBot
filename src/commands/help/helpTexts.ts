@@ -12,7 +12,7 @@ export const COMMAND_SUMMARIES: [name: string, summary: string][] = [
   ['leaderboard', 'Hourly damage leaderboards'],
   ['bountybattles', 'Bounty battle alerts'],
   ['battleorders', 'Battle order feed'],
-  ['buffreminders', 'Buff / debuff expiry pings'],
+  ['buffreminders', 'Buff / debuff DM reminders'],
   ['contracts', 'Mercenary contract alerts'],
   ['scanfor', 'Bulk country/player scans'],
   ['countrygroup', 'Country groups for scans'],
@@ -44,14 +44,14 @@ export const COMMAND_HELP: Record<string, string> = {
   ].join('\n'),
 
   buffreminders: [
-    '# /buffreminders — buff / debuff pings',
+    '# /buffreminders — buff / debuff DM reminders',
     '',
-    'Pings you in the reminder channel when your buff (pill) wears off and again when the debuff after it ends, so you know when you can take another pill. Requires a linked WarEra account (`/link`). Checked every 5 minutes.',
+    'DMs you when your buff (pill) ends, and optionally 10 minutes before it ends and when the debuff after it is over, so you know when you can take another pill. Requires a linked WarEra account (`/link`) and DMs open to the bot. Reminders land within about a minute of those times; a newly taken pill is picked up within 5 minutes.',
     '',
-    '- `on` / `off` — sign up or stop',
-    '- `status` — whether reminders are active and whether you are signed up',
-    '- `setup channel:<#channel>` — (Manage Roles) where reminders are posted; enables them',
-    '- `disable` — (Manage Roles) stop reminders for everyone (sign-ups are kept)',
+    '- `on [prewarning] [debuffend]` — sign up (both options default to yes); run again to change them. Signing up sends a confirmation DM',
+    '- `off` — stop',
+    '- `status` — whether reminders are enabled here and whether you are signed up',
+    '- `enable` / `disable` — (Manage Roles) allow or stop reminders for this server (sign-ups are kept)',
   ].join('\n'),
 
   bountybattles: [

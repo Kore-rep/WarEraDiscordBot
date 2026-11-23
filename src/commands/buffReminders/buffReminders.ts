@@ -1,38 +1,39 @@
-import { ChannelType, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
+import { DiscordService } from '../../services/discord/DiscordService';
 import { Command, createCommandBuilder } from '../types';
 import { logger } from '../../utils/logger';
 import { COMMAND_HELP } from '../help/helpTexts';
 import { hasManageRoles } from '../../utils/commandAuth';
 import { ServerConfigManager } from '../../utils/serverConfigManager';
-import { optInBuffReminders, optOutBuffReminders } from '../../services/buffReminders/BuffReminderService';
+import {
+  describeBuffReminderChoices,
+  optInBuffReminders,
+  optOutBuffReminders,
+} from '../../services/buffReminders/BuffReminderService';
 
-const STAFF_SUBCOMMANDS = new Set(['setup', 'disable']);
+const STAFF_SUBCOMMANDS = new Set(['enable', 'disable']);
 
 /**
- * `/buffreminders` — linked members opt in to a ping when their buff (pill) wears
- * off and when the debuff after it ends. Staff choose the channel.
+ * `/buffreminders` — linked members opt in to DMs 10 minutes before their buff
+ * (pill) ends, when it ends, and when the debuff after it ends. Staff can turn the
+ * feature off for the server.
  */
 export const buffRemindersCommand: Command = {
-  data: createCommandBuilder('buffreminders', 'Get pinged when your buff or debuff ends', { requireAdmin: false })
-    .addSubcommand(sub => sub.setName('on').setDescription('Ping me when my buff wears off and when my debuff ends'))
-    .addSubcommand(sub => sub.setName('off').setDescription('Stop buff / debuff pings'))
-    .addSubcommand(sub => sub.setName('help').setDescription('How buff reminders work'))
-    .addSubcommand(sub => sub.setName('status').setDescription('Show reminder settings'))
+  data: createCommandBuilder('buffreminders', 'Get a DM before and when your buff or debuff ends', { requireAdmin: false })
     .addSubcommand(sub =>
       sub
-        .setName('setup')
-        .setDescription('(Staff) Set the channel reminders are posted in and enable them')
-        .addChannelOption(opt =>
-          opt
-            .setName('channel')
-            .setDescription('Channel to post reminders in')
-            .addChannelTypes(ChannelType.GuildText)
-            .setRequired(true)
-        )
+        .setName('on')
+        .setDescription('DM me when my buff ends (run again to change the options)')
+        .addBooleanOption(opt => opt.setName('prewarning').setDescription('Also DM 10 minutes before the buff ends (default: yes)'))
+        .addBooleanOption(opt => opt.setName('debuffend').setDescription('Also DM when the debuff is over (default: yes)'))
     )
-    .addSubcommand(sub => sub.setName('disable').setDescription('(Staff) Stop posting reminders for everyone')),
+    .addSubcommand(sub => sub.setName('off').setDescription('Stop buff / debuff DMs'))
+    .addSubcommand(sub => sub.setName('help').setDescription('How buff reminders work'))
+    .addSubcommand(sub => sub.setName('status').setDescription('Show reminder settings'))
+    .addSubcommand(sub => sub.setName('enable').setDescription('(Staff) Allow buff reminders on this server'))
+    .addSubcommand(sub => sub.setName('disable').setDescription('(Staff) Stop buff reminders for everyone on this server')),
 
-  async execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  async execute(interaction: ChatInputCommandInteraction, discordService?: DiscordService): Promise<void> {
     try {
       if (!interaction.guild) {
         await interaction.reply({ content: 'This command can only be used in a Discord server.', ephemeral: true });
@@ -51,13 +52,24 @@ export const buffRemindersCommand: Command = {
       const cfg = ServerConfigManager.getBuffRemindersConfig(serverId);
 
       if (sub === 'on') {
-        const result = await optInBuffReminders(serverId, interaction.user.id);
+        if (!discordService) {
+          await interaction.reply({ content: 'The Discord service is not available.', ephemeral: true });
+          return;
+        }
+        await interaction.deferReply({ ephemeral: true });
+        const choices = {
+          preWarning: interaction.options.getBoolean('prewarning') ?? true,
+          debuffEnd: interaction.options.getBoolean('debuffend') ?? true,
+        };
+        const result = await optInBuffReminders(serverId, interaction.user.id, choices, discordService);
         const content = {
-          ok: `You'll be pinged in <#${cfg?.channelId}> when your buff wears off and when your debuff ends.`,
-          'not-setup': 'Buff reminders are not set up on this server. Ask staff to run `/buffreminders setup`.',
+          ok: "Buff reminders are on. Check your DMs, I've sent a confirmation.",
+          updated: `Updated. I'll DM you ${describeBuffReminderChoices(choices)}.`,
+          disabled: 'Buff reminders are disabled on this server.',
           'not-linked': 'Link your WarEra account first with `/link`.',
+          'dm-blocked': "I couldn't DM you. Allow direct messages from server members (Privacy Settings), then try again.",
         }[result];
-        await interaction.reply({ content, ephemeral: true });
+        await interaction.editReply({ content });
         return;
       }
 
@@ -71,32 +83,25 @@ export const buffRemindersCommand: Command = {
       }
 
       if (sub === 'status') {
-        const active = !!cfg?.enabled && !!cfg.channelId;
-        const optedIn = cfg?.optedInDiscordUserIds.includes(interaction.user.id) ?? false;
+        const enabled = cfg?.enabled ?? true;
+        const mine = cfg?.subscribers.find(s => s.discordUserId === interaction.user.id);
         await interaction.reply({
           content:
-            `Buff reminders: ${active ? `enabled in <#${cfg!.channelId}>` : 'not active'}\n` +
-            `Members signed up: ${cfg?.optedInDiscordUserIds.length ?? 0}\n` +
-            `You: ${optedIn ? 'signed up' : 'not signed up'}`,
+            `Buff reminders on this server: ${enabled ? 'enabled' : 'disabled'}\n` +
+            `Members signed up: ${cfg?.subscribers.length ?? 0}\n` +
+            `You: ${mine ? `signed up, DMs ${describeBuffReminderChoices(mine)}` : 'not signed up'}`,
           ephemeral: true,
         });
         return;
       }
 
-      if (sub === 'setup') {
-        const channel = interaction.options.getChannel('channel', true);
-        ServerConfigManager.updateBuffRemindersConfig(serverId, { enabled: true, channelId: channel.id });
+      if (sub === 'enable' || sub === 'disable') {
+        ServerConfigManager.updateBuffRemindersConfig(serverId, { enabled: sub === 'enable' });
         await interaction.reply({
-          content: `Buff reminders will be posted in <#${channel.id}>. Members sign up with \`/buffreminders on\`.`,
-          ephemeral: true,
-        });
-        return;
-      }
-
-      if (sub === 'disable') {
-        ServerConfigManager.updateBuffRemindersConfig(serverId, { enabled: false });
-        await interaction.reply({
-          content: 'Buff reminders disabled. Sign-ups are kept; run `/buffreminders setup` to re-enable.',
+          content:
+            sub === 'enable'
+              ? 'Buff reminders enabled. Members sign up with `/buffreminders on`.'
+              : 'Buff reminders disabled. Sign-ups are kept; run `/buffreminders enable` to resume.',
           ephemeral: true,
         });
         return;

@@ -322,11 +322,17 @@ export interface BattleOrdersConfig {
   mus: BattleOrderMuEntry[];
 }
 
-/** Pill buff / debuff expiry reminders for opted-in linked members. */
+/** A member signed up for buff reminders, with the optional DMs they chose. */
+export interface BuffReminderSubscriber {
+  discordUserId: string;
+  preWarning: boolean; // DM 10 minutes before the buff ends
+  debuffEnd: boolean; // DM when the debuff after the buff ends
+}
+
+/** Pill buff / debuff reminders, sent by DM to opted-in linked members. */
 export interface BuffRemindersConfig {
-  enabled: boolean;
-  channelId: string;
-  optedInDiscordUserIds: string[];
+  enabled: boolean; // staff switch; members can opt in unless this is false
+  subscribers: BuffReminderSubscriber[];
 }
 
 /**

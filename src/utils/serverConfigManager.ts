@@ -260,8 +260,14 @@ export class ServerConfigManager {
   private static normalizeBuffReminders(raw: Partial<BuffRemindersConfig>): BuffRemindersConfig {
     return {
       enabled: raw.enabled ?? true,
-      channelId: raw.channelId?.trim() ?? '',
-      optedInDiscordUserIds: [...new Set((raw.optedInDiscordUserIds ?? []).filter(id => id?.trim()))],
+      // One entry per member; a later entry for the same member wins.
+      subscribers: [
+        ...new Map(
+          (raw.subscribers ?? [])
+            .filter(s => s.discordUserId?.trim())
+            .map(s => [s.discordUserId, { discordUserId: s.discordUserId, preWarning: s.preWarning !== false, debuffEnd: s.debuffEnd !== false }])
+        ).values(),
+      ],
     };
   }
 
@@ -520,7 +526,7 @@ export class ServerConfigManager {
       } : undefined,
       buffReminders: config.buffReminders ? {
         ...config.buffReminders,
-        optedInDiscordUserIds: [...config.buffReminders.optedInDiscordUserIds],
+        subscribers: config.buffReminders.subscribers.map(s => ({ ...s })),
       } : undefined,
     };
   }
